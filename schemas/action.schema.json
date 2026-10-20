@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/action.schema.json",
+  "$defs": {
+    "ActionType": {
+      "description": "What an advisory asks a fleet to do. The playbook limits this per class.",
+      "enum": [
+        "NO_ENTRY",
+        "SPEED_CAP",
+        "ALL_WAY_STOP",
+        "DENSITY_CAP",
+        "KEEP_CLEAR",
+        "PAUSE_SERVICE"
+      ],
+      "title": "ActionType",
+      "type": "string"
+    },
+    "AppliesTo": {
+      "additionalProperties": false,
+      "description": "Who an action binds, and optionally which graph elements it masks.",
+      "properties": {
+        "operators": {
+          "items": {
+            "pattern": "^(\\*|[a-z0-9_]{1,32})$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Operators",
+          "type": "array"
+        },
+        "vehicle_classes": {
+          "items": {
+            "pattern": "^(\\*|[a-z0-9_]{1,32})$",
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Vehicle Classes",
+          "type": "array"
+        },
+        "edges": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:\\-]+$",
+            "type": "string"
+          },
+          "title": "Edges",
+          "type": "array"
+        },
+        "nodes": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:\\-]+$",
+            "type": "string"
+          },
+          "title": "Nodes",
+          "type": "array"
+        }
+      },
+      "title": "AppliesTo",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One thing a fleet is asked to do inside the advisory geometry.",
+  "properties": {
+    "type": {
+      "$ref": "#/$defs/ActionType"
+    },
+    "applies_to": {
+      "$ref": "#/$defs/AppliesTo"
+    },
+    "params": {
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,31}$": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "title": "Params",
+      "type": "object"
+    }
+  },
+  "required": [
+    "type"
+  ],
+  "title": "Action",
+  "type": "object"
+}

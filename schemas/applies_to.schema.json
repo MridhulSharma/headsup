@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/applies_to.schema.json",
+  "additionalProperties": false,
+  "description": "Who an action binds, and optionally which graph elements it masks.",
+  "properties": {
+    "operators": {
+      "items": {
+        "pattern": "^(\\*|[a-z0-9_]{1,32})$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Operators",
+      "type": "array"
+    },
+    "vehicle_classes": {
+      "items": {
+        "pattern": "^(\\*|[a-z0-9_]{1,32})$",
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Vehicle Classes",
+      "type": "array"
+    },
+    "edges": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._:\\-]+$",
+        "type": "string"
+      },
+      "title": "Edges",
+      "type": "array"
+    },
+    "nodes": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "pattern": "^[A-Za-z0-9._:\\-]+$",
+        "type": "string"
+      },
+      "title": "Nodes",
+      "type": "array"
+    }
+  },
+  "title": "AppliesTo",
+  "type": "object"
+}
