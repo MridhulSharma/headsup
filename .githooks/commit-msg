@@ -1,0 +1,6 @@
+#!/bin/sh
+# Reject Claude / Anthropic co-author trailers.
+if grep -qiE '^co-authored-by:.*(claude|anthropic)' "$1"; then
+  echo "commit-msg: Claude must not be listed as a co-author in this repo." >&2
+  exit 1
+fi

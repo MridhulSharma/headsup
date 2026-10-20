@@ -1,0 +1,41 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Node ---
+node_modules/
+gev/node_modules/
+.npm/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+.vite/
+
+# --- Secrets: no .env of any kind except the template ---
+.env*
+!.env.example
+
+# --- Data: caches and raw recordings stay local ---
+data/cache/
+data/recordings/**/raw/
+
+# --- Editors and OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

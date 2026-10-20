@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "attribution": { "commit": "", "pr": "" },
+  "permissions": {
+    "allow": ["Bash(uv run *)", "Bash(npm run *)", "Bash(git status)", "Bash(git diff *)", "Bash(docker compose *)"],
+    "ask": ["Bash(git push *)", "Bash(git tag *)"],
+    "deny": ["Read(./.env)", "Read(./gev/.env)", "Read(./**/.env.local)"]
+  }
+}

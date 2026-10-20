@@ -1,0 +1,86 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  no-co-author:
+    name: no Claude co-author trailer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit commit messages
+        run: |
+          if git log --format=%B | grep -iE '^co-authored-by:.*(claude|anthropic)'; then
+            echo "::error::A commit lists Claude or Anthropic as a co-author. Strip the trailer before pushing (see docs/build-packet.md, Git workflow)."
+            exit 1
+          fi
+          echo "No Claude / Anthropic co-author trailers in history."
+
+  lint-and-test:
+    name: ruff + pytest
+    runs-on: ubuntu-latest
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgis:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: headsup
+          POSTGRES_PASSWORD: headsup
+          POSTGRES_DB: headsup
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U headsup -d headsup"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      HU_LLM_MODE: mock
+      REDIS_URL: redis://localhost:6379/0
+      DATABASE_URL: postgresql+psycopg://headsup:headsup@localhost:5432/headsup
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12 and dependencies
+        run: |
+          uv python install 3.12
+          uv sync --all-extras --dev
+
+      - name: Lint
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: Test
+        run: uv run pytest -q -m "not llm and not e2e"
