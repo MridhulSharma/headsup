@@ -1,0 +1,134 @@
+# S1: San Antonio flash flood, 20-21 April 2026.
+#
+# Both feeds in this scenario are real observations of a real event. Nothing
+# in the recording is invented, so `scripted` is false and the viewer shows no
+# "scripted data" badge. The one caveat is recorded under `provenance`: the
+# NWS JSON envelope had to be rebuilt, because api.weather.gov serves only
+# currently active alerts and April is long gone from it.
+
+id: s1_flood
+name: San Antonio flash flood
+city: san_antonio
+hazard_class: FLOOD
+
+# False means every value replayed here was observed by NWS or USGS. Set this
+# true only for a scenario whose signals were generated, and the God's Eye
+# View will label the run.
+scripted: false
+
+summary: >-
+  NWS Austin/San Antonio ran two back-to-back flash flood warnings over
+  north-east Bexar County on the afternoon and evening of 20 April 2026, while
+  the Salado Creek gauges below the warning polygon rose past their action
+  stages. The corridor the warning covers carries the Loop 410 and Loop 1604
+  crossings a robotaxi fleet would otherwise route over.
+
+window:
+  # Where the first and last recorded polls land. Gauge readings are stamped
+  # at the end of their 30-minute poll window, so the recording opens at
+  # 18:30Z even though it covers readings from 18:00Z.
+  start: 2026-04-20T18:30:00Z
+  end: 2026-04-21T05:00:00Z
+  # 10 h 30 m of feed time; 10 m 30 s at the demo speed of 60x.
+  duration_minutes: 630
+  first_warning_at: 2026-04-20T18:50:00Z
+  # 20 s into a 60x replay, inside the 60 s time-to-advisory budget.
+  first_warning_offset_seconds: 1200
+
+recording:
+  fixture: data/recordings/s1_flood/fixture
+  payloads: 31
+  events: 140
+  bytes: 96111
+  feeds:
+    nws:
+      payloads: 9
+      events: 9
+    usgs:
+      payloads: 22
+      events: 131
+
+feeds:
+  nws:
+    event: Flash Flood Warning
+    office: KEWX
+    vtec_events: [2026.KEWX.FF.W.0009, 2026.KEWX.FF.W.0010]
+    counties: [TXC029 Bexar, TXC091 Comal, TXC187 Guadalupe]
+    damage_threat: CONSIDERABLE
+    # Nine products: two warnings, six continuation statements, one cancel.
+    # The second warning's polygon has nine vertices; the first has six.
+    products:
+      - { at: 2026-04-20T18:50:00Z, action: NEW, etn: 9 }
+      - { at: 2026-04-20T19:48:00Z, action: CON, etn: 9 }
+      - { at: 2026-04-20T20:22:00Z, action: EXT, etn: 9 }
+      - { at: 2026-04-20T22:15:00Z, action: CON, etn: 9 }
+      - { at: 2026-04-20T22:57:00Z, action: NEW, etn: 10 }
+      - { at: 2026-04-21T01:02:00Z, action: CON, etn: 10 }
+      - { at: 2026-04-21T01:46:00Z, action: EXT, etn: 10 }
+      - { at: 2026-04-21T03:32:00Z, action: CON, etn: 10 }
+      - { at: 2026-04-21T03:46:00Z, action: CAN, etn: 10 }
+  usgs:
+    parameter: "00065"       # gauge height, feet
+    poll_minutes: 30
+    # `action_stage_ft` is the threshold Heads Up operates on, chosen from
+    # these hydrographs. It is not a published NWS flood stage.
+    gauges:
+      - site: "08178585"
+        name: Salado Ck at Wilderness Rd
+        action_stage_ft: 2.0
+        start_ft: 0.46
+        peak_ft: 2.65
+        peak_at: 2026-04-20T22:00:00Z
+        crossed_action_stage_at: 2026-04-20T21:30:00Z
+      - site: "08178593"
+        name: Salado Ck at Blanco Rd
+        action_stage_ft: 4.5
+        start_ft: 3.36
+        peak_ft: 5.11
+        peak_at: 2026-04-20T22:15:00Z
+        crossed_action_stage_at: 2026-04-20T21:15:00Z
+      - site: "08178800"
+        name: Salado Ck at Loop 13
+        action_stage_ft: 9.0
+        start_ft: 5.45
+        peak_ft: 8.49
+        peak_at: 2026-04-21T04:45:00Z
+        # Still rising when the recording ends. The real crest, 19.26 ft at
+        # 2026-04-21T10:45Z, is downstream of the warning and outside the
+        # window, so this gauge never crosses its action stage in the replay.
+        crossed_action_stage_at: null
+
+replay:
+  default_speed: 60
+  streams: [events.nws, events.usgs]
+
+provenance:
+  nws:
+    status: real
+    archive: IEM VTEC archive, Iowa Environmental Mesonet
+    source_url: https://mesonet.agron.iastate.edu/json/vtec_event.py?wfo=EWX&year=2026&phenomena=FF&significance=W&etn=9
+    envelope: reconstructed
+    note: >-
+      Polygons, timestamps, VTEC strings, county codes, headlines, narratives
+      and damage threats are taken verbatim from the issued NWS products. The
+      warning polygon of each product is decoded from its LAT...LON block.
+      The surrounding api.weather.gov alert JSON is rebuilt around that
+      content, because the live alerts endpoint only serves active alerts and
+      its archive does not reach back to April 2026.
+  usgs:
+    status: real
+    source_url: https://api.waterdata.usgs.gov/ogcapi/v0/collections/continuous/items
+    envelope: verbatim
+    # The `datetime` window asked of the API. Readings are then grouped into
+    # polls of `feeds.usgs.poll_minutes`, each stamped at the end of its
+    # window, which is why `window.start` is one poll later than this.
+    retrieval_window:
+      start: 2026-04-20T18:00:00Z
+      end: 2026-04-21T05:00:00Z
+    note: >-
+      Gauge-height features exactly as the Water Data OGC API returns them,
+      grouped into 30-minute polls. Identical in shape to what the live
+      `latest-continuous` adapter parses.
+  retrieved_at: 2026-10-20
+  # Rebuild with: uv run python scripts/build_s1_fixture.py
+  builder: scripts/build_s1_fixture.py
