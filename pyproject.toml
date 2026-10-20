@@ -1,0 +1,71 @@
+[project]
+name = "headsup"
+version = "0.1.0"
+description = "Neutral multi-agent layer turning public city signals into signed, expiring advisories for simulated robotaxi fleets."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "MIT" }
+authors = [{ name = "Mridhul Sharma" }]
+
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic>=2",
+    "redis>=5",
+    "psycopg[binary]",
+    "sqlalchemy",
+    "geoalchemy2",
+    "shapely",
+    "h3",
+    "osmnx",
+    "python-igraph",
+    "scikit-learn",
+    "pynacl",
+    "httpx",
+    "anthropic",
+    "ollama",
+    "pyyaml",
+    "typer",
+    "rich",
+    "orjson",
+]
+
+[project.scripts]
+hu = "headsup.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "hypothesis",
+    "ruff",
+    "respx",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/headsup"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+asyncio_mode = "auto"
+markers = [
+    "llm: calls a real LLM API and spends money; never run in unit tests or CI",
+    "integration: needs the Docker services from docker-compose.yml (Redis, PostGIS)",
+    "e2e: runs a whole scenario end to end through bus, agents and simulator",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.uv]
+package = true
