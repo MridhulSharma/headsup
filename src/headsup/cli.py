@@ -11,6 +11,7 @@ from rich.table import Table
 from headsup import __version__
 from headsup import infra as infra_mod
 from headsup.contracts import schemas as schema_mod
+from headsup.ingest.cli import ingest_app
 
 app = typer.Typer(
     name="hu",
@@ -22,6 +23,7 @@ infra_app = typer.Typer(help="Redis and PostGIS via docker compose.", no_args_is
 app.add_typer(infra_app, name="infra")
 schemas_app = typer.Typer(help="JSON Schema for the message contracts.", no_args_is_help=True)
 app.add_typer(schemas_app, name="schemas")
+app.add_typer(ingest_app, name="ingest")
 
 console = Console()
 err = Console(stderr=True)

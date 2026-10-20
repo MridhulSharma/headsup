@@ -483,6 +483,28 @@ git switch main && git merge --no-ff d2/5-fusion-proposer -m "merge: D2.5 fusion
 
 > In src/headsup/api build a FastAPI app: POST /advisories (internal, compiler credential only), GET /advisories?bbox=&active=true, GET /hazards, WS /operators/{op} (pushes advisories for that operator's service area, receives Acks onto the acks stream), and WS /viewer that fans out telemetry (2-5 Hz, batched), advisories, hazards, assist requests and counters in the message format already used by viz/mock\_stream.py. Include a signature-verify step for operators. `hu api` runs uvicorn on 8765. Add `hu demo s1` that starts infra check, API, agents, simulator and the S1 replay together and tears them down on Ctrl+C. Write tests/e2e/test\_s1.py (marker e2e, mock LLM): replay S1 at 60x, assert at least one advisory is published, it verifies, and op\_a has zero hazard entries after the advisory is active. Run the Done-when checks, show me the output, then stop. Do not commit.
 
+**Also required in this step - child process teardown on Windows.** `hu demo`
+starts the API, the agents, the simulator and a replay as child processes. On
+Windows a child is *not* killed when its parent exits, and `uv run` can leave a
+grandchild alive after its own parent returns. This already bit D1.2: an
+orphaned `hu ingest replay` outlived its wrapper and kept publishing to
+`events.usgs` every 30 s, corrupting the entry counts of a later timed run.
+
+- Put every child in a Win32 **Job Object created with
+  `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`**, so the OS kills the whole tree when
+  the parent dies, including a hard kill rather than just Ctrl+C. On POSIX use
+  a process group (`start_new_session=True`, then `killpg`).
+- Do not rely on `atexit`, `finally` or a signal handler alone; none of them
+  run when the parent is killed with `SIGKILL` / `TerminateProcess`.
+- Spawn the children directly (the console-script `.exe` or `python -m`), not
+  through a `uv run` wrapper, so there is no intermediate process to lose.
+- **Test:** start `hu demo s1`, record the child PIDs, kill the *parent* with
+  `TerminateProcess` (`Stop-Process -Force` / `taskkill /PID <pid> /F`, no
+  `/T`), then assert after a short grace period that none of the recorded PIDs
+  is still alive and that nothing is still writing to the streams.
+
+**Done when:** the e2e S1 test passes, and killing `hu demo s1`'s parent leaves no surviving child processes.
+
 ```bash
 git switch -c d2/6-api
 git add -A && git commit -m "feat(api): advisory rest and websocket api, viewer stream, hu demo s1"
