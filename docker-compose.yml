@@ -1,0 +1,41 @@
+name: headsup
+
+services:
+  redis:
+    image: redis:7
+    container_name: headsup-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+
+  postgis:
+    image: postgis/postgis:16-3.4
+    container_name: headsup-postgis
+    environment:
+      POSTGRES_USER: headsup
+      POSTGRES_PASSWORD: headsup
+      POSTGRES_DB: headsup
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgis-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U headsup -d headsup"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+  postgis-data:
