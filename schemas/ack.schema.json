@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/ack.schema.json",
+  "$defs": {
+    "AckStatus": {
+      "description": "How an operator answered an advisory.",
+      "enum": [
+        "ACCEPTED",
+        "ACCEPTED_PARTIAL",
+        "DECLINED"
+      ],
+      "title": "AckStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One operator's answer to one advisory version.",
+  "properties": {
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "advisory_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Advisory Id",
+      "type": "string"
+    },
+    "advisory_version": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Advisory Version",
+      "type": "integer"
+    },
+    "operator": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Operator",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AckStatus"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "vehicles_rerouted": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Vehicles Rerouted",
+      "type": "integer"
+    },
+    "acknowledged_at": {
+      "format": "date-time",
+      "title": "Acknowledged At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "advisory_id",
+    "operator",
+    "status"
+  ],
+  "title": "Ack",
+  "type": "object"
+}

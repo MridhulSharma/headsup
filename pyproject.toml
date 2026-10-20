@@ -51,6 +51,7 @@ packages = ["src/headsup"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 addopts = "-ra"
 asyncio_mode = "auto"
 markers = [

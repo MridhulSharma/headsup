@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from headsup import __version__
 from headsup import infra as infra_mod
+from headsup.contracts import schemas as schema_mod
 
 app = typer.Typer(
     name="hu",
@@ -17,6 +20,8 @@ app = typer.Typer(
 )
 infra_app = typer.Typer(help="Redis and PostGIS via docker compose.", no_args_is_help=True)
 app.add_typer(infra_app, name="infra")
+schemas_app = typer.Typer(help="JSON Schema for the message contracts.", no_args_is_help=True)
+app.add_typer(schemas_app, name="schemas")
 
 console = Console()
 err = Console(stderr=True)
@@ -86,6 +91,33 @@ def infra_status() -> None:
     except infra_mod.InfraError as exc:
         err.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
+
+
+@schemas_app.command("export")
+def schemas_export(
+    out: str = typer.Option("schemas", "--out", help="Directory to write into."),
+) -> None:
+    """Write one JSON Schema file per contract model."""
+    target = Path(out)
+    written = schema_mod.export(target)
+    for path in written:
+        console.print(f"  {path.as_posix()}")
+    console.print(f"[green]wrote {len(written)} schema files to {target.as_posix()}[/green]")
+
+
+@schemas_app.command("check")
+def schemas_check(
+    out: str = typer.Option("schemas", "--out", help="Directory to check."),
+) -> None:
+    """Fail if the committed schemas no longer match the models."""
+    target = Path(out)
+    drift = schema_mod.check(target)
+    if drift:
+        for item in drift:
+            err.print(f"[red]{item}[/red]")
+        err.print(f"[red]{len(drift)} schema files drifted - run `hu schemas export`[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]{target.as_posix()} matches the contracts[/green]")
 
 
 def main() -> None:

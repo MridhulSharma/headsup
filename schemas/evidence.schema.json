@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/evidence.schema.json",
+  "$defs": {
+    "Source": {
+      "description": "A public feed Heads Up ingests. Values double as `events.<source>` names.",
+      "enum": [
+        "nws",
+        "usgs",
+        "wzdx",
+        "austin_incidents",
+        "austin_signals",
+        "bexar",
+        "city_dispatch",
+        "synthetic"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A citation: which observation supports a hazard or an advisory.",
+  "properties": {
+    "event_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/Source"
+    },
+    "kind": {
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9_.\\-]*$",
+      "title": "Kind",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "raw_ref": {
+      "maxLength": 512,
+      "minLength": 1,
+      "title": "Raw Ref",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event_id",
+    "source",
+    "kind",
+    "observed_at",
+    "raw_ref"
+  ],
+  "title": "Evidence",
+  "type": "object"
+}

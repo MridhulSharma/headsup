@@ -1,0 +1,90 @@
+{
+  "type": "Feature",
+  "id": "adv_s1_flood_0001",
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [-98.49461, 29.41952],
+        [-98.49208, 29.41952],
+        [-98.49208, 29.42134],
+        [-98.49461, 29.42134],
+        [-98.49461, 29.41952]
+      ]
+    ]
+  },
+  "properties": {
+    "id": "adv_s1_flood_0001",
+    "version": 1,
+    "hazard": {
+      "id": "haz_s1_flood_0001",
+      "class": "FLOOD",
+      "severity": 4,
+      "confidence": 0.91,
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [-98.49461, 29.41952],
+            [-98.49208, 29.41952],
+            [-98.49208, 29.42134],
+            [-98.49461, 29.42134],
+            [-98.49461, 29.41952]
+          ]
+        ]
+      },
+      "evidence": [
+        {
+          "event_id": "ev_nws_0001",
+          "source": "nws",
+          "kind": "flood_warning",
+          "observed_at": "2026-10-20T23:15:00+00:00",
+          "raw_ref": "data/recordings/s1_flood/nws_0001.json"
+        },
+        {
+          "event_id": "ev_usgs_0001",
+          "source": "usgs",
+          "kind": "gauge_reading",
+          "observed_at": "2026-10-20T23:15:30+00:00",
+          "raw_ref": "data/recordings/s1_flood/usgs_0001.json"
+        }
+      ],
+      "valid_until": "2026-10-21T02:15:00+00:00",
+      "first_seen": "2026-10-20T23:15:10+00:00",
+      "updated_at": "2026-10-20T23:15:40+00:00",
+      "candidates": ["cand_s1_flood_0001"],
+      "rationale": "An active NWS flood warning covers the crossing and the USGS gauge reads 11.4 ft against a 9.0 ft flood stage."
+    },
+    "action": {
+      "type": "NO_ENTRY",
+      "applies_to": {
+        "operators": ["*"],
+        "vehicle_classes": ["*"],
+        "edges": ["58291-58294-0"],
+        "nodes": []
+      },
+      "params": {}
+    },
+    "valid_from": "2026-10-20T23:15:55+00:00",
+    "valid_until": "2026-10-21T01:15:55+00:00",
+    "evidence": [
+      {
+        "event_id": "ev_nws_0001",
+        "source": "nws",
+        "kind": "flood_warning",
+        "observed_at": "2026-10-20T23:15:00+00:00",
+        "raw_ref": "data/recordings/s1_flood/nws_0001.json"
+      },
+      {
+        "event_id": "ev_usgs_0001",
+        "source": "usgs",
+        "kind": "gauge_reading",
+        "observed_at": "2026-10-20T23:15:30+00:00",
+        "raw_ref": "data/recordings/s1_flood/usgs_0001.json"
+      }
+    ],
+    "policy_rule": "flood.no_entry.v1",
+    "issuer": "headsup/san_antonio",
+    "signature": "LcV0Qy5bR3nJ8pXmA2hT7wKdF4sG6uE9iO1yB0zC3vN5rP7qS8tU1xW2aD4eH6jM8kL0nQ2rT4vX6zA8cE0g=="
+  }
+}

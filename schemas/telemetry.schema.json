@@ -1,0 +1,136 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/telemetry.schema.json",
+  "$defs": {
+    "VehicleState": {
+      "additionalProperties": false,
+      "description": "One simulated vehicle at one tick, in the viewer's field names.",
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:\\-]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "op": {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:\\-]+$",
+          "title": "Op",
+          "type": "string"
+        },
+        "lon": {
+          "maximum": 180.0,
+          "minimum": -180.0,
+          "title": "Lon",
+          "type": "number"
+        },
+        "lat": {
+          "maximum": 90.0,
+          "minimum": -90.0,
+          "title": "Lat",
+          "type": "number"
+        },
+        "heading": {
+          "default": 0.0,
+          "exclusiveMaximum": 360.0,
+          "minimum": 0.0,
+          "title": "Heading",
+          "type": "number"
+        },
+        "speed_mph": {
+          "default": 0.0,
+          "maximum": 120.0,
+          "minimum": 0.0,
+          "title": "Speed Mph",
+          "type": "number"
+        },
+        "status": {
+          "$ref": "#/$defs/VehicleStatus",
+          "default": "MOVING"
+        },
+        "trip_id": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9._:\\-]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trip Id"
+        }
+      },
+      "required": [
+        "id",
+        "op",
+        "lon",
+        "lat"
+      ],
+      "title": "VehicleState",
+      "type": "object"
+    },
+    "VehicleStatus": {
+      "description": "Simulated vehicle state, as the viewer colours it.",
+      "enum": [
+        "MOVING",
+        "STOPPED",
+        "STALLED",
+        "AWAITING_ASSIST",
+        "OUT_OF_SERVICE"
+      ],
+      "title": "VehicleStatus",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One simulator tick: every vehicle plus the counters the console shows.",
+  "properties": {
+    "type": {
+      "const": "telemetry",
+      "default": "telemetry",
+      "title": "Type",
+      "type": "string"
+    },
+    "tick": {
+      "minimum": 0,
+      "title": "Tick",
+      "type": "integer"
+    },
+    "sim_time": {
+      "format": "date-time",
+      "title": "Sim Time",
+      "type": "string"
+    },
+    "vehicles": {
+      "items": {
+        "$ref": "#/$defs/VehicleState"
+      },
+      "title": "Vehicles",
+      "type": "array"
+    },
+    "ghost": {
+      "default": false,
+      "title": "Ghost",
+      "type": "boolean"
+    },
+    "counters": {
+      "additionalProperties": {
+        "type": "integer"
+      },
+      "title": "Counters",
+      "type": "object"
+    }
+  },
+  "required": [
+    "tick",
+    "sim_time"
+  ],
+  "title": "Telemetry",
+  "type": "object"
+}

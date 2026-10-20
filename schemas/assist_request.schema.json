@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://headsup.local/schemas/assist_request.schema.json",
+  "$defs": {
+    "AssistReason": {
+      "description": "Why a vehicle asked for remote assistance.",
+      "enum": [
+        "FLOODED_EDGE",
+        "DARK_SIGNAL",
+        "BLOCKED_ROUTE",
+        "EMERGENCY_SCENE",
+        "OTHER"
+      ],
+      "title": "AssistReason",
+      "type": "string"
+    },
+    "HazardClass": {
+      "description": "What kind of hazard a fused observation describes.",
+      "enum": [
+        "FLOOD",
+        "WORK_ZONE",
+        "SIGNAL_OUTAGE",
+        "EMERGENCY_SCENE",
+        "SCHOOL_ZONE",
+        "SEVERE_WEATHER"
+      ],
+      "title": "HazardClass",
+      "type": "string"
+    },
+    "Point": {
+      "additionalProperties": false,
+      "description": "A single location, e.g. a stream gauge or a stalled vehicle.",
+      "properties": {
+        "type": {
+          "const": "Point",
+          "default": "Point",
+          "title": "Type",
+          "type": "string"
+        },
+        "coordinates": {
+          "items": {
+            "type": "number"
+          },
+          "maxItems": 3,
+          "minItems": 2,
+          "title": "Coordinates",
+          "type": "array"
+        }
+      },
+      "required": [
+        "coordinates"
+      ],
+      "title": "Point",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A vehicle that stopped and needs a human: the queue the demo measures.",
+  "properties": {
+    "id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "vehicle_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Vehicle Id",
+      "type": "string"
+    },
+    "operator": {
+      "maxLength": 128,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9._:\\-]+$",
+      "title": "Operator",
+      "type": "string"
+    },
+    "location": {
+      "$ref": "#/$defs/Point"
+    },
+    "reason": {
+      "$ref": "#/$defs/AssistReason"
+    },
+    "hazard_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:\\-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Hazard Id"
+    },
+    "hazard_class": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HazardClass"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "cluster_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:\\-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cluster Id"
+    },
+    "priority": {
+      "default": 3,
+      "maximum": 5,
+      "minimum": 1,
+      "title": "Priority",
+      "type": "integer"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "title": "Requested At",
+      "type": "string"
+    },
+    "ghost": {
+      "default": false,
+      "title": "Ghost",
+      "type": "boolean"
+    },
+    "notes": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Notes"
+    }
+  },
+  "required": [
+    "vehicle_id",
+    "operator",
+    "location",
+    "reason"
+  ],
+  "title": "AssistRequest",
+  "type": "object"
+}
