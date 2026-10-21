@@ -1,0 +1,21 @@
+God's Eye View — vendored fork
+==============================
+
+This directory (`gev/`) is a vendored copy of
+
+    https://github.com/MridhulSharma/gods-eye-view
+
+which is a fork of
+
+    https://github.com/bilawalsidhu/gods-eye-view
+
+by Bilawal Sidhu, distributed under the MIT License.
+
+The upstream license text is unchanged in `gev/LICENSE` and applies to all
+files in this directory. Third-party dependency notices remain in
+`gev/THIRD_PARTY_NOTICES.md`; bundled dataset provenance remains under
+`gev/src/data/local_data/`.
+
+Heads Up adds a `headsup` layer and its supporting modules inside this
+directory. Those additions are part of the Heads Up research prototype and are
+not endorsed by, or affiliated with, the upstream project or its author.

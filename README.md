@@ -25,6 +25,15 @@ uv run hu infra up                    # Redis + PostGIS in Docker
 uv run pytest -q -m "not llm"
 ```
 
+## Credits
+
+The 3D viewer in [`gev/`](gev/) is a vendored copy of
+[MridhulSharma/gods-eye-view](https://github.com/MridhulSharma/gods-eye-view),
+a fork of [bilawalsidhu/gods-eye-view](https://github.com/bilawalsidhu/gods-eye-view)
+by Bilawal Sidhu, used under the MIT License. See [`gev/NOTICE`](gev/NOTICE)
+and [`gev/LICENSE`](gev/LICENSE).
+
 ## License
 
-TBD before release.
+TBD before release. The vendored `gev/` directory stays under its own MIT
+license.
