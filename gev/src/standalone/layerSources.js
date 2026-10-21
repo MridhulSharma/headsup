@@ -20,6 +20,10 @@ import { createCycloneSource } from '../layers/cyclones/source.js';
 import { createWindSource } from '../layers/wind/source.js';
 import { createFirmsSource } from '../layers/firms/source.js';
 import { createMapillarySource } from '../layers/streetLevel/providers/mapillary/source.js';
+import {
+  HEADSUP_VIEWER_ENDPOINT,
+  createHeadsupViewerSource,
+} from '../layers/headsup/source.js';
 import { createReferenceSources } from '../sources/reference.js';
 export { createReferenceSources as createStandaloneReferenceSources } from '../sources/reference.js';
 
@@ -55,6 +59,10 @@ export function createStandaloneLayerSources(overrides = {}) {
     cyclones: createCycloneSource(),
     mapillary: createMapillarySource({
       token: import.meta.env?.MAPILLARY_CLIENT_TOKEN || '',
+    }),
+    headsup: createHeadsupViewerSource({
+      endpoint:
+        import.meta.env?.VITE_HEADSUP_VIEWER_URL || HEADSUP_VIEWER_ENDPOINT,
     }),
   };
   for (const name of Object.keys(overrides)) {

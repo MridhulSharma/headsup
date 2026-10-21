@@ -283,3 +283,56 @@ the next build step, nothing touched yet):
 
 Gates to run on that step: `npm run format:check`, `npm run check:boundaries`,
 `npm run layer-token:check` and `npm test`, from `gev/`.
+
+## What the test layer actually added (D1.5), and where it differs
+
+The plan above held, with four corrections found while wiring it up. The layer
+drawn in this step reads the viewer socket directly:
+`createHeadsupViewerSource` subscribes to `ws://localhost:8765/viewer`
+(override with `VITE_HEADSUP_VIEWER_URL`) and exposes `getSnapshot()` beside
+`subscribe()`, so the catalog's source contract still sees a snapshot source.
+Vehicles are a `PointPrimitiveCollection` colored by operator — hashed, not
+registered, because operator ids are free identifiers — with positions written
+each frame from `sampleTrack()`; hazard areas are entity polygons Cesium draws
+as ground primitives, with a clamped outline polyline.
+
+On the draping: the polygon carries no `height`, no `perPositionHeight` and no
+`heightReference`, and sets `classificationType: BOTH`. `heightReference` is
+for geometry that HAS a height — set on a polygon without one, Cesium logs
+`"heightReference must also have a defined height. heightReference will be
+ignored"` (`GroundGeometryUpdater.getGeometryHeight`) and the polygon then
+drapes only by accident, over terrain but not over the photoreal tiles. The
+first cut of this layer had exactly that, so the rule is worth writing down for
+the scene work: a draped polygon is one with NO height of its own, and `BOTH`
+is what puts it on the 3D tiles. `ownership.test.mjs` pins all four.
+
+1. **No share-link token yet.** The notes reserved token `5`. The layer is
+   registered as `LOCAL_ONLY_LAYER_METADATA` in `constructCatalog.js` instead,
+   on the `local-adsb` precedent: a share link cannot carry another browser to
+   this machine's own simulator socket. A ledger token is permanent once
+   merged, and the upstream ledger fixtures hard-code the next free digit, so
+   `5` is better spent when the feed is a real Heads Up server. That keeps
+   `src/data/layerState.js` and the token ledger untouched —
+   `npm run layer-token:check` reports 0 new.
+2. **Voice-off for now.** `layerManifest.test.mjs` requires every catalog layer
+   to be in the voice manifest or in `VOICE_OFF_LAYERS`; a manifest entry
+   regenerates the pinned Realtime tool schema. The layer is listed voice-off
+   (`local Heads Up viewer socket; scene-driven (control_scene)`) so the
+   published tool contract stays as it is until the feed is real.
+3. **The source is constructed in `src/standalone/layerSources.js`**, not
+   `src/sources/reference.js`: it is a provider-backed live feed, and only the
+   standalone entry may read `import.meta.env`.
+4. **`headsup.css` is not needed yet.** Nothing in this step paints HUD chrome:
+   polygon fill and outline colors come from `model.js`, and advisory text goes
+   through the overlay host. `gev/style.css` is therefore untouched. The
+   advisory card and HUD counter block are what will need that stylesheet.
+
+Also required, and not in the list above: `gev/package.json` needs the
+`./layers/headsup` and `./layers/headsup/source` exports (the boundary checker
+fails unless every group's export is declared), both locale catalogs need the
+three new `msg()` strings, and two upstream membership counts move from 32 to
+33 (`src/app/constructCatalog.test.mjs`, `src/app/sourceComposition.test.mjs`).
+
+`gev/src/layers/headsup/expiry.js` landed as planned and the layer re-tests the
+advisory windows twice a second from its frame hook, so an advisory expires on
+its own clock without waiting for a socket frame.

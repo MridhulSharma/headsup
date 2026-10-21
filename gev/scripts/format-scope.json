@@ -1068,5 +1068,8 @@
   "src/tooling/changelogFragments.test.mjs",
   "src/data/gbfsProxyRateLimit.test.mjs",
   "src/data/routeSegment.test.mjs",
-  "src/terrainHeightsBounds.test.mjs"
+  "src/terrainHeightsBounds.test.mjs",
+  "src/layers/headsup/records.test.mjs",
+  "src/layers/headsup/expiry.test.mjs",
+  "src/layers/headsup/ownership.test.mjs"
 ]

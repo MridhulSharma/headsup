@@ -1069,6 +1069,17 @@
     ],
     "external": ["cesium"]
   },
+  "headsup": {
+    "exports": ["./layers/headsup"],
+    "modules": [
+      "src/layers/headsup/index.js",
+      "src/layers/headsup/model.js",
+      "src/layers/headsup/records.js",
+      "src/layers/headsup/expiry.js",
+      "src/layers/headsup/source.js"
+    ],
+    "external": ["cesium"]
+  },
   "recent-imagery": {
     "exports": ["./layers/recent-imagery"],
     "modules": [
@@ -2506,7 +2517,13 @@
       "src/voice/providerCapabilities.js",
       "src/voice/geminiSession.js",
       "src/voice/geminiAudio.js",
-      "src/voice/geminiCaptureWorklet.js"
+      "src/voice/geminiCaptureWorklet.js",
+      "src/layers/headsup/index.js",
+      "src/layers/headsup/model.js",
+      "src/layers/headsup/records.js",
+      "src/layers/headsup/expiry.js",
+      "src/layers/headsup/source.js",
+      "src/app/layers/headsup.js"
     ],
     "external": [
       "hls.js",
@@ -3073,7 +3090,13 @@
       "src/layers/airQuality/source.js",
       "src/ui/statusText.js",
       "src/ui/layerNames.js",
-      "src/layers/streetLevel/providers/mapillary/policy.js"
+      "src/layers/streetLevel/providers/mapillary/policy.js",
+      "src/layers/headsup/index.js",
+      "src/layers/headsup/model.js",
+      "src/layers/headsup/records.js",
+      "src/layers/headsup/expiry.js",
+      "src/layers/headsup/source.js",
+      "src/app/layers/headsup.js"
     ],
     "external": [
       "hls.js",
@@ -3426,6 +3449,14 @@
     "modules": [
       "src/layers/earthquakes/records.js",
       "src/layers/earthquakes/source.js"
+    ],
+    "external": []
+  },
+  "headsup-source": {
+    "exports": ["./layers/headsup/source"],
+    "modules": [
+      "src/layers/headsup/records.js",
+      "src/layers/headsup/source.js"
     ],
     "external": []
   },
