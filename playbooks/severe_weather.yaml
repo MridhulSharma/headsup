@@ -1,0 +1,21 @@
+# Severe weather is the one class with a metro-scale area cap, because a wind
+# or hail warning really does cover a county. It pays for that with the
+# narrowest action list: slow down, thin out, or stop taking new rides. It
+# never closes a road, because the weather does not say which road is unsafe.
+class: SEVERE_WEATHER
+policy_rule: severe_weather.v1
+description: >-
+  NWS severe thunderstorm, high wind, hail and winter weather warnings over a
+  whole warning polygon.
+allowed_actions:
+  - SPEED_CAP
+  - DENSITY_CAP
+  - PAUSE_SERVICE
+action_rules:
+  SPEED_CAP: severe_weather.speed_cap.v1
+  DENSITY_CAP: severe_weather.density_cap.v1
+  PAUSE_SERVICE: severe_weather.pause_service.v1
+max_area_km2: 150.0
+max_lifetime_minutes: 180
+two_key_area_km2: 25.0
+two_key_severity: 4

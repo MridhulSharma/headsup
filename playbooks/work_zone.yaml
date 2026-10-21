@@ -1,0 +1,19 @@
+# Work zones come from WZDx feeds the contractor controls, so they get the
+# tightest area cap of any class: a lane closure is a few hundred metres, and
+# anything larger is a feed error rather than a work zone.
+class: WORK_ZONE
+policy_rule: work_zone.v1
+description: >-
+  Lane and street closures published by a WZDx feed or a city permit system.
+allowed_actions:
+  - SPEED_CAP
+  - NO_ENTRY
+  - DENSITY_CAP
+action_rules:
+  SPEED_CAP: work_zone.speed_cap.v1
+  NO_ENTRY: work_zone.no_entry.v1
+  DENSITY_CAP: work_zone.density_cap.v1
+max_area_km2: 2.0
+max_lifetime_minutes: 720
+two_key_area_km2: 1.0
+two_key_severity: 4

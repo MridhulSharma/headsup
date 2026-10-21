@@ -10,6 +10,8 @@ from rich.table import Table
 
 from headsup import __version__
 from headsup import infra as infra_mod
+from headsup.agents.compiler.cli import register as register_compiler
+from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app
 
@@ -24,6 +26,11 @@ app.add_typer(infra_app, name="infra")
 schemas_app = typer.Typer(help="JSON Schema for the message contracts.", no_args_is_help=True)
 app.add_typer(schemas_app, name="schemas")
 app.add_typer(ingest_app, name="ingest")
+app.add_typer(bus_app, name="bus")
+
+# `hu compile`, `hu verify` and `hu keygen` are top-level verbs, not a group:
+# they are the two ends of the publishing gate and get used on their own.
+register_compiler(app)
 
 console = Console()
 err = Console(stderr=True)

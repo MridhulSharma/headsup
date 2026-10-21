@@ -1,0 +1,21 @@
+# The point of an emergency-scene advisory is to leave responders room, so the
+# area is the scene itself and the lifetime is one operational period. The
+# critical-access rule matters most here: a scene next to a fire station must
+# never close the station's last way out.
+class: EMERGENCY_SCENE
+policy_rule: emergency_scene.v1
+description: >-
+  Active incident scenes from city dispatch: crashes, fires, swift-water
+  rescue staging.
+allowed_actions:
+  - KEEP_CLEAR
+  - NO_ENTRY
+  - SPEED_CAP
+action_rules:
+  KEEP_CLEAR: emergency_scene.keep_clear.v1
+  NO_ENTRY: emergency_scene.no_entry.v1
+  SPEED_CAP: emergency_scene.speed_cap.v1
+max_area_km2: 1.0
+max_lifetime_minutes: 120
+two_key_area_km2: 0.5
+two_key_severity: 4
