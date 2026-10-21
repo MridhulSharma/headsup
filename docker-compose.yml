@@ -4,7 +4,16 @@ services:
   redis:
     image: redis:7
     container_name: headsup-redis
-    command: ["redis-server", "--appendonly", "yes"]
+    # `--aclfile` is what makes the single-writer rule survive a restart:
+    # `hu bus acl apply` writes the compiler and agent users, and `ACL SAVE`
+    # persists them into the named volume. Redis aborts startup if the file
+    # does not exist, which it would not on a fresh volume, so create it
+    # first. `exec` keeps redis as PID 1 so it still stops and restarts
+    # cleanly.
+    command:
+      - sh
+      - -c
+      - touch /data/users.acl && exec redis-server --appendonly yes --aclfile /data/users.acl
     ports:
       - "6379:6379"
     volumes:

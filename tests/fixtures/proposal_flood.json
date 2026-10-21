@@ -1,0 +1,124 @@
+{
+  "id": "prop_s1_flood_0001",
+  "hazard": {
+    "id": "haz_s1_flood_0001",
+    "class": "FLOOD",
+    "severity": 3,
+    "confidence": 0.91,
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            -98.49461,
+            29.41952
+          ],
+          [
+            -98.49208,
+            29.41952
+          ],
+          [
+            -98.49208,
+            29.42134
+          ],
+          [
+            -98.49461,
+            29.42134
+          ],
+          [
+            -98.49461,
+            29.41952
+          ]
+        ]
+      ]
+    },
+    "evidence": [
+      {
+        "event_id": "ev_nws_flood_0001",
+        "source": "nws",
+        "kind": "flash_flood_warning",
+        "observed_at": "2026-04-20T18:50:00Z",
+        "raw_ref": "data/recordings/s1_flood/fixture/raw/nws_0001.jsonl#0"
+      },
+      {
+        "event_id": "ev_usgs_gauge_0001",
+        "source": "usgs",
+        "kind": "gauge_reading",
+        "observed_at": "2026-04-20T18:51:00Z",
+        "raw_ref": "data/recordings/s1_flood/fixture/raw/usgs_0001.jsonl#4"
+      }
+    ],
+    "valid_until": "2026-04-20T21:50:00Z",
+    "first_seen": "2026-04-20T18:50:00Z",
+    "updated_at": "2026-04-20T18:52:00Z",
+    "candidates": [
+      "cand_s1_flood_0001"
+    ],
+    "rationale": "The NWS flash flood warning and the Salado Creek gauge above its action stage agree that the low-water crossing is under water."
+  },
+  "action": {
+    "type": "NO_ENTRY",
+    "applies_to": {
+      "operators": [
+        "*"
+      ],
+      "vehicle_classes": [
+        "*"
+      ],
+      "edges": [
+        "58291-58294-0"
+      ],
+      "nodes": []
+    },
+    "params": {}
+  },
+  "geometry": {
+    "type": "Polygon",
+    "coordinates": [
+      [
+        [
+          -98.49461,
+          29.41952
+        ],
+        [
+          -98.49208,
+          29.41952
+        ],
+        [
+          -98.49208,
+          29.42134
+        ],
+        [
+          -98.49461,
+          29.42134
+        ],
+        [
+          -98.49461,
+          29.41952
+        ]
+      ]
+    ]
+  },
+  "valid_from": "2026-04-20T18:55:00Z",
+  "valid_until": "2026-04-20T20:55:00Z",
+  "evidence": [
+    {
+      "event_id": "ev_nws_flood_0001",
+      "source": "nws",
+      "kind": "flash_flood_warning",
+      "observed_at": "2026-04-20T18:50:00Z",
+      "raw_ref": "data/recordings/s1_flood/fixture/raw/nws_0001.jsonl#0"
+    },
+    {
+      "event_id": "ev_usgs_gauge_0001",
+      "source": "usgs",
+      "kind": "gauge_reading",
+      "observed_at": "2026-04-20T18:51:00Z",
+      "raw_ref": "data/recordings/s1_flood/fixture/raw/usgs_0001.jsonl#4"
+    }
+  ],
+  "policy_rule": "flood.no_entry.v1",
+  "proposed_by": "proposer",
+  "rationale": "A low-water crossing under an active flash flood warning is a no-entry area, not a slow zone. The window is the real one from the 20 April 2026 event, so compiling this file needs `--now` inside it: a recorded proposal really has expired, and the compiler is right to refuse it on today's clock.",
+  "created_at": "2026-04-20T18:52:00Z"
+}

@@ -1,0 +1,18 @@
+# School zones are scheduled, not emergent: they slow traffic and thin it out,
+# and they never close a street. Any closure request on this class is a sign
+# the proposer picked the wrong hazard class.
+class: SCHOOL_ZONE
+policy_rule: school_zone.v1
+description: >-
+  Arrival and dismissal windows around schools loaded from OSM, used to cap
+  speed and vehicle density rather than to close anything.
+allowed_actions:
+  - SPEED_CAP
+  - DENSITY_CAP
+action_rules:
+  SPEED_CAP: school_zone.speed_cap.v1
+  DENSITY_CAP: school_zone.density_cap.v1
+max_area_km2: 1.5
+max_lifetime_minutes: 240
+two_key_area_km2: 1.0
+two_key_severity: 4

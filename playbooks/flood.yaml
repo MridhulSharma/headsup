@@ -1,0 +1,20 @@
+# A flooded road is binary: either a vehicle can pass or it cannot. The
+# playbook therefore allows a hard closure, but keeps the closed area small
+# enough that it is a crossing or a block, never a district.
+class: FLOOD
+policy_rule: flood.v1
+description: >-
+  Low-water crossings and flooded street segments under an NWS flood warning
+  or a USGS gauge above flood stage.
+allowed_actions:
+  - NO_ENTRY
+  - SPEED_CAP
+  - KEEP_CLEAR
+action_rules:
+  NO_ENTRY: flood.no_entry.v1
+  SPEED_CAP: flood.speed_cap.v1
+  KEEP_CLEAR: flood.keep_clear.v1
+max_area_km2: 12.0
+max_lifetime_minutes: 180
+two_key_area_km2: 4.0
+two_key_severity: 4

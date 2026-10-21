@@ -1,0 +1,20 @@
+# A dark signal is not a closure: the intersection still works, as an all-way
+# stop. Closing it would push traffic onto neighbouring dark intersections,
+# so NO_ENTRY is deliberately not on the list.
+class: SIGNAL_OUTAGE
+policy_rule: signal_outage.v1
+description: >-
+  Intersections whose signals are dark or flashing, from the Austin signal
+  status feed or a utility outage report.
+allowed_actions:
+  - ALL_WAY_STOP
+  - SPEED_CAP
+  - DENSITY_CAP
+action_rules:
+  ALL_WAY_STOP: signal_outage.all_way_stop.v1
+  SPEED_CAP: signal_outage.speed_cap.v1
+  DENSITY_CAP: signal_outage.density_cap.v1
+max_area_km2: 6.0
+max_lifetime_minutes: 240
+two_key_area_km2: 3.0
+two_key_severity: 4
