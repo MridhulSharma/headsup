@@ -59,6 +59,7 @@ markers = [
     "llm: calls a real LLM API and spends money; never run in unit tests or CI",
     "integration: needs the Docker services from docker-compose.yml (Redis, PostGIS)",
     "e2e: runs a whole scenario end to end through bus, agents and simulator",
+    "perf: measures wall-clock throughput on the dev laptop; meaningless on a shared runner",
 ]
 
 [tool.ruff]
@@ -72,6 +73,11 @@ extend-exclude = ["gev"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer declares options as call expressions in argument defaults; that is the
+# framework's interface, not the mutable-default bug B008 looks for.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
 
 [tool.uv]
 package = true
