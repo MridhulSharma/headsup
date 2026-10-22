@@ -14,6 +14,7 @@ from headsup.agents.compiler.cli import register as register_compiler
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app
+from headsup.sim.cli import register as register_sim
 from headsup.world.cli import world_app
 
 app = typer.Typer(
@@ -33,6 +34,9 @@ app.add_typer(world_app, name="world")
 # `hu compile`, `hu verify` and `hu keygen` are top-level verbs, not a group:
 # they are the two ends of the publishing gate and get used on their own.
 register_compiler(app)
+
+# `hu sim` is one verb too: a run is a single thing you start and watch.
+register_sim(app)
 
 console = Console()
 err = Console(stderr=True)
