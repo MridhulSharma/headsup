@@ -239,7 +239,9 @@ async def test_the_service_publishes_an_advisory_and_an_audit_record(
     approvals = InMemoryApprovals()
     approvals.grant(PROPOSAL.id, "duty_officer_7", now=COMPILE_NOW)
     service = CompilerService(
-        compiler_bus, Compiler(approvals=approvals, clock=lambda: COMPILE_NOW)
+        compiler_bus,
+        Compiler(approvals=approvals, clock=lambda: COMPILE_NOW),
+        allow_unguarded=True,
     )
     outcome = await service.publish(PROPOSAL, approve(PROPOSAL.id))
 
@@ -258,7 +260,9 @@ async def test_a_rejected_proposal_writes_audit_and_nothing_else(
     compiler_bus: Bus,
 ) -> None:
     """A refusal leaves as much evidence as a publication."""
-    service = CompilerService(compiler_bus, Compiler(clock=lambda: COMPILE_NOW))
+    service = CompilerService(
+        compiler_bus, Compiler(clock=lambda: COMPILE_NOW), allow_unguarded=True
+    )
     outcome = await service.publish(PROPOSAL, approve(PROPOSAL.id))
 
     assert not outcome.ok
@@ -285,7 +289,9 @@ async def test_the_service_audits_a_write_it_could_not_make(
     # The agent user, lying about being the compiler: the client-side guard
     # passes and the server refuses.
     bus = Bus(role_url(Role.AGENT), namespace=namespace, writer="compiler")
-    service = CompilerService(bus, Compiler(approvals=approvals, clock=lambda: COMPILE_NOW))
+    service = CompilerService(
+        bus, Compiler(approvals=approvals, clock=lambda: COMPILE_NOW), allow_unguarded=True
+    )
     try:
         with pytest.raises(BusError):
             await service.publish(PROPOSAL, approve(PROPOSAL.id))

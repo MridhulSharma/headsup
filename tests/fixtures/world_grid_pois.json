@@ -1,0 +1,33 @@
+{
+  "city": "fixture",
+  "count": 3,
+  "pois": [
+    {
+      "id": "poi_hospital_n900001",
+      "kind": "HOSPITAL",
+      "name": "Grid General",
+      "osm_id": "node/900001",
+      "lon": -97.73843724164911,
+      "lat": 30.267349746247703,
+      "access_edge_ids": []
+    },
+    {
+      "id": "poi_fire_station_n900002",
+      "kind": "FIRE_STATION",
+      "name": "Grid Station 1",
+      "osm_id": "node/900002",
+      "lon": -97.73854142553917,
+      "lat": 30.267439729330885,
+      "access_edge_ids": []
+    },
+    {
+      "id": "poi_school_n900003",
+      "kind": "SCHOOL",
+      "name": "Grid Elementary",
+      "osm_id": "node/900003",
+      "lon": -97.7394790805497,
+      "lat": 30.26824957707951,
+      "access_edge_ids": []
+    }
+  ]
+}

@@ -1,17 +1,22 @@
-"""The critical-access rule, and the interface D2.1 replaces.
+"""The critical-access rule, and the interface the world model plugs into.
 
 No advisory may close every way into a hospital, a fire station or an EMS
 station. The compiler cannot answer that question on its own: it needs the
-road graph, which arrives in D2.1 with the world model. Until then it asks a
-`PoiChecker`, and this module ships two of them:
+road graph. So it asks a `PoiChecker`, and the real answer comes from
+`headsup.world.checker.WorldPoiChecker`, which intersects the edges under the
+advisory with the edges entering each POI's block.
+
+This module keeps the protocol and the two checkers that need no graph:
 
 * `NullPoiChecker` - answers "nothing blocked" and says so loudly in
-  `describes_itself`, so a run without the world model is visibly unguarded;
+  `describes_itself`, so a process running before `hu world build` is visibly
+  unguarded rather than quietly so;
 * `StubPoiChecker` - holds a handful of POIs with their access points and
-  answers from geometry alone, which is enough for the unit and property tests.
+  answers from geometry alone, which is what the unit and property tests run
+  on so that they need no city.
 
-D2.1 adds `WorldPoiChecker` with the real `access_edges(poi)` and drops it in
-through the same protocol; nothing in `rules.py` changes.
+All three satisfy the same protocol, so swapping one in is
+`Compiler(poi=...)` and nothing in `rules.py` changes.
 """
 
 from __future__ import annotations
@@ -51,8 +56,8 @@ class Poi:
     """One point of interest and the ways into it.
 
     `access_points` is one coordinate per access edge: where that edge meets
-    the public street network. The real checker in D2.1 works on edge ids; the
-    stub works on these coordinates, and both answer the same question.
+    the public street network. `WorldPoiChecker` works on edge ids; the stub
+    works on these coordinates, and both answer the same question.
     """
 
     id: str
@@ -100,15 +105,17 @@ class PoiChecker(Protocol):
 class NullPoiChecker:
     """Answers "nothing blocked" because it knows nothing.
 
-    This is the default so that the compiler runs before the world model
-    exists, and the audit record carries the fact that the rule was unguarded.
+    This is the default so that the compiler runs before a world is built, and
+    the audit record carries the fact that the rule was unguarded.
     """
 
     def blocked_access(self, geometry: Geometry, action: ActionType) -> Sequence[BlockedAccess]:
         return ()
 
     def describes_itself(self) -> str:
-        return "null-poi-checker (no POI data; critical-access rule unguarded until D2.1)"
+        return (
+            "null-poi-checker (no POI data; critical-access rule unguarded - run `hu world build`)"
+        )
 
 
 @dataclass

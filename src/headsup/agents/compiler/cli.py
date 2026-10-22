@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -30,8 +31,9 @@ from rich.console import Console
 from rich.table import Table
 
 from headsup.agents.compiler.approvals import InMemoryApprovals
-from headsup.agents.compiler.compiler import Compiler, CompilerError
+from headsup.agents.compiler.compiler import ENV_CITY, Compiler, CompilerError
 from headsup.agents.compiler.playbooks import PlaybookError, PlaybookSet, default_playbooks
+from headsup.agents.compiler.poi import NullPoiChecker, PoiChecker
 from headsup.agents.compiler.rules import Check
 from headsup.agents.compiler.service import CompilerService
 from headsup.agents.compiler.signing import (
@@ -123,6 +125,27 @@ def _checks_table(checks: tuple[Check, ...]) -> Table:
     return table
 
 
+def _poi_checker(city: str | None, cache: str | None = None) -> PoiChecker:
+    """The world model's checker for a city, or the null one.
+
+    The city has to be asked for, by `--city` or `HU_CITY`: it is not derived
+    from the issuer's default the way `default_issuer` derives one. Guarding a
+    closure against the wrong city's hospitals would look like a guard and be
+    worse than none, whereas the null checker says in every audit record that
+    the rule ran unguarded.
+
+    `headsup.world` is imported here rather than at module scope because it
+    brings in igraph and pyproj, and `hu verify` has no use for either.
+    """
+    target = city or os.environ.get(ENV_CITY, "").strip()
+    if not target:
+        return NullPoiChecker()
+
+    from headsup.world.checker import default_poi_checker
+
+    return default_poi_checker(target, cache_dir=cache)
+
+
 def _load_playbooks(directory: str | None) -> PlaybookSet:
     try:
         return PlaybookSet.load(directory) if directory else default_playbooks()
@@ -157,6 +180,19 @@ def compile_proposal(
             "proposal, whose window is in the past."
         ),
     ),
+    city: str | None = typer.Option(
+        None,
+        "--city",
+        help=(
+            "Whose road graph answers the critical-access rule (default: HU_CITY, "
+            "and unguarded if that is unset too). Needs `hu world build --city "
+            "<city>`; without a built world the rule runs unguarded and says so "
+            "in the audit record."
+        ),
+    ),
+    cache: str | None = typer.Option(
+        None, "--cache", help="World cache directory (default: data/cache)."
+    ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Print only the advisory JSON."),
 ) -> None:
     """Compile one proposal into a signed advisory, or show why it was refused."""
@@ -188,10 +224,15 @@ def compile_proposal(
             err.print(f"[red]--approval-token is not a usable token: {_first_error(exc)}[/red]")
             raise typer.Exit(1) from exc
 
+    checker = _poi_checker(city, cache)
+    if not quiet:
+        err.print(f"[dim]{checker.describes_itself()}[/dim]")
+
     try:
         compiler = Compiler(
             playbooks=_load_playbooks(playbooks),
             signer=signer,
+            poi=checker,
             approvals=approvals,
             clock=(lambda: moment) if moment is not None else None,
         )
@@ -242,8 +283,17 @@ def compile_proposal(
 
 
 async def _publish(compiler: Compiler, proposal: Any, verdict: Any) -> tuple[Any, str | None]:
-    """Compile and write to the bus, so `--publish` audits like an agent does."""
-    service = CompilerService.from_env(compiler=compiler)
+    """Compile and write to the bus, so `--publish` audits like an agent does.
+
+    Publishing is the guarded act: the service refuses to start without a road
+    graph behind the critical-access rule, so `--publish` needs `--city` (or
+    `HU_CITY`) and a built world, while a compile that only prints does not.
+    """
+    try:
+        service = CompilerService.from_env(compiler=compiler)
+    except CompilerError as exc:
+        err.print(f"[red]{exc}[/red]")
+        raise typer.Exit(1) from exc
     try:
         outcome = await service.publish(proposal, verdict)
     except BusError as exc:
