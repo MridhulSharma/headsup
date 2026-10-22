@@ -1,0 +1,2019 @@
+{
+  "city": "austin",
+  "dataset": "p53x-x73x",
+  "source_url": "https://data.austintexas.gov/resource/p53x-x73x.json",
+  "retrieved_at": "2026-10-22",
+  "bbox": [
+    -97.76,
+    30.258,
+    -97.728,
+    30.282
+  ],
+  "signal_type": "TRAFFIC",
+  "signal_status": "TURNED_ON",
+  "count": 182,
+  "signals": [
+    {
+      "signal_id": "23",
+      "location_name": "GUADALUPE ST / MARTIN LUTHER KING JR BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741928,
+          30.281733
+        ]
+      }
+    },
+    {
+      "signal_id": "24",
+      "location_name": "LAVACA ST / MARTIN LUTHER KING JR BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740509,
+          30.281328
+        ]
+      }
+    },
+    {
+      "signal_id": "25",
+      "location_name": "MARTIN LUTHER KING JR BLVD / CONGRESS AVE (MLK/Capitol Mall)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738106,
+          30.280687
+        ]
+      }
+    },
+    {
+      "signal_id": "26",
+      "location_name": "MARTIN LUTHER KING JR BLVD / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.73571,
+          30.279976
+        ]
+      }
+    },
+    {
+      "signal_id": "27",
+      "location_name": "MARTIN LUTHER KING JR BLVD / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734512,
+          30.279638
+        ]
+      }
+    },
+    {
+      "signal_id": "28",
+      "location_name": "MARTIN LUTHER KING JR BLVD / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.732193,
+          30.278975
+        ]
+      }
+    },
+    {
+      "signal_id": "35",
+      "location_name": "MARTIN LUTHER KING JR BLVD / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.730484,
+          30.278559
+        ]
+      }
+    },
+    {
+      "signal_id": "36",
+      "location_name": "MARTIN LUTHER KING JR BLVD / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.72908,
+          30.278509
+        ]
+      }
+    },
+    {
+      "signal_id": "76",
+      "location_name": "MARTIN LUTHER KING JR BLVD / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736771,
+          30.280294
+        ]
+      }
+    },
+    {
+      "signal_id": "86",
+      "location_name": "7TH ST / NECHES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737915,
+          30.2677
+        ]
+      }
+    },
+    {
+      "signal_id": "104",
+      "location_name": "LAMAR BLVD / PARKWAY",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.751167,
+          30.277359
+        ]
+      }
+    },
+    {
+      "signal_id": "116",
+      "location_name": "LAMAR BLVD / 12TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.751396,
+          30.276897
+        ]
+      }
+    },
+    {
+      "signal_id": "117",
+      "location_name": "LAMAR BLVD / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.752281,
+          30.275017
+        ]
+      }
+    },
+    {
+      "signal_id": "118",
+      "location_name": "6TH ST / LAMAR BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.753967,
+          30.271538
+        ]
+      }
+    },
+    {
+      "signal_id": "119",
+      "location_name": "5TH ST / LAMAR BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.754601,
+          30.27029
+        ]
+      }
+    },
+    {
+      "signal_id": "120",
+      "location_name": "LAMAR BLVD / RIVERSIDE DR",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.757103,
+          30.264525
+        ]
+      }
+    },
+    {
+      "signal_id": "121",
+      "location_name": "LAMAR BLVD / BARTON SPRINGS RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.758522,
+          30.260862
+        ]
+      }
+    },
+    {
+      "signal_id": "128",
+      "location_name": "LAMAR BLVD / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.752777,
+          30.273949
+        ]
+      }
+    },
+    {
+      "signal_id": "131",
+      "location_name": "6TH ST / BOWIE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.752525,
+          30.270962
+        ]
+      }
+    },
+    {
+      "signal_id": "132",
+      "location_name": "CONGRESS AVE / BARTON SPRINGS RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74614,
+          30.259111
+        ]
+      }
+    },
+    {
+      "signal_id": "133",
+      "location_name": "RIVERSIDE DR / BARTON SPRINGS RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748428,
+          30.258638
+        ]
+      }
+    },
+    {
+      "signal_id": "134",
+      "location_name": "1ST ST / BARTON SPRINGS RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.750069,
+          30.258383
+        ]
+      }
+    },
+    {
+      "signal_id": "135",
+      "location_name": "CESAR CHAVEZ ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736763,
+          30.261231
+        ]
+      }
+    },
+    {
+      "signal_id": "136",
+      "location_name": "CESAR CHAVEZ ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735786,
+          30.260996
+        ]
+      }
+    },
+    {
+      "signal_id": "137",
+      "location_name": "1ST ST / RIVERSIDE DR",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.749275,
+          30.259758
+        ]
+      }
+    },
+    {
+      "signal_id": "147",
+      "location_name": "CESAR CHAVEZ ST / GUADALUPE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748001,
+          30.264366
+        ]
+      }
+    },
+    {
+      "signal_id": "148",
+      "location_name": "CESAR CHAVEZ ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746941,
+          30.264071
+        ]
+      }
+    },
+    {
+      "signal_id": "149",
+      "location_name": "CESAR CHAVEZ ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744568,
+          30.263382
+        ]
+      }
+    },
+    {
+      "signal_id": "150",
+      "location_name": "CESAR CHAVEZ ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742104,
+          30.262692
+        ]
+      }
+    },
+    {
+      "signal_id": "151",
+      "location_name": "SAN JACINTO BLVD / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741791,
+          30.263641
+        ]
+      }
+    },
+    {
+      "signal_id": "152",
+      "location_name": "CESAR CHAVEZ ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738792,
+          30.261782
+        ]
+      }
+    },
+    {
+      "signal_id": "153",
+      "location_name": "GUADALUPE ST / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.747673,
+          30.265287
+        ]
+      }
+    },
+    {
+      "signal_id": "154",
+      "location_name": "LAVACA ST / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74659,
+          30.264998
+        ]
+      }
+    },
+    {
+      "signal_id": "155",
+      "location_name": "CONGRESS AVE / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744194,
+          30.26432
+        ]
+      }
+    },
+    {
+      "signal_id": "177",
+      "location_name": "BRAZOS ST / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742859,
+          30.263947
+        ]
+      }
+    },
+    {
+      "signal_id": "182",
+      "location_name": "BRAZOS ST / CESAR CHAVEZ ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74321,
+          30.263029
+        ]
+      }
+    },
+    {
+      "signal_id": "183",
+      "location_name": "CESAR CHAVEZ ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741074,
+          30.262396
+        ]
+      }
+    },
+    {
+      "signal_id": "187",
+      "location_name": "5TH ST / BOWIE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.753174,
+          30.269737
+        ]
+      }
+    },
+    {
+      "signal_id": "203",
+      "location_name": "5TH ST / BAYLOR ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.756035,
+          30.270855
+        ]
+      }
+    },
+    {
+      "signal_id": "209",
+      "location_name": "12TH ST / WEST LYNN ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.759117,
+          30.280226
+        ]
+      }
+    },
+    {
+      "signal_id": "210",
+      "location_name": "GUADALUPE ST / 15TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743,
+          30.2779
+        ]
+      }
+    },
+    {
+      "signal_id": "215",
+      "location_name": "15TH ST / ENFIELD RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.753212,
+          30.280155
+        ]
+      }
+    },
+    {
+      "signal_id": "216",
+      "location_name": "15TH ST / WEST AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.747284,
+          30.279146
+        ]
+      }
+    },
+    {
+      "signal_id": "217",
+      "location_name": "15TH ST / RIO GRANDE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746231,
+          30.278841
+        ]
+      }
+    },
+    {
+      "signal_id": "218",
+      "location_name": "15TH ST / NUECES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745148,
+          30.278534
+        ]
+      }
+    },
+    {
+      "signal_id": "219",
+      "location_name": "15TH ST / SAN ANTONIO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744057,
+          30.278219
+        ]
+      }
+    },
+    {
+      "signal_id": "221",
+      "location_name": "15TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741928,
+          30.277605
+        ]
+      }
+    },
+    {
+      "signal_id": "222",
+      "location_name": "15TH ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739494,
+          30.276918
+        ]
+      }
+    },
+    {
+      "signal_id": "223",
+      "location_name": "15TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737106,
+          30.276232
+        ]
+      }
+    },
+    {
+      "signal_id": "224",
+      "location_name": "15TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736031,
+          30.275942
+        ]
+      }
+    },
+    {
+      "signal_id": "225",
+      "location_name": "15TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734848,
+          30.275618
+        ]
+      }
+    },
+    {
+      "signal_id": "226",
+      "location_name": "15TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740837,
+          30.277298
+        ]
+      }
+    },
+    {
+      "signal_id": "227",
+      "location_name": "15TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.731758,
+          30.274777
+        ]
+      }
+    },
+    {
+      "signal_id": "229",
+      "location_name": "CESAR CHAVEZ ST / SANDRA MURAIDA WAY",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.755539,
+          30.266434
+        ]
+      }
+    },
+    {
+      "signal_id": "230",
+      "location_name": "CESAR CHAVEZ ST / B R REYNOLDS DR",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.757095,
+          30.266964
+        ]
+      }
+    },
+    {
+      "signal_id": "233",
+      "location_name": "BARTON SPRINGS RD / BOULDIN AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.753479,
+          30.259584
+        ]
+      }
+    },
+    {
+      "signal_id": "234",
+      "location_name": "BARTON SPRINGS RD / DAWSON RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.755707,
+          30.260344
+        ]
+      }
+    },
+    {
+      "signal_id": "238",
+      "location_name": "CESAR CHAVEZ ST / WALTER SEAHOLM DR",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.75353,
+          30.266
+        ]
+      }
+    },
+    {
+      "signal_id": "241",
+      "location_name": "12TH ST / SHOAL CREEK BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.749908,
+          30.276411
+        ]
+      }
+    },
+    {
+      "signal_id": "242",
+      "location_name": "12TH ST / WEST AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748428,
+          30.276058
+        ]
+      }
+    },
+    {
+      "signal_id": "243",
+      "location_name": "12TH ST / RIO GRANDE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74736,
+          30.275765
+        ]
+      }
+    },
+    {
+      "signal_id": "244",
+      "location_name": "12TH ST / NUECES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746269,
+          30.275465
+        ]
+      }
+    },
+    {
+      "signal_id": "245",
+      "location_name": "12TH ST / GUADALUPE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744125,
+          30.274853
+        ]
+      }
+    },
+    {
+      "signal_id": "246",
+      "location_name": "12TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743034,
+          30.274534
+        ]
+      }
+    },
+    {
+      "signal_id": "247",
+      "location_name": "12TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738243,
+          30.273203
+        ]
+      }
+    },
+    {
+      "signal_id": "249",
+      "location_name": "12TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735046,
+          30.27232
+        ]
+      }
+    },
+    {
+      "signal_id": "250",
+      "location_name": "GUADALUPE ST / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744583,
+          30.273706
+        ]
+      }
+    },
+    {
+      "signal_id": "251",
+      "location_name": "LAVACA ST / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743462,
+          30.273409
+        ]
+      }
+    },
+    {
+      "signal_id": "252",
+      "location_name": "11TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742844,
+          30.273237
+        ]
+      }
+    },
+    {
+      "signal_id": "253",
+      "location_name": "CONGRESS AVE / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741104,
+          30.272749
+        ]
+      }
+    },
+    {
+      "signal_id": "254",
+      "location_name": "BRAZOS ST / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739739,
+          30.27236
+        ]
+      }
+    },
+    {
+      "signal_id": "255",
+      "location_name": "SAN JACINTO BLVD / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738655,
+          30.27206
+        ]
+      }
+    },
+    {
+      "signal_id": "256",
+      "location_name": "11TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737564,
+          30.271763
+        ]
+      }
+    },
+    {
+      "signal_id": "257",
+      "location_name": "RED RIVER ST / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735451,
+          30.27117
+        ]
+      }
+    },
+    {
+      "signal_id": "259",
+      "location_name": "15TH ST / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738197,
+          30.276548
+        ]
+      }
+    },
+    {
+      "signal_id": "261",
+      "location_name": "GUADALUPE ST / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744888,
+          30.27277
+        ]
+      }
+    },
+    {
+      "signal_id": "262",
+      "location_name": "LAVACA ST / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743805,
+          30.27248
+        ]
+      }
+    },
+    {
+      "signal_id": "263",
+      "location_name": "COLORADO ST / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742744,
+          30.272173
+        ]
+      }
+    },
+    {
+      "signal_id": "264",
+      "location_name": "CONGRESS AVE / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74144,
+          30.271803
+        ]
+      }
+    },
+    {
+      "signal_id": "265",
+      "location_name": "BRAZOS ST / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740082,
+          30.271429
+        ]
+      }
+    },
+    {
+      "signal_id": "266",
+      "location_name": "SAN JACINTO BLVD / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738998,
+          30.271112
+        ]
+      }
+    },
+    {
+      "signal_id": "267",
+      "location_name": "10TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737923,
+          30.270824
+        ]
+      }
+    },
+    {
+      "signal_id": "268",
+      "location_name": "RED RIVER ST / 10TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735771,
+          30.270227
+        ]
+      }
+    },
+    {
+      "signal_id": "269",
+      "location_name": "LAVACA ST / 13TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742592,
+          30.275734
+        ]
+      }
+    },
+    {
+      "signal_id": "272",
+      "location_name": "GUADALUPE ST / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745232,
+          30.27182
+        ]
+      }
+    },
+    {
+      "signal_id": "273",
+      "location_name": "LAVACA ST / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744148,
+          30.271542
+        ]
+      }
+    },
+    {
+      "signal_id": "274",
+      "location_name": "COLORADO ST / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743057,
+          30.271244
+        ]
+      }
+    },
+    {
+      "signal_id": "275",
+      "location_name": "CONGRESS AVE / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741753,
+          30.270853
+        ]
+      }
+    },
+    {
+      "signal_id": "276",
+      "location_name": "BRAZOS ST / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740425,
+          30.270472
+        ]
+      }
+    },
+    {
+      "signal_id": "277",
+      "location_name": "SAN JACINTO BLVD / 9TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739334,
+          30.270174
+        ]
+      }
+    },
+    {
+      "signal_id": "278",
+      "location_name": "CESAR CHAVEZ ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745857,
+          30.263762
+        ]
+      }
+    },
+    {
+      "signal_id": "279",
+      "location_name": "6TH ST / RIO GRANDE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.749527,
+          30.269945
+        ]
+      }
+    },
+    {
+      "signal_id": "280",
+      "location_name": "CESAR CHAVEZ ST / SAN ANTONIO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.749115,
+          30.264656
+        ]
+      }
+    },
+    {
+      "signal_id": "281",
+      "location_name": "GUADALUPE ST / 8TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74559,
+          30.270872
+        ]
+      }
+    },
+    {
+      "signal_id": "282",
+      "location_name": "8TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744492,
+          30.270575
+        ]
+      }
+    },
+    {
+      "signal_id": "283",
+      "location_name": "8TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743416,
+          30.270268
+        ]
+      }
+    },
+    {
+      "signal_id": "284",
+      "location_name": "8TH ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742111,
+          30.269905
+        ]
+      }
+    },
+    {
+      "signal_id": "285",
+      "location_name": "8TH ST / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740784,
+          30.269531
+        ]
+      }
+    },
+    {
+      "signal_id": "286",
+      "location_name": "8TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739693,
+          30.269236
+        ]
+      }
+    },
+    {
+      "signal_id": "287",
+      "location_name": "8TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738609,
+          30.268927
+        ]
+      }
+    },
+    {
+      "signal_id": "288",
+      "location_name": "LAVACA ST / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745873,
+          30.266876
+        ]
+      }
+    },
+    {
+      "signal_id": "289",
+      "location_name": "8TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736488,
+          30.268322
+        ]
+      }
+    },
+    {
+      "signal_id": "290",
+      "location_name": "7TH ST / GUADALUPE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745934,
+          30.269962
+        ]
+      }
+    },
+    {
+      "signal_id": "291",
+      "location_name": "7TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744843,
+          30.269655
+        ]
+      }
+    },
+    {
+      "signal_id": "292",
+      "location_name": "7TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743774,
+          30.269348
+        ]
+      }
+    },
+    {
+      "signal_id": "293",
+      "location_name": "7TH ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74247,
+          30.268967
+        ]
+      }
+    },
+    {
+      "signal_id": "294",
+      "location_name": "7TH ST / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741112,
+          30.268602
+        ]
+      }
+    },
+    {
+      "signal_id": "295",
+      "location_name": "7TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740036,
+          30.268295
+        ]
+      }
+    },
+    {
+      "signal_id": "296",
+      "location_name": "7TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738953,
+          30.268007
+        ]
+      }
+    },
+    {
+      "signal_id": "297",
+      "location_name": "7TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736816,
+          30.267403
+        ]
+      }
+    },
+    {
+      "signal_id": "298",
+      "location_name": "6TH ST / WEST AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.750588,
+          30.270296
+        ]
+      }
+    },
+    {
+      "signal_id": "299",
+      "location_name": "6TH ST / NUECES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748421,
+          30.269629
+        ]
+      }
+    },
+    {
+      "signal_id": "300",
+      "location_name": "6TH ST / GUADALUPE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746262,
+          30.269024
+        ]
+      }
+    },
+    {
+      "signal_id": "301",
+      "location_name": "6TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745201,
+          30.268717
+        ]
+      }
+    },
+    {
+      "signal_id": "302",
+      "location_name": "6TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744125,
+          30.268417
+        ]
+      }
+    },
+    {
+      "signal_id": "303",
+      "location_name": "6TH ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742813,
+          30.268066
+        ]
+      }
+    },
+    {
+      "signal_id": "304",
+      "location_name": "6TH ST / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741455,
+          30.267683
+        ]
+      }
+    },
+    {
+      "signal_id": "305",
+      "location_name": "6TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740372,
+          30.267395
+        ]
+      }
+    },
+    {
+      "signal_id": "306",
+      "location_name": "6TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739334,
+          30.267069
+        ]
+      }
+    },
+    {
+      "signal_id": "307",
+      "location_name": "6TH ST / NECHES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738243,
+          30.266783
+        ]
+      }
+    },
+    {
+      "signal_id": "308",
+      "location_name": "6TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.73719,
+          30.266476
+        ]
+      }
+    },
+    {
+      "signal_id": "309",
+      "location_name": "5TH ST / WEST AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.750954,
+          30.26931
+        ]
+      }
+    },
+    {
+      "signal_id": "310",
+      "location_name": "5TH ST / NUECES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748779,
+          30.268679
+        ]
+      }
+    },
+    {
+      "signal_id": "312",
+      "location_name": "5TH ST / LAVACA ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745544,
+          30.267796
+        ]
+      }
+    },
+    {
+      "signal_id": "313",
+      "location_name": "5TH ST / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744469,
+          30.267477
+        ]
+      }
+    },
+    {
+      "signal_id": "314",
+      "location_name": "5TH ST / CONGRESS AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743172,
+          30.267119
+        ]
+      }
+    },
+    {
+      "signal_id": "315",
+      "location_name": "5TH ST / BRAZOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741837,
+          30.266756
+        ]
+      }
+    },
+    {
+      "signal_id": "316",
+      "location_name": "5TH ST / SAN JACINTO BLVD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74073,
+          30.266438
+        ]
+      }
+    },
+    {
+      "signal_id": "317",
+      "location_name": "5TH ST / TRINITY ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.739677,
+          30.266132
+        ]
+      }
+    },
+    {
+      "signal_id": "318",
+      "location_name": "5TH ST / NECHES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.738586,
+          30.265842
+        ]
+      }
+    },
+    {
+      "signal_id": "319",
+      "location_name": "5TH ST / RED RIVER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737488,
+          30.265535
+        ]
+      }
+    },
+    {
+      "signal_id": "320",
+      "location_name": "CONGRESS AVE / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.7435,
+          30.266209
+        ]
+      }
+    },
+    {
+      "signal_id": "321",
+      "location_name": "5TH ST / GUADALUPE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746635,
+          30.268093
+        ]
+      }
+    },
+    {
+      "signal_id": "325",
+      "location_name": "GUADALUPE ST / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746964,
+          30.267183
+        ]
+      }
+    },
+    {
+      "signal_id": "326",
+      "location_name": "COLORADO ST / 2ND ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745514,
+          30.264683
+        ]
+      }
+    },
+    {
+      "signal_id": "328",
+      "location_name": "CONGRESS AVE / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743866,
+          30.26524
+        ]
+      }
+    },
+    {
+      "signal_id": "329",
+      "location_name": "6TH ST / BLANCO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.757126,
+          30.272749
+        ]
+      }
+    },
+    {
+      "signal_id": "330",
+      "location_name": "12TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.732788,
+          30.271833
+        ]
+      }
+    },
+    {
+      "signal_id": "331",
+      "location_name": "IH 35 SVRD / 11TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.733292,
+          30.270559
+        ]
+      }
+    },
+    {
+      "signal_id": "332",
+      "location_name": "LAVACA ST / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.746246,
+          30.26593
+        ]
+      }
+    },
+    {
+      "signal_id": "334",
+      "location_name": "8TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734299,
+          30.267725
+        ]
+      }
+    },
+    {
+      "signal_id": "335",
+      "location_name": "7TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734665,
+          30.266821
+        ]
+      }
+    },
+    {
+      "signal_id": "336",
+      "location_name": "6TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735001,
+          30.265881
+        ]
+      }
+    },
+    {
+      "signal_id": "339",
+      "location_name": "15TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.73098,
+          30.274611
+        ]
+      }
+    },
+    {
+      "signal_id": "340",
+      "location_name": "12TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.731888,
+          30.27187
+        ]
+      }
+    },
+    {
+      "signal_id": "341",
+      "location_name": "11TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.732475,
+          30.270329
+        ]
+      }
+    },
+    {
+      "signal_id": "345",
+      "location_name": "7TH ST / 35 SVRD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.733856,
+          30.266571
+        ]
+      }
+    },
+    {
+      "signal_id": "346",
+      "location_name": "IH 35 SVRD / 6TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.7342,
+          30.265636
+        ]
+      }
+    },
+    {
+      "signal_id": "350",
+      "location_name": "7TH ST / ATTAYAC ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.72908,
+          30.265019
+        ]
+      }
+    },
+    {
+      "signal_id": "363",
+      "location_name": "CESAR CHAVEZ ST / COMAL ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.728668,
+          30.258518
+        ]
+      }
+    },
+    {
+      "signal_id": "369",
+      "location_name": "CESAR CHAVEZ ST / WALLER ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.732605,
+          30.259886
+        ]
+      }
+    },
+    {
+      "signal_id": "472",
+      "location_name": "2ND ST / SAN ANTONIO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748734,
+          30.265595
+        ]
+      }
+    },
+    {
+      "signal_id": "614",
+      "location_name": "RED RIVER ST / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.737839,
+          30.264626
+        ]
+      }
+    },
+    {
+      "signal_id": "731",
+      "location_name": "GUADALUPE ST / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.747307,
+          30.266226
+        ]
+      }
+    },
+    {
+      "signal_id": "742",
+      "location_name": "COLORADO ST / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.745155,
+          30.265602
+        ]
+      }
+    },
+    {
+      "signal_id": "951",
+      "location_name": "6TH ST / BAYLOR ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.755386,
+          30.272099
+        ]
+      }
+    },
+    {
+      "signal_id": "953",
+      "location_name": "5TH ST / RIO GRANDE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.74987,
+          30.268997
+        ]
+      }
+    },
+    {
+      "signal_id": "954",
+      "location_name": "5TH ST / WALSH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.758171,
+          30.271654
+        ]
+      }
+    },
+    {
+      "signal_id": "959",
+      "location_name": "COLORADO ST / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.744812,
+          30.266569
+        ]
+      }
+    },
+    {
+      "signal_id": "972",
+      "location_name": "GUADALUPE ST / 13TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.743706,
+          30.276011
+        ]
+      }
+    },
+    {
+      "signal_id": "973",
+      "location_name": "GUADALUPE ST / 17TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742287,
+          30.279736
+        ]
+      }
+    },
+    {
+      "signal_id": "974",
+      "location_name": "LAVACA ST / 16TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741539,
+          30.278563
+        ]
+      }
+    },
+    {
+      "signal_id": "975",
+      "location_name": "LAVACA ST / 17TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741203,
+          30.279469
+        ]
+      }
+    },
+    {
+      "signal_id": "1009",
+      "location_name": "BRAZOS ST / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742508,
+          30.264877
+        ]
+      }
+    },
+    {
+      "signal_id": "1010",
+      "location_name": "BRAZOS ST / 4TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.742149,
+          30.265835
+        ]
+      }
+    },
+    {
+      "signal_id": "1013",
+      "location_name": "600 BLK E 15TH ST (East of Red River St)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.733902,
+          30.275349
+        ]
+      }
+    },
+    {
+      "signal_id": "1018",
+      "location_name": "LAMAR BLVD / TOOMEY RD",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.757907,
+          30.262954
+        ]
+      }
+    },
+    {
+      "signal_id": "1036",
+      "location_name": "CESAR CHAVEZ ST / WEST AVE",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.752357,
+          30.265623
+        ]
+      }
+    },
+    {
+      "signal_id": "1040",
+      "location_name": "7TH ST / WALLER ST (WESTERLY INTERSECTION)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.730341,
+          30.265431
+        ]
+      }
+    },
+    {
+      "signal_id": "1041",
+      "location_name": "7TH ST / WALLER ST (EASTERLY INTERSECTION)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.730077,
+          30.265327
+        ]
+      }
+    },
+    {
+      "signal_id": "1042",
+      "location_name": "CESAR CHAVEZ ST / SAN MARCOS ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734611,
+          30.260589
+        ]
+      }
+    },
+    {
+      "signal_id": "1050",
+      "location_name": "MARTIN LUTHER KING JR BLVD / COLORADO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.73946,
+          30.281042
+        ]
+      }
+    },
+    {
+      "signal_id": "1051",
+      "location_name": "LAVACA ST / 18TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.740873,
+          30.280344
+        ]
+      }
+    },
+    {
+      "signal_id": "1053",
+      "location_name": "IH 35 SVRD / 8TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.733509,
+          30.267509
+        ]
+      }
+    },
+    {
+      "signal_id": "1063",
+      "location_name": "WALLER ST / 5TH ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.7309,
+          30.2635
+        ]
+      }
+    },
+    {
+      "signal_id": "1086",
+      "location_name": "IH 35 SVRD / 4TH ST (NB)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.734826,
+          30.263802
+        ]
+      }
+    },
+    {
+      "signal_id": "1099",
+      "location_name": "4TH ST / SABINE ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.736792,
+          30.264362
+        ]
+      }
+    },
+    {
+      "signal_id": "1107",
+      "location_name": "CESAR CHAVEZ ST / NUECES ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.750216,
+          30.264984
+        ]
+      }
+    },
+    {
+      "signal_id": "1122",
+      "location_name": "SAN JACINTO BLVD / 3RD ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.741457,
+          30.264563
+        ]
+      }
+    },
+    {
+      "signal_id": "1150",
+      "location_name": "4TH ST / 35 SVRD (SB)",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.735723,
+          30.264033
+        ]
+      }
+    },
+    {
+      "signal_id": "1168",
+      "location_name": "3RD ST / SAN ANTONIO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748428,
+          30.266544
+        ]
+      }
+    },
+    {
+      "signal_id": "1169",
+      "location_name": "4TH ST / SAN ANTONIO ST",
+      "location": {
+        "type": "Point",
+        "coordinates": [
+          -97.748066,
+          30.267461
+        ]
+      }
+    }
+  ]
+}

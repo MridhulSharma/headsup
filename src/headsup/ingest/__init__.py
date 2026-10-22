@@ -7,6 +7,18 @@ into `CivicEvent`s whether it arrived over HTTP a second ago or came off disk.
 
 from __future__ import annotations
 
+from headsup.ingest.austin_signals import (
+    ENV_APP_TOKEN,
+    FLASHING_STATES,
+    SCHEDULED_FLASH_STATE,
+    SIGNAL_INVENTORY_DATASET,
+    SIGNAL_STATUS_DATASET,
+    SODA_BASE,
+    STATE_KINDS,
+    UNSCHEDULED_FLASH_STATES,
+    AustinSignalsAdapter,
+    app_token,
+)
 from headsup.ingest.base import (
     DEFAULT_USER_AGENT,
     Adapter,
@@ -24,6 +36,7 @@ from headsup.ingest.base import (
 from headsup.ingest.cities import AUSTIN, CITIES, GAUGE_HEIGHT, SAN_ANTONIO, City, city
 from headsup.ingest.live import (
     NWS_INTERVAL,
+    SIGNALS_INTERVAL,
     USGS_INTERVAL,
     FeedRun,
     LiveIngest,
@@ -56,7 +69,9 @@ __all__ = [
     "AUSTIN",
     "CITIES",
     "DEFAULT_USER_AGENT",
+    "ENV_APP_TOKEN",
     "FIXTURE_DIR",
+    "FLASHING_STATES",
     "GAUGE_HEIGHT",
     "MAX_SPEED",
     "MIN_SPEED",
@@ -65,8 +80,16 @@ __all__ = [
     "RAW_DIR",
     "RECORDINGS_ROOT",
     "SAN_ANTONIO",
+    "SCHEDULED_FLASH_STATE",
+    "SIGNALS_INTERVAL",
+    "SIGNAL_INVENTORY_DATASET",
+    "SIGNAL_STATUS_DATASET",
+    "SODA_BASE",
+    "STATE_KINDS",
+    "UNSCHEDULED_FLASH_STATES",
     "USGS_INTERVAL",
     "Adapter",
+    "AustinSignalsAdapter",
     "City",
     "Clock",
     "Emission",
@@ -83,6 +106,7 @@ __all__ = [
     "SystemClock",
     "UsgsAdapter",
     "adapter_class",
+    "app_token",
     "check_speed",
     "city",
     "city_adapters",

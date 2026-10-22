@@ -22,6 +22,14 @@ robotaxi fleets, shown in a God's Eye View (CesiumJS) fork. Research prototype.
 - Core track owns src/, tests/, scenarios/, playbooks/. Viz track owns gev/ and viz/.
 - Use forward slashes in paths and LF line endings.
 
+## Token discipline
+- Do not read docs/build-packet.md; the step prompt is the spec.
+- Viz: read docs/gev-notes.md first; open only files it names. Do not explore gev/ upstream code.
+- Tests: `uv run pytest -q -x --tb=short`; on failure show only the failing test's output.
+- Never print full logs, dev-server output or large files; use tail/grep.
+- Do not spawn subagents. Do not take browser screenshots; I verify visuals myself.
+- Make targeted edits; do not re-read files you just wrote.
+
 ## Running long processes
 `hu ingest replay`, `hu ingest live` and `hu demo` run for minutes and are
 timing-sensitive: a replay paces itself against wall-clock time.

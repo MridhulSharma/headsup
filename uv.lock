@@ -261,6 +261,7 @@ dependencies = [
     { name = "shapely" },
     { name = "sqlalchemy" },
     { name = "typer" },
+    { name = "tzdata" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -295,6 +296,7 @@ requires-dist = [
     { name = "shapely" },
     { name = "sqlalchemy" },
     { name = "typer" },
+    { name = "tzdata" },
     { name = "uvicorn", extras = ["standard"] },
 ]
 

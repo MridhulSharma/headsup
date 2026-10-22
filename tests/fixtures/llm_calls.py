@@ -1,9 +1,10 @@
 """What the LLM tests share: the schemas the fixtures answer, and two doubles.
 
-The reply schemas live here rather than in `src` because the agents that will
-ask these questions arrive in D2.4 and D3.1. They are the shapes
-`tests/fixtures/llm/*.json` was written against, so a fixture that drifts out
-of contract fails the unit run.
+`FloodFields` now belongs to the flood sentinel that asks the question, and is
+re-exported here so the LLM tests keep asserting against the *real* schema: a
+reply shape that drifts out of the sentinel's contract fails the unit run.
+The remaining schemas still live here, because the agents that will ask those
+questions arrive in D2.5 and D3.1.
 
 `FakeAnthropic` is a stand-in for the SDK client: it records the request body
 it was handed, which is the only way to assert on prompt-cache placement
@@ -18,29 +19,32 @@ from typing import Any
 import orjson
 from pydantic import Field
 
+from headsup.agents.sentinels import FloodFields
 from headsup.contracts import (
     ActionType,
     Confidence,
     FreeText,
     HeadsUpModel,
-    Severity,
     Source,
 )
 
 # --- the shapes the fixtures answer ----------------------------------------
 
-
-class FloodFields(HeadsUpModel):
-    """What the flood sentinel lets a volume call take from NWS free text.
-
-    Every field is a fact to be looked up, never an instruction: the sentinel
-    decides what to do with them, the model only fills them in.
-    """
-
-    waterway: FreeText | None = None
-    severity_hint: Severity
-    evacuation_mentioned: bool = False
-    roads_named: list[FreeText] = Field(default_factory=list, max_length=10)
+#: The flood sentinel's own schema, re-exported for the LLM tests.
+__all__ = [
+    "FLOOD_PAYLOAD",
+    "FakeAnthropic",
+    "FakeBlock",
+    "FakeMessages",
+    "FakeResponse",
+    "FakeUsage",
+    "FloodFields",
+    "FusionRationale",
+    "ProposedAction",
+    "RecordingBus",
+    "reply",
+    "truncated",
+]
 
 
 class FusionRationale(HeadsUpModel):
