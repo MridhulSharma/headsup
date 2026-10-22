@@ -5,7 +5,8 @@ robotaxi fleets, shown in a God's Eye View (CesiumJS) fork. Research prototype.
 
 ## Commands (Windows: run from Git Bash or PowerShell)
 - uv run hu infra up | down | status   # Redis + PostGIS in Docker
-- uv run pytest -q -m "not llm"        # default test run, no API spend
+- uv run pytest -q -m "not llm and not perf"   # default test run, no API spend
+- uv run pytest -q -m perf             # 900-vehicle throughput; run it alone
 - uv run ruff check . && uv run ruff format --check .
 - uv run hu demo s1                    # replay scenario S1 end to end
 - cd gev && npm run dev                # 3D viewer on localhost:4173

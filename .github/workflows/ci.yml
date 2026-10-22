@@ -83,4 +83,4 @@ jobs:
           uv run ruff format --check .
 
       - name: Test
-        run: uv run pytest -q -m "not llm and not e2e"
+        run: uv run pytest -q -m "not llm and not e2e and not perf"
