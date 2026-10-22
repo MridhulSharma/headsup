@@ -26,6 +26,11 @@ dependencies = [
     "anthropic",
     "ollama",
     "pyyaml",
+    # The Austin signal feed stamps its rows in Austin local time with no
+    # offset, so `zoneinfo` has to resolve America/Chicago. Windows has no
+    # system tz database, and relying on this arriving behind psycopg would
+    # make a five-hour timestamp error one dependency bump away.
+    "tzdata",
     "typer",
     "rich",
     "orjson",

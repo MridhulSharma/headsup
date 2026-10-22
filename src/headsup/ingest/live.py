@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from headsup.bus import Bus
 from headsup.contracts import CivicEvent, Source
+from headsup.ingest.austin_signals import AustinSignalsAdapter
 from headsup.ingest.base import Adapter, Clock, IngestError, SystemClock
 from headsup.ingest.cities import City
 from headsup.ingest.nws import NwsAdapter
@@ -22,8 +23,11 @@ from headsup.ingest.usgs import UsgsAdapter
 
 #: Seconds between polls. NWS reissues alerts within a minute; USGS gauges
 #: report every 15 minutes, so polling faster than this only wastes requests.
+#: Austin refreshes the signal status table every five minutes - the interval
+#: is the feed's own `processed_datetime` cadence, not a guess.
 NWS_INTERVAL = 60.0
 USGS_INTERVAL = 300.0
+SIGNALS_INTERVAL = 300.0
 
 
 @dataclass(slots=True)
@@ -38,11 +42,23 @@ class FeedRun:
 
 
 def city_adapters(city: City, **kwargs: object) -> list[tuple[Adapter, float]]:
-    """The feeds Heads Up polls for one city, with their intervals."""
-    return [
+    """The feeds Heads Up polls for one city, with their intervals.
+
+    A city only gets the signal feed if it publishes one, so San Antonio polls
+    two feeds and Austin three.
+    """
+    feeds: list[tuple[Adapter, float]] = [
         (NwsAdapter(area=city.nws_area, **kwargs), NWS_INTERVAL),  # type: ignore[arg-type]
         (UsgsAdapter.for_city(city, **kwargs), USGS_INTERVAL),  # type: ignore[arg-type]
     ]
+    if city.signal_dataset:
+        feeds.append(
+            (
+                AustinSignalsAdapter(dataset=city.signal_dataset, **kwargs),  # type: ignore[arg-type]
+                SIGNALS_INTERVAL,
+            )
+        )
+    return feeds
 
 
 class LiveIngest:

@@ -195,17 +195,50 @@ class Adapter(ABC):
         self._seq += 1
         return ref
 
-    async def get_json(self, url: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """One GET returning a JSON object, with feed errors wrapped."""
+    async def _get(
+        self,
+        url: str,
+        params: dict[str, Any] | None,
+        headers: dict[str, str] | None,
+    ) -> Any:
+        """One GET returning parsed JSON of whatever shape, with feed errors wrapped."""
         try:
-            response = await self.client.get(url, params=params)
+            response = await self.client.get(url, params=params, headers=headers)
             response.raise_for_status()
-            body = response.json()
+            return response.json()
         except httpx.HTTPError as exc:
             raise IngestError(f"{self.source.value}: GET {url} failed: {exc}") from exc
         except ValueError as exc:
             raise IngestError(f"{self.source.value}: GET {url} did not return JSON") from exc
+
+    async def get_json(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """One GET returning a JSON object, with feed errors wrapped."""
+        body = await self._get(url, params, headers)
         if not isinstance(body, dict):
+            raise IngestError(f"{self.source.value}: GET {url} returned {type(body).__name__}")
+        return body
+
+    async def get_json_array(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> list[Any]:
+        """One GET returning a JSON array, which is what a Socrata feed answers.
+
+        `RawPayload.body` is an object, so an adapter whose feed answers with a
+        bare array has to say under which key it stored it. That is the
+        adapter's business, not this method's.
+        """
+        body = await self._get(url, params, headers)
+        if not isinstance(body, list):
             raise IngestError(f"{self.source.value}: GET {url} returned {type(body).__name__}")
         return body
 
