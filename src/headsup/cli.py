@@ -14,6 +14,7 @@ from headsup.agents.compiler.cli import register as register_compiler
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app
+from headsup.world.cli import world_app
 
 app = typer.Typer(
     name="hu",
@@ -27,6 +28,7 @@ schemas_app = typer.Typer(help="JSON Schema for the message contracts.", no_args
 app.add_typer(schemas_app, name="schemas")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(bus_app, name="bus")
+app.add_typer(world_app, name="world")
 
 # `hu compile`, `hu verify` and `hu keygen` are top-level verbs, not a group:
 # they are the two ends of the publishing gate and get used on their own.

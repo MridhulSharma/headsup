@@ -37,9 +37,15 @@ AFTER_S1 = "2026-04-21T06:00:00Z"
 
 @pytest.fixture(autouse=True)
 def no_key_in_the_environment(monkeypatch):
-    """Run as a fresh clone does: no signing key, so the dev key is used."""
+    """Run as a fresh clone does: no signing key, so the dev key is used.
+
+    `HU_CITY` goes too: with it set, `hu compile` loads that city's road graph
+    for the critical-access rule, and these tests would then pass or fail on
+    what somebody had built into `data/cache/`.
+    """
     monkeypatch.delenv("HU_SIGNING_KEY", raising=False)
     monkeypatch.delenv("HU_VERIFY_KEY", raising=False)
+    monkeypatch.delenv("HU_CITY", raising=False)
 
 
 def compile_fixture(path: Path, out: Path, *args: str, now: str | None = DURING_S1):
@@ -47,6 +53,51 @@ def compile_fixture(path: Path, out: Path, *args: str, now: str | None = DURING_
     if now is not None:
         argv += ["--now", now]
     return runner.invoke(app, [*argv, *args])
+
+
+# --- the critical-access rule's POI data ------------------------------------
+
+
+def test_compile_says_the_access_rule_is_unguarded_without_a_city(tmp_path: Path) -> None:
+    """No `--city` and no `HU_CITY`: visibly unguarded, not quietly."""
+    result = compile_fixture(PROPOSAL, tmp_path / "advisory.json")
+    assert result.exit_code == 0, result.output
+    assert "unguarded" in flat(result.output)
+    assert "hu world build" in flat(result.output)
+
+
+def test_compile_is_unguarded_for_a_city_that_is_not_built(tmp_path: Path) -> None:
+    empty = tmp_path / "cache"
+    empty.mkdir()
+    result = compile_fixture(
+        PROPOSAL, tmp_path / "advisory.json", "--city", "austin", "--cache", str(empty)
+    )
+    assert result.exit_code == 0, result.output
+    assert "unguarded" in flat(result.output)
+
+
+def test_compile_names_the_city_whose_graph_answered(tmp_path: Path) -> None:
+    """With a built city, the audit record names its graph, not the stub."""
+    import shutil
+
+    from fixtures.world import GRAPH_FILE, grid_world
+    from headsup.world import graph_path, pois_path, save_pois
+    from headsup.world.model import clear_world_cache
+
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    shutil.copy(GRAPH_FILE, graph_path("austin", cache))
+    save_pois(pois_path("austin", cache), "austin", grid_world().pois)
+    clear_world_cache()
+    try:
+        result = compile_fixture(
+            PROPOSAL, tmp_path / "advisory.json", "--city", "austin", "--cache", str(cache)
+        )
+        assert result.exit_code == 0, result.output
+        assert "world-poi-checker" in flat(result.output)
+        assert "austin graph" in flat(result.output)
+    finally:
+        clear_world_cache()
 
 
 # --- hu compile -------------------------------------------------------------
