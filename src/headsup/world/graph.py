@@ -17,6 +17,13 @@ Two queries matter to the rest of the system:
 * `access_edges(lon, lat)` - the roads that enter the block a POI sits on. The
   compiler's critical-access rule asks this about every hospital, fire and EMS
   station under a closure.
+
+One *node* tag is carried across as well. OSM marks a signal-controlled
+junction with `highway=traffic_signals`, and a SIGNAL_OUTAGE is a statement
+about exactly those junctions: dropping the tag made every intersection in an
+outage area a dark signal, including the stop-sign corners that have no signal
+to lose. So `signalized_nodes` comes over with `x` and `y` and is what the
+simulator's dark-signal rule and the ALL_WAY_STOP mask are resolved against.
 """
 
 from __future__ import annotations
@@ -71,6 +78,10 @@ DEFAULT_SPEED_KPH: dict[str, float] = {
 #: For a class not in the table: a city street nobody tagged.
 FALLBACK_SPEED_KPH = 40.0
 
+#: The OSM node tag for a signal-controlled junction. The value of `highway`
+#: on a *node*, not on a way, so it never collides with `DEFAULT_SPEED_KPH`.
+SIGNAL_TAG = "traffic_signals"
+
 KPH_PER_MPH = 1.609344
 MPS_PER_KPH = 1000.0 / 3600.0
 
@@ -107,6 +118,21 @@ def first_tag(value: Any) -> Any:
     """
     values = tag_values(value)
     return values[0] if values else None
+
+
+def is_signalized(highway: Any) -> bool:
+    """Whether an OSM node's `highway` tag marks a signal-controlled junction.
+
+    One node can arrive with several values, the way a merged edge's tags do,
+    and OSM tags a junction that is both signalised and a marked crossing as
+    `traffic_signals;crossing`. So every value and every part of one is
+    checked rather than the whole string compared.
+    """
+    return any(
+        part.strip().lower() == SIGNAL_TAG
+        for value in tag_values(highway)
+        for part in value.split(";")
+    )
 
 
 def parse_maxspeed(value: Any) -> float | None:
@@ -222,6 +248,9 @@ class RoadGraph:
         self.edges: tuple[Edge, ...] = tuple(edges)
         self.index = index
         self.bbox = bbox
+        #: Filled on first ask: `signalized_nodes` walks every vertex, and the
+        #: dark-signal rule asks for it once per hazard resolution.
+        self._signalized: frozenset[int] | None = None
 
     # --- construction ------------------------------------------------------
 
@@ -240,6 +269,8 @@ class RoadGraph:
         position = {osmid: index for index, osmid in enumerate(osmids)}
         xs: list[float] = []
         ys: list[float] = []
+        highways: list[str] = []
+        signalized: list[bool] = []
         for osmid in osmids:
             node = nx_graph.nodes[osmid]
             try:
@@ -247,6 +278,9 @@ class RoadGraph:
                 ys.append(float(node["y"]))
             except (KeyError, TypeError, ValueError) as exc:
                 raise WorldError(f"node {osmid} has no usable x/y: {node!r}") from exc
+            tag = node.get("highway")
+            highways.append(str(first_tag(tag) or ""))
+            signalized.append(is_signalized(tag))
 
         pairs: list[tuple[int, int]] = []
         edges: list[Edge] = []
@@ -290,6 +324,8 @@ class RoadGraph:
         graph.vs["osmid"] = [str(osmid) for osmid in osmids]
         graph.vs["x"] = xs
         graph.vs["y"] = ys
+        graph.vs["highway"] = highways
+        graph.vs["signalized"] = signalized
         graph.add_edges(pairs)
         if edges:
             graph.es["eid"] = [edge.id for edge in edges]
@@ -353,6 +389,28 @@ class RoadGraph:
         """The OSM node id behind an igraph vertex id."""
         return str(self.graph.vs[node]["osmid"])
 
+    @property
+    def signalized_nodes(self) -> frozenset[int]:
+        """Vertices OSM marks as signal-controlled junctions.
+
+        Empty for a graph built without the tag rather than an error: a
+        fixture or a hand-built igraph is still a usable road graph, and a
+        caller that needs signals asks whether the set is empty.
+        """
+        if self._signalized is None:
+            if "signalized" in self.graph.vs.attributes():
+                flags = self.graph.vs["signalized"]
+                self._signalized = frozenset(
+                    index for index, flag in enumerate(flags) if bool(flag)
+                )
+            else:
+                self._signalized = frozenset()
+        return self._signalized
+
+    def is_signalized_node(self, node: int) -> bool:
+        """Whether one vertex is a signal-controlled junction."""
+        return node in self.signalized_nodes
+
     def position_of(self, node: int) -> tuple[float, float]:
         vertex = self.graph.vs[node]
         return float(vertex["x"]), float(vertex["y"])
@@ -360,7 +418,8 @@ class RoadGraph:
     def summary(self) -> str:
         """One line for a log or a CLI: size, road length and index size."""
         return (
-            f"{self.city}: {self.node_count} nodes, {self.edge_count} edges, "
+            f"{self.city}: {self.node_count} nodes "
+            f"({len(self.signalized_nodes)} signalized), {self.edge_count} edges, "
             f"{self.length_km:.1f} km of road, {len(self.index)} h3 "
             f"r{self.index.resolution} cells ({self.index.entries} cell-edge pairs)"
         )

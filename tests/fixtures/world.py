@@ -15,6 +15,10 @@ back through the same `osmnx.load_graphml` that reads a downloaded city:
 `H` is a hospital in the middle of the block n05-n06-n09-n10, with a fire
 station on the same block and a school two blocks north-west.
 
+The two middle columns -- n04..n07 and n08..n11 -- are signalised and the
+outer two are not, so an area drawn across the grid covers intersections of
+both kinds. `SIGNALIZED` is that set as igraph vertex ids.
+
 Loading is cached per process: the graphml parse and the H3 index are the
 slowest things in these tests, and nothing in them mutates the graph.
 """
@@ -54,6 +58,11 @@ EDGES = 48
 #: The hospital's block has four corner intersections, each with two streets
 #: leading out of it: eight streets, both directions.
 HOSPITAL_ACCESS_EDGES = 16
+
+#: The signal-controlled intersections, as igraph vertex ids: the two middle
+#: columns, which are vertices 4..11 because node ids count up the columns.
+#: Must match `SIGNALIZED_COLUMNS` in `scripts/build_world_fixture.py`.
+SIGNALIZED = frozenset(range(4, 12))
 
 
 @lru_cache(maxsize=1)

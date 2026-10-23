@@ -36,7 +36,7 @@ import contextlib
 import logging
 import os
 import secrets
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass, field
 from datetime import timedelta
 from typing import Annotated, Any
@@ -46,6 +46,7 @@ from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, WebSoc
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.websockets import WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 
 from headsup import __version__
 from headsup.agents.compiler.approvals import (
@@ -285,7 +286,7 @@ def create_app(state: ApiState | None = None) -> FastAPI:
     api = state or ApiState()
 
     @contextlib.asynccontextmanager
-    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await api.startup()
         try:
             yield
@@ -297,6 +298,12 @@ def create_app(state: ApiState | None = None) -> FastAPI:
         version=__version__,
         summary="Public city signals compiled into signed, expiring fleet advisories.",
         lifespan=lifespan,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["http://localhost:4173"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.state.api = api
 

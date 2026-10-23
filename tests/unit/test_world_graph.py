@@ -17,6 +17,7 @@ from fixtures.world import (
     EDGES,
     HOSPITAL_ACCESS_EDGES,
     NODES,
+    SIGNALIZED,
     advisory_box,
     at,
     block_box,
@@ -33,6 +34,7 @@ from headsup.world.graph import (
     MPS_PER_KPH,
     first_tag,
     geodesic_length_m,
+    is_signalized,
     parse_maxspeed,
     speed_kph,
     tag_values,
@@ -69,11 +71,69 @@ def test_edges_carry_length_and_free_flow_time() -> None:
     assert graph.graph.es[0]["free_flow_s"] == pytest.approx(edge.free_flow_s)
 
 
+# --- signalised junctions --------------------------------------------------
+
+
+def test_the_node_traffic_signals_tag_survives_the_igraph_copy() -> None:
+    """OSM marks a signal-controlled junction on the *node*, and it is kept.
+
+    It used to be dropped: only `x` and `y` came across, so every
+    intersection inside a SIGNAL_OUTAGE area counted as a dark signal,
+    including the stop-sign corners that have no signal to lose. The fixture's
+    two middle avenues are signalised and the outer two are not, which is what
+    makes that difference visible.
+    """
+    graph = grid_graph()
+    assert graph.signalized_nodes == SIGNALIZED
+    # Eight of sixteen: the tag is carried, not assumed.
+    assert len(graph.signalized_nodes) == NODES // 2
+    for node in SIGNALIZED:
+        assert graph.is_signalized_node(node)
+        assert graph.graph.vs[node]["highway"] == "traffic_signals"
+    for node in set(range(NODES)) - SIGNALIZED:
+        assert not graph.is_signalized_node(node)
+        assert graph.graph.vs[node]["highway"] == ""
+
+
+def test_a_graph_with_no_node_tags_has_no_signals_rather_than_an_error() -> None:
+    """A hand-built igraph is still a usable road graph."""
+    import igraph
+
+    from headsup.world.h3index import EdgeCellIndex
+
+    bare = RoadGraph("nowhere", igraph.Graph(directed=True), (), EdgeCellIndex(cells={}))
+    assert bare.signalized_nodes == frozenset()
+    assert not bare.is_signalized_node(0)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("traffic_signals", True),
+        ("TRAFFIC_SIGNALS", True),
+        # OSM tags a junction that is both signalised and a marked crossing
+        # with a semicolon list, and simplification can leave several values.
+        ("traffic_signals;crossing", True),
+        (["crossing", "traffic_signals"], True),
+        ("crossing", False),
+        ("stop", False),
+        # A substring is not the tag: `traffic_signals:direction` is a
+        # different key and `motorway_junction` is a different junction.
+        ("traffic_signals_vending", False),
+        (None, False),
+        ([], False),
+    ],
+)
+def test_is_signalized_reads_every_value_of_the_tag(value: object, expected: bool) -> None:
+    assert is_signalized(value) is expected
+
+
 def test_graph_summary_names_the_city_and_the_index() -> None:
     summary = grid_graph().summary()
     assert CITY in summary
     assert "h3 r10" in summary
     assert f"{EDGES} edges" in summary
+    assert f"{len(SIGNALIZED)} signalized" in summary
 
 
 def test_an_unknown_edge_id_is_an_error_not_an_index_error() -> None:

@@ -21,8 +21,10 @@ The pipeline the two of them complete:
 
 `ProposerWorker` publishes its proposal to `proposals` and only then hands the
 pair to the compiler, so the proposal is on the bus whatever the gate decides
-and a rejection can be read against what was asked for. The critic between them
-is `agents.critic.stub_verdict` until D3.2.
+and a rejection can be read against what was asked for. One hazard may yield
+several proposals -- see `Proposer.propose_all` -- and each goes through that
+same sequence in turn. The critic between them is `agents.critic.stub_verdict`
+until D3.2.
 
 The compiler service is injected and optional. With one, this is S1 end to end;
 without one the pipeline stops at `proposals`, which is what lets a process
@@ -218,24 +220,31 @@ class ProposerWorker(_Worker):
 
         self.report.events += 1
         try:
-            proposal = await self.proposer.propose(hazard)
+            proposals = await self.proposer.propose_all(hazard)
         except Exception as exc:  # one bad hazard must not end the run
             self.report.note(f"{hazard.id}: {exc}")
             log.warning("%s: %s on %s", self.name, exc, hazard.id, exc_info=True)
             await self._ack(message)
             return
 
-        if proposal is None:
+        if not proposals:
             # Nothing the playbook allows, or nothing left of the window.
             # Normal, and not an error the report should count as skipped.
             await self._ack(message)
             return
 
-        await self.bus.publish(proposal, stream=self.proposals_stream)
-        self.report.candidates += 1
-        if self.on_proposal is not None:
-            self.on_proposal(self.name, proposal)
-        await self._compile(proposal)
+        # One hazard can be asked for more than one action -- a dark
+        # intersection needs the stop rule, the queue cap and the approach cap
+        # -- and each one is gated on its own, so a companion the compiler
+        # refuses leaves the others standing. Published and compiled in order,
+        # not concurrently: the compiler is the single writer to `advisories`
+        # and the rail a viewer draws should follow the order asked.
+        for proposal in proposals:
+            await self.bus.publish(proposal, stream=self.proposals_stream)
+            self.report.candidates += 1
+            if self.on_proposal is not None:
+                self.on_proposal(self.name, proposal)
+            await self._compile(proposal)
         await self._ack(message)
 
     async def _compile(self, proposal: ProposedAdvisory) -> None:

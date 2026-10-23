@@ -27,7 +27,7 @@ what_if: >-
 # grid the outage covers, looking north up the avenue.
 start_view:
   lon: -97.7431
-  lat: 30.2650
+  lat: 30.265
   height: 2200
   heading: 10
   pitch: -40
@@ -95,6 +95,108 @@ feeds:
     # communication issues. A sentinel that counted either would draw a
     # different hull.
     decoy_signals: ["316", "292", "288"]
+
+# What is physically true while the outage is on, independent of any advisory:
+# the signals above are dark, so the signalised intersections among them stop
+# controlling anything. The simulator reads this block and nothing else - the
+# ghost fleet meets it as well, which is the whole point of keeping ground
+# truth out of the agent pipeline.
+#
+# The area is the convex hull of the 9 dark signal heads padded by 50 m,
+# which is the same shape the sentinel publishes for the same cluster. So an
+# advisory this run produces covers every intersection this run darkens, and
+# nothing is dark that no advisory could reach.
+#
+# Only the signalised intersections inside it go dark. A stop-sign corner has
+# no signal to lose, and `world.graph` carries OSM's highway=traffic_signals
+# over onto the node so the simulator can tell them apart.
+#
+# The window is the feed's own, as minutes into the run rather than absolute
+# instants: the run starts whenever it is started, and what the recording
+# fixes is how far into it the signals drop out (10) and when the
+# grid is back (85). Darkening them from the first tick instead
+# would charge the fleet for ten minutes of outage no feed had mentioned yet,
+# on top of the time the sentinel legitimately needs to see a cluster.
+ground_truth:
+  - id: s2-downtown-signals
+    class: SIGNAL_OUTAGE
+    severity: 3
+    from_offset_minutes: 10
+    until_offset_minutes: 85
+    geometry:
+      type: Polygon
+      coordinates:
+        - - [-97.7447743, 30.2661203]
+          - [-97.7448259, 30.2661192]
+          - [-97.7448773, 30.2661226]
+          - [-97.7449281, 30.2661304]
+          - [-97.7449777, 30.2661425]
+          - [-97.7450257, 30.2661588]
+          - [-97.7450716, 30.2661791]
+          - [-97.7451149, 30.2662033]
+          - [-97.7451553, 30.2662311]
+          - [-97.7451923, 30.2662621]
+          - [-97.7452256, 30.2662962]
+          - [-97.7452548, 30.266333]
+          - [-97.7452796, 30.2663721]
+          - [-97.7452998, 30.2664131]
+          - [-97.7453153, 30.2664557]
+          - [-97.7453258, 30.2664994]
+          - [-97.7457148, 30.2686474]
+          - [-97.7457201, 30.2686898]
+          - [-97.7457207, 30.2687324]
+          - [-97.7457167, 30.2687749]
+          - [-97.7457081, 30.2688169]
+          - [-97.7456948, 30.268858]
+          - [-97.7449858, 30.270716]
+          - [-97.7449675, 30.2707571]
+          - [-97.7449447, 30.2707965]
+          - [-97.7449175, 30.2708337]
+          - [-97.7448862, 30.2708684]
+          - [-97.7448512, 30.2709004]
+          - [-97.7448127, 30.2709292]
+          - [-97.7447712, 30.2709546]
+          - [-97.7447269, 30.2709764]
+          - [-97.7446805, 30.2709943]
+          - [-97.7446322, 30.2710083]
+          - [-97.7445826, 30.271018]
+          - [-97.7445321, 30.2710236]
+          - [-97.7444812, 30.2710248]
+          - [-97.7444304, 30.2710218]
+          - [-97.7443803, 30.2710144]
+          - [-97.7443311, 30.2710029]
+          - [-97.7419501, 30.2703329]
+          - [-97.7419013, 30.2703167]
+          - [-97.7418545, 30.2702964]
+          - [-97.7418104, 30.2702721]
+          - [-97.7417693, 30.2702441]
+          - [-97.7417316, 30.2702127]
+          - [-97.7416978, 30.2701782]
+          - [-97.7416682, 30.2701409]
+          - [-97.741643, 30.2701012]
+          - [-97.7416226, 30.2700596]
+          - [-97.7416071, 30.2700163]
+          - [-97.7409511, 30.2677943]
+          - [-97.7409409, 30.2677508]
+          - [-97.7409357, 30.2677066]
+          - [-97.7409355, 30.2676622]
+          - [-97.7409404, 30.267618]
+          - [-97.7409503, 30.2675744]
+          - [-97.7409651, 30.2675319]
+          - [-97.7413471, 30.2666049]
+          - [-97.7413662, 30.2665649]
+          - [-97.7413896, 30.2665266]
+          - [-97.7414172, 30.2664904]
+          - [-97.7414487, 30.2664567]
+          - [-97.7414838, 30.2664258]
+          - [-97.7415221, 30.2663979]
+          - [-97.7415634, 30.2663734]
+          - [-97.7416072, 30.2663524]
+          - [-97.7416531, 30.2663352]
+          - [-97.7417007, 30.2663218]
+          - [-97.7417496, 30.2663125]
+          - [-97.7417993, 30.2663073]
+          - [-97.7447743, 30.2661203]
 
 expected:
   # What the signal sentinel should make of the recording.

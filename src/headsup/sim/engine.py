@@ -17,6 +17,11 @@ Advisories only ever *restrict*; ground truth decides what is physically
 possible. A vehicle stalls because the road is flooded, not because nobody
 told it -- which is what lets the ghost fleet fail on the same roads the
 advised fleet avoids.
+
+The one place advice *un*blocks a vehicle is a dark signal, and it is not an
+exception to that rule. A dark junction is passable the whole time; what a
+vehicle lacks there is a way to resolve the right of way, which is exactly
+what an ALL_WAY_STOP supplies. See `_tend_stalled`.
 """
 
 from __future__ import annotations
@@ -65,6 +70,10 @@ _ASSIST_REASON: dict[HazardClass, AssistReason] = {
 #: Dark intersections only deadlock when vehicles actually meet. One car
 #: crossing an unlit signal proceeds; two arriving together is the failure D3.1
 #: dramatises. Deterministic, and it keeps the assist queue meaningful.
+#:
+#: Which nodes are dark at all is `sim.ground_truth`'s answer, and it is the
+#: *signalised* intersections inside the outage area: a stop-sign corner has
+#: no signal to lose.
 DARK_CONTENTION = 2
 
 MM_PER_M = 1000.0
@@ -500,11 +509,25 @@ class Simulation:
         return intents
 
     def _tend_stalled(self, veh: Vehicle, snapshot: HazardSnapshot) -> None:
-        """A stalled vehicle: count the wait, or recover once the road clears."""
+        """A stalled vehicle: count the wait, or recover once it can move again.
+
+        A flooded edge clears only when the water goes down -- ground truth,
+        and nothing an advisory says changes it. A dark signal is different: a
+        vehicle stalled at one is stuck on the right of way, not on the road,
+        so an operator that has since been told to treat the junction as an
+        all-way stop can clear it while the signal is still dark. Without
+        that, an advisory would only ever help vehicles that had not reached
+        the outage yet, and in a scenario whose ground truth outlasts the run
+        the queue the advisory is supposed to drain would never drain.
+
+        Only the operator's own mask is consulted, so a declining operator and
+        the ghost fleet stay where they are.
+        """
         cfg = self._cfg
-        still_blocked = veh.edge in snapshot.impassable or (
-            veh.stall_node >= 0 and veh.stall_node in snapshot.dark
-        )
+        dark_node = veh.stall_node >= 0 and veh.stall_node in snapshot.dark
+        if dark_node and veh.stall_node in self._operators.by_name[veh.op].mask.all_way_stop:
+            dark_node = False
+        still_blocked = veh.edge in snapshot.impassable or dark_node
         if still_blocked:
             veh.stalled_s += 1
             veh.recovering_s = 0
@@ -559,6 +582,10 @@ class Simulation:
 
                 # An unlit signal only deadlocks when cars actually meet: one
                 # vehicle crossing proceeds, two arriving together do not.
+                # `snapshot.dark` holds signalised junctions only, and
+                # `mask.all_way_stop` is resolved to the same set, so an
+                # operator under the advisory is covered at every node the
+                # outage actually took out.
                 if (
                     dark_hazard is not None
                     and node not in mask.all_way_stop

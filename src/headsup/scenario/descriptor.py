@@ -10,6 +10,15 @@ The file is generated from the same `Blackout` the recording is written from,
 so its counts cannot drift from the recording they describe. The prose is a
 template here rather than `yaml.safe_dump` output for one reason: a scenario
 descriptor is read by people, and the comments are half of what it says.
+
+The `ground_truth` block is generated from the same cluster too. It is the
+area the simulator darkens -- what is physically true while the outage is on,
+independent of any advisory -- and it is the padded convex hull of the signals
+this run made dark, which is the shape `agents.sentinels.signals` publishes
+for the same set. Deriving it here is what keeps the three in step: the
+recording says nine signals are flashing, the sentinel draws a hull round
+them, and the simulator darkens the intersections inside that hull. A hazard
+area invented separately would darken intersections no advisory could cover.
 """
 
 from __future__ import annotations
@@ -17,7 +26,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from headsup.agents.sentinels.signals import EPS_M, MIN_SIGNALS, SEVERITY
+from shapely.geometry import MultiPoint
+
+from headsup.agents.sentinels.base import pad_m
+from headsup.agents.sentinels.signals import EPS_M, MIN_SIGNALS, PAD_M, SEVERITY
 from headsup.scenario.blackout import (
     CITY,
     CLEAR_MIN,
@@ -40,6 +52,27 @@ SCENARIOS_DIR = PROJECT_ROOT / "scenarios"
 #: Demo speed. 90 minutes of feed time in 90 seconds.
 DEFAULT_SPEED = 60
 
+#: Decimal places for the ground-truth ring. 1e-7 degrees is about a
+#: centimetre, and matches what the sentinel rounds its own hull to, so the
+#: two shapes are written the same way as well as computed the same way.
+RING_PLACES = 7
+
+
+def ground_truth_ring(blackout: Blackout) -> list[list[float]]:
+    """The hull of this blackout's dark signals, padded, as GeoJSON coordinates.
+
+    `PAD_M` is the sentinel's own padding, for the reason the sentinel pads at
+    all: the hull through a set of signal heads has them on its boundary and
+    stops at the stop bars, and an area whose edge runs through the middle of
+    a junction is ambiguous to resolve against a road graph.
+    """
+    hull = MultiPoint([(signal.lon, signal.lat) for signal in blackout.cluster]).convex_hull
+    area = pad_m(hull, PAD_M)
+    return [
+        [round(float(x), RING_PLACES), round(float(y), RING_PLACES)]
+        for x, y in area.exterior.coords
+    ]
+
 
 def path_for(scenario: str = SCENARIO, *, root: Path | None = None) -> Path:
     return (root or SCENARIOS_DIR) / f"{scenario}.yaml"
@@ -59,6 +92,11 @@ def render(blackout: Blackout, *, recording: Path, events: int, bytes_: int) -> 
     )
     noise = ", ".join(f'"{signal.signal_id}"' for signal in blackout.noise)
     decoys = ", ".join(f'"{signal.signal_id}"' for signal in blackout.decoys)
+    points = ground_truth_ring(blackout)
+    # One ring, one vertex a line: a long flow-style ring would be a single
+    # 1800-character line in a file whose whole point is being read.
+    ring_indented = "        - " + "\n          ".join(f"- [{x}, {y}]" for x, y in points)
+    dark = len(blackout.cluster)
     lon, lat = AUSTIN_DOWNTOWN
     view_lat = round(lat - 0.0036, 4)
     try:
@@ -156,6 +194,38 @@ feeds:
     # communication issues. A sentinel that counted either would draw a
     # different hull.
     decoy_signals: [{decoys}]
+
+# What is physically true while the outage is on, independent of any advisory:
+# the signals above are dark, so the signalised intersections among them stop
+# controlling anything. The simulator reads this block and nothing else - the
+# ghost fleet meets it as well, which is the whole point of keeping ground
+# truth out of the agent pipeline.
+#
+# The area is the convex hull of the {dark} dark signal heads padded by {PAD_M:g} m,
+# which is the same shape the sentinel publishes for the same cluster. So an
+# advisory this run produces covers every intersection this run darkens, and
+# nothing is dark that no advisory could reach.
+#
+# Only the signalised intersections inside it go dark. A stop-sign corner has
+# no signal to lose, and `world.graph` carries OSM's highway=traffic_signals
+# over onto the node so the simulator can tell them apart.
+#
+# The window is the feed's own, as minutes into the run rather than absolute
+# instants: the run starts whenever it is started, and what the recording
+# fixes is how far into it the signals drop out ({ONSET_MIN:g}) and when the
+# grid is back ({CLEAR_MIN:g}). Darkening them from the first tick instead
+# would charge the fleet for ten minutes of outage no feed had mentioned yet,
+# on top of the time the sentinel legitimately needs to see a cluster.
+ground_truth:
+  - id: s2-downtown-signals
+    class: SIGNAL_OUTAGE
+    severity: {SEVERITY}
+    from_offset_minutes: {ONSET_MIN:g}
+    until_offset_minutes: {CLEAR_MIN:g}
+    geometry:
+      type: Polygon
+      coordinates:
+{ring_indented}
 
 expected:
   # What the signal sentinel should make of the recording.

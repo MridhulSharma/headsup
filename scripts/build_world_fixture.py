@@ -19,6 +19,13 @@ Austin, which gives the queries something with an exact expected answer:
      |       |       |       |
     n00 --- n04 --- n08 --- n12
 
+The two middle avenues - N 1 Ave and N 2 Ave, the columns holding n04..n07
+and n08..n11 - are signalised: those eight intersections carry OSM's
+`highway=traffic_signals`, and the eight on the outer two avenues do not. That
+split is what makes a SIGNAL_OUTAGE test on this grid mean something: an
+outage area drawn across the whole grid darkens the eight signals in it and
+leaves the stop-sign corners alone.
+
 `H` is a hospital in the middle of the block bounded by n05, n06, n09 and n10.
 Those four intersections are ~71 m from it and are its block; the next ring of
 intersections is ~158 m away and is not. Eight streets cross that boundary, so
@@ -56,6 +63,10 @@ SIZE = 4
 
 M_PER_DEG_LAT = 111_132.0
 
+#: Which columns' intersections are signal controlled. The two middle
+#: avenues, so a polygon can cover signalised and unsignalised corners both.
+SIGNALIZED_COLUMNS = (1, 2)
+
 #: One OSM id per grid node, so `sorted(graph.nodes)` is the grid order.
 FIRST_OSMID = 1_000_000
 
@@ -84,7 +95,12 @@ def build_graph() -> nx.MultiDiGraph:
     for column in range(SIZE):
         for row in range(SIZE):
             lon, lat = _degrees(column * BLOCK_M, row * BLOCK_M)
-            graph.add_node(node_id(column, row), x=lon, y=lat, street_count=4)
+            attrs: dict[str, object] = {"x": lon, "y": lat, "street_count": 4}
+            if column in SIGNALIZED_COLUMNS:
+                # The tag OSM puts on a signal-controlled junction, and the
+                # one `world.graph` carries across onto the igraph copy.
+                attrs["highway"] = "traffic_signals"
+            graph.add_node(node_id(column, row), **attrs)
 
     way = 500_000
     for column in range(SIZE):
