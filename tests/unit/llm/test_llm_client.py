@@ -95,7 +95,7 @@ async def test_a_judgment_call_runs_on_the_same_mock(client) -> None:
 
 async def test_the_proposer_fixture_still_matches_its_contract(client) -> None:
     result = await client.complete(
-        purpose="proposer_no_entry",
+        purpose="proposer_action",
         tier=Tier.JUDGMENT,
         schema=ProposedAction,
         messages="choose an action",

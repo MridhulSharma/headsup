@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from typer.testing import CliRunner
 
-from headsup.agents.sentinels.cli import AGENTS, _selected
+from headsup.agents.cli import AGENTS, _selected
 from headsup.cli import app
 
 runner = CliRunner()
@@ -31,11 +31,20 @@ def test_agents_is_a_top_level_verb() -> None:
     assert "agents" in flat(result.output)
 
 
-def test_help_names_the_two_sentinels_the_build_packet_asks_for() -> None:
+def test_help_names_every_stage_of_the_pipeline() -> None:
     result = runner.invoke(app, ["agents", "--help"])
     assert result.exit_code == 0, result.output
     text = flat(result.output)
-    for fragment in ("--only", "flood", "signal", "--once", "--namespace"):
+    for fragment in (
+        "--only",
+        "flood",
+        "signal",
+        "fusion",
+        "proposer",
+        "--once",
+        "--namespace",
+        "--compile",
+    ):
         assert fragment in text
 
 
@@ -43,15 +52,19 @@ def test_only_takes_the_comma_separated_list_from_the_build_packet() -> None:
     assert _selected("flood,signal") == ["flood", "signal"]
     assert _selected(" flood , signal ") == ["flood", "signal"]
     assert _selected("signal") == ["signal"]
+    assert _selected("fusion,proposer") == ["fusion", "proposer"]
 
 
-def test_only_is_de_duplicated_and_ordered_by_the_agent_table() -> None:
+def test_only_is_de_duplicated_and_ordered_by_the_pipeline() -> None:
     """Two `--only signal` arguments are one worker, not two in one process."""
     assert _selected("signal,flood,signal") == ["flood", "signal"]
+    # Whatever order the flag names them in, they run feeds-first: under
+    # `--once` that order is what lets a hazard reach the proposer at all.
+    assert _selected("proposer,fusion,flood") == ["flood", "fusion", "proposer"]
 
 
 def test_an_empty_only_runs_every_agent() -> None:
-    assert _selected("") == list(AGENTS) == ["flood", "signal"]
+    assert _selected("") == list(AGENTS) == ["flood", "signal", "fusion", "proposer"]
 
 
 def test_an_unknown_agent_names_the_ones_that_exist() -> None:
@@ -63,7 +76,7 @@ def test_an_unknown_agent_stops_the_run_before_it_touches_redis() -> None:
     result = runner.invoke(app, ["agents", "--only", "weather"])
     assert result.exit_code == 2, result.output
     assert "unknown agent" in flat(result.output)
-    assert "flood, signal" in flat(result.output)
+    assert "flood, signal, fusion, proposer" in flat(result.output)
 
 
 # --- hu scenario ------------------------------------------------------------

@@ -43,8 +43,9 @@ from headsup.agents.compiler.signing import (
     is_dev_key,
     verify,
 )
+from headsup.agents.critic import STUB_REASON, stub_verdict
 from headsup.bus import BusError
-from headsup.contracts import Advisory, CriticVerdict, Verdict, utcnow
+from headsup.contracts import Advisory, utcnow
 
 console = Console()
 err = Console(stderr=True)
@@ -52,10 +53,10 @@ err = Console(stderr=True)
 #: Read from stdin instead of a file.
 STDIN = "-"
 
-#: What `hu compile` assumes when the file carries no critic verdict. D2.5
-#: wires the proposer straight to the compiler with exactly this stub, and
+#: What `hu compile` assumes when the file carries no critic verdict. The stub
+#: itself lives in `agents.critic`, because D2.5's `ProposerWorker` hands the
+#: compiler exactly this verdict and there should be one definition of it until
 #: D3.2 replaces it with the real critic.
-STUB_REASON = "pass-through critic stub (D1.3); the real critic arrives in D3.2"
 
 
 def _first_error(exc: ValidationError) -> str:
@@ -103,15 +104,6 @@ def _split(payload: Any, where: str) -> tuple[Any, Any | None]:
     if "proposal" in payload:
         return payload["proposal"], payload.get("verdict")
     return payload, None
-
-
-def _stub_verdict(proposal_id: str) -> CriticVerdict:
-    return CriticVerdict(
-        proposal_id=proposal_id,
-        verdict=Verdict.APPROVE,
-        reasons=[STUB_REASON],
-        reviewed_by="critic_stub",
-    )
 
 
 def _checks_table(checks: tuple[Check, ...]) -> Table:
@@ -240,7 +232,7 @@ def compile_proposal(
         err.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
 
-    verdict = raw_verdict if raw_verdict is not None else _stub_verdict(str(proposal_id or ""))
+    verdict = raw_verdict if raw_verdict is not None else stub_verdict(str(proposal_id or ""))
     if raw_verdict is None and not quiet:
         err.print(f"[dim]no verdict in {file}: using the {STUB_REASON}[/dim]")
 

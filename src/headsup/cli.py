@@ -10,8 +10,8 @@ from rich.table import Table
 
 from headsup import __version__
 from headsup import infra as infra_mod
+from headsup.agents.cli import register as register_agents
 from headsup.agents.compiler.cli import register as register_compiler
-from headsup.agents.sentinels.cli import register as register_agents
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app

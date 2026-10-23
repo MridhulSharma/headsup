@@ -1,10 +1,10 @@
 """What the LLM tests share: the schemas the fixtures answer, and two doubles.
 
-`FloodFields` now belongs to the flood sentinel that asks the question, and is
-re-exported here so the LLM tests keep asserting against the *real* schema: a
-reply shape that drifts out of the sentinel's contract fails the unit run.
-The remaining schemas still live here, because the agents that will ask those
-questions arrive in D2.5 and D3.1.
+Every schema here now belongs to the agent that asks the question -
+`FloodFields` to the flood sentinel, `FusionRationale` to fusion,
+`ProposedAction` to the proposer - and all three are re-exported so the LLM
+tests keep asserting against the *real* schemas: a reply shape that drifts out
+of an agent's contract fails the unit run rather than the demo.
 
 `FakeAnthropic` is a stand-in for the SDK client: it records the request body
 it was handed, which is the only way to assert on prompt-cache placement
@@ -17,20 +17,14 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import orjson
-from pydantic import Field
 
+from headsup.agents.fusion import FusionRationale
+from headsup.agents.proposer import ProposedAction
 from headsup.agents.sentinels import FloodFields
-from headsup.contracts import (
-    ActionType,
-    Confidence,
-    FreeText,
-    HeadsUpModel,
-    Source,
-)
 
 # --- the shapes the fixtures answer ----------------------------------------
 
-#: The flood sentinel's own schema, re-exported for the LLM tests.
+#: Each agent's own schema, re-exported for the LLM tests.
 __all__ = [
     "FLOOD_PAYLOAD",
     "FakeAnthropic",
@@ -45,22 +39,6 @@ __all__ = [
     "reply",
     "truncated",
 ]
-
-
-class FusionRationale(HeadsUpModel):
-    """The paragraph fusion attaches to a hazard, and which source led."""
-
-    rationale: FreeText
-    primary_source: Source
-    conflicts: list[FreeText] = Field(default_factory=list, max_length=5)
-
-
-class ProposedAction(HeadsUpModel):
-    """The proposer's choice, which the playbook then has to allow."""
-
-    action: ActionType
-    reason: FreeText
-    confidence: Confidence
 
 
 # --- doubles ---------------------------------------------------------------

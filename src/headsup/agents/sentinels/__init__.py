@@ -10,7 +10,8 @@ a `Hazard`, and only the compiler publishes. Two of them exist today:
 | `SignalOutageSentinel` | `events.austin_signals` | SIGNAL_OUTAGE, per signal cluster |
 
 `SentinelWorker` is how either one runs on the bus, and `hu agents --only
-flood,signal` is how both are started.
+flood,signal` is how both are started. That verb lives in `agents.cli` rather
+than here, because it now builds fusion and the proposer too.
 
 Feed text reaches a model in exactly one place - the flood sentinel's
 `volume` call that fills `FloodFields` - and it reaches it as a `data_block`
