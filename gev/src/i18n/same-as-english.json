@@ -119,7 +119,10 @@
     "{value} KM/S",
     "ΔE",
     "ΔN",
-    "▲ {frp} MW"
+    "▲ {frp} MW",
+    "NWS",
+    "USGS",
+    "WZDx"
   ],
   "ru": [
     "AIS: --",
@@ -138,6 +141,9 @@
     "WHOT/BHOT",
     "{code} {name}",
     "{name} ({city})",
-    "{speed}×"
+    "{speed}×",
+    "NWS",
+    "USGS",
+    "WZDx"
   ]
 }

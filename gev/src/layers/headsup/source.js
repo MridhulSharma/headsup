@@ -191,7 +191,8 @@ export function createHeadsupViewerSource({
   /** Append one record, dropping the oldest once the bound is reached. */
   const remember = (list, record) => {
     list.push(record);
-    if (list.length > MAX_RUN_RECORDS) list.splice(0, list.length - MAX_RUN_RECORDS);
+    if (list.length > MAX_RUN_RECORDS)
+      list.splice(0, list.length - MAX_RUN_RECORDS);
   };
 
   /**

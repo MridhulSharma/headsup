@@ -624,7 +624,11 @@ test('one assist marker per request, and one per cluster when triage groups them
   );
 
   // A request a human cleared leaves the screen.
-  h.handle()({ vehicles: [], advisories: [], pipeline: { acks: [], assists: [] } });
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: { acks: [], assists: [] },
+  });
   assert.equal(assistCollection(h).length, 0);
   assert.equal(h.layer.getStats().assists, 0);
   h.layer.destroy(h.viewer);
@@ -676,8 +680,9 @@ test('hiding the ghost fleet hides the queue it is responsible for', () => {
   });
   const collection = assistCollection(h);
   const shown = () =>
-    Array.from({ length: collection.length }, (_, index) =>
-      collection.get(index).show,
+    Array.from(
+      { length: collection.length },
+      (_, index) => collection.get(index).show,
     );
   // Markers are held in key order, so the ghost request is the first.
   assert.deepEqual(shown(), [true, true]);

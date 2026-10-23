@@ -845,12 +845,7 @@ test('the S3 Sentinels card shows the dispatch text beside the fields read from 
   const fields = card.querySelector('.headsup-card-fields');
   assert.deepEqual(
     fields.children.map((node) => node.textContent),
-    [
-      'incident',
-      'AFD INC 2026-0423-00871',
-      'lanes_closed',
-      '2 eastbound',
-    ],
+    ['incident', 'AFD INC 2026-0423-00871', 'lanes_closed', '2 eastbound'],
   );
 });
 

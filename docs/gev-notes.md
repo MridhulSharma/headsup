@@ -506,3 +506,189 @@ than the minimum, because one stalled second during a tile load is not the
 steady state the budget is about, and prints the feed's own worst tick beside
 it: a browser holding 60 fps against a generator that fell behind has not been
 tested.
+
+## The ops console and the agent rail (D3.6)
+
+The rail opened in D2.0 is now filled, and three things on the map joined it.
+Built against `viz/mock_stream.py`: **D3.7 has not landed, so there are no
+real S3 events yet** — the dispatch-text card and the `KEEP_CLEAR` corridor
+were built against scripted mock frames, the way D2.0 built the panel.
+
+### The wire contract grew by four frame kinds
+
+The rail is a record of what the agents did, so the reasoning has to survive
+the frame that carried it. `candidate`, `hazard`, `proposal` and `verdict`
+were previously *tallied* and are now normalized whole, and four kinds are
+new or widened:
+
+| Frame | Carries |
+| --- | --- |
+| `compile` | The publishing gate's own answer: `SIGNED`, `REJECTED` or `PENDING_APPROVAL`, with `reasons[]`, the signature state and a `two_key` flag. |
+| `assist` | Every remote-assist request open right now, whole-state like telemetry, each with a `cluster` id once surge triage has grouped it. |
+| `counters` | `hazard_entries` and `assist_queue`, each `{live, ghost}`. |
+| `ack` (widened) | `DELAYED` beside `ACCEPTED` and `DECLINED`, plus `action_taken` and `reason`. |
+
+Three readings are deliberately pessimistic, and each is pinned by a test: a
+critic decision this build cannot parse reads as `ESCALATE`, a compiler status
+it cannot parse reads as `REJECTED`, and an ack status it cannot parse reads
+as `DECLINED`. The safe reading of an answer we cannot read is never "yes".
+
+`signature_verified` is **three-valued**. `true` and `false` are claims about
+a check that ran; `null` means none was reported, and the Compiler card then
+says `present, unverified` rather than either of the other two. Only the
+issuer's key can turn that into a yes, and this console does not hold it.
+
+### Where the rail's rows come from
+
+`gev/src/headsup/pipeline.js` is new and pure: a feed snapshot and the layer's
+stats in, a frozen view out. `gev/src/headsup/console.js` renders it. Three
+rules shaped it:
+
+- **A stage lights from its own event, never from a timer.** `lit` is true
+  because a record exists and `firstAt` is when the first one arrived, so a
+  stage lights once and stays lit. Nothing animates.
+- **Nothing is inferred from a neighbour.** A compiler that never answered
+  leaves its row unlit even with an advisory on the map, because "an advisory
+  exists, so the compiler must have signed it" is the reasoning an audit trail
+  replaces.
+- **Four tones, not a severity scale.** `wait` is a pipeline stopped for a
+  person; `alert` is one that produced a refusal. Conflating them would hide
+  the one state a human can act on — which is the whole of S3.
+
+`FEED_LABELS` names the public feeds, and a source id this build has no name
+for is shown **as it arrived**: a chip reading `travis_county_oem` is a better
+answer than one reading `Unknown`, because which feed an advisory rests on is
+the question that row exists to answer.
+
+**Time to advisory** is measured between two instants *this page observed* —
+the first candidate or hazard frame, and the first advisory — recorded in
+`source.js` as each frame lands. Not from the timestamps inside the frames: a
+number copied off a publisher's clock is a claim, not a measurement.
+
+### The second key
+
+`POST /approvals/{proposal_id}`, on `createScenarioClient`. The Compiler card
+grows an Approve button only while that proposal's **latest** compiler answer
+is `PENDING_APPROVAL` *and* says `two_key` — once it is signed or rejected the
+decision is not anybody's to make any more, and the button goes.
+
+Two rules, both tested: only `{"state": "approved"}` counts as a second key
+(a 200 carrying anything else has not told the page a key was recorded, and a
+button that *looked* as though it worked is the worst failure a two-key
+control can have), and a refusal is **never** retried against the fallback
+origin — something is listening there, and asking a second service to override
+the first one's "no" would make the page lie about which API it drove.
+
+The console does not redraw itself as published when the call returns. What
+re-enables the pipeline is the compiler's next frame.
+
+### What joined the map
+
+- **Ghost fleet in faint red.** It was grey, which read as "inactive" — the
+  opposite of what is happening: the ghost cohort is the one driving into a
+  hazard nobody told it about. Faint because the ghosts are the background of
+  the comparison. `#ef476f` came OUT of the operator palette at the same time,
+  so no fleet can hash to a colour that now means "unadvised" or "refused".
+- **Remote-assist markers**, a fifth `BillboardCollection` (so `init` now adds
+  five). One ring per request, collapsing to one ring with a count badge
+  wherever triage set a shared `cluster` id. The collapse follows **triage's
+  own id and never a distance this layer picked** — a viewer that clustered by
+  proximity would be asserting a triage decision nobody made, and the badge's
+  number would stop meaning "this many requests were grouped". The badge is
+  world text, so it goes through the overlay host.
+- **`KEEP_CLEAR` corridors glow** via a wider, fainter clamped polyline
+  *under* the line rather than a `PolylineGlow` material. Both carry a colour
+  the publication pulse animates, and the pulse's whole design rests on
+  Cesium updating the per-instance colour attribute of draped geometry for a
+  `ColorMaterialProperty` without re-tessellating it
+  (`PolygonGeometryUpdater._isDynamic` exempts it). A glow material would move
+  the corridor onto another batch and put that at risk for an effect two lines
+  already give. Keyed on the ACTION, not the geometry: a `SPEED_CAP` along a
+  road is a limit on a route, not a lane somebody asked to be kept clear.
+
+### The counter strip, and keeping the centre clear
+
+Four readings, three of them a comparison: hazard entries live/ghost,
+vehicles rerouted, time to advisory, assist queue live/ghost with a
+twenty-four second sparkline. A single total would hide the only claim the
+demo makes. A tally the feed has not reported shows `—`, not `0`: "nobody has
+told us" and "nothing happened" are different claims. `rerouted` is the one
+counter the viewer derives for itself, because it is a property of the
+telemetry already on screen.
+
+The sparkline draws two bars per column — the ghost queue as a wide faint
+envelope, the live one as its core — rather than a stack, which would draw
+their sum: a number nobody is claiming.
+
+**The 1920x1080 requirement is a test, not an eyeball.**
+`gev/src/headsup/layout.test.mjs` reads the geometry out of the stylesheets —
+five tokens in `headsup-mode.css`, upstream's `--right-rail-x`,
+`.hud-bottom-right` and `#command-dock` — computes each reserved rectangle at
+1920x1080, and asserts none of them touches the protected centre: the middle
+**half** of the viewport in both axes (x 480-1440, y 270-810). A value it
+cannot find in the CSS is a failure, not a skip.
+
+That is why the rail scrolls rather than grows (`--headsup-rail-width: 380px`,
+plus a `max-height`), and why the strip's height is capped: it sits in
+upstream's bottom-right HUD corner 180px up, so a strip allowed to grow upward
+would reach the centre whatever its width. The rail's 300px bottom reserve is
+what clears `#command-dock`, which upstream centres along the bottom and which
+runs underneath the rail's lane horizontally — the two can only be kept apart
+vertically.
+
+The rail stays hidden on the landing, and ending a replay closes its open card
+in the same act rather than waiting for a render: nothing is guaranteed to
+render between one replay ending and the next, and a hidden rail holding an
+open card is two states disagreeing.
+
+### What the mock had to grow
+
+`viz/scenario_script.py` now scripts all three scenarios, chosen so that
+between them the rail shows every state it can draw rather than only the
+happy one:
+
+| ID | Hazard | Critic | Compiler | Fleets |
+| --- | --- | --- | --- | --- |
+| S1 | `FLOOD` sev 4 | `APPROVE` | `SIGNED` | ACCEPTED, DECLINED |
+| S2 | `SIGNAL_OUTAGE` sev 3 | `REVISE`, then `APPROVE` | `SIGNED` on the second proposal | ACCEPTED, ACCEPTED |
+| S3 | `EMERGENCY_SCENE` sev 4 | `ESCALATE` | `PENDING_APPROVAL`, then `SIGNED` | ACCEPTED, DELAYED |
+
+S3 is the two-key case and **stops** at its last timed step: nothing more goes
+out until `POST /approvals/{id}` supplies the second key, and then the
+remaining frames go out in one burst, because what paces them is a person
+pressing a button. Its candidate carries a raw CAD dispatch line and the seven
+fields the text sentinel pulled out of it, which is what the Sentinels card
+shows side by side. Its advisory is a `LineString` — `KEEP_CLEAR` over the two
+closed lanes of the 600 block of East 6th Street.
+
+S3's ghost cohort **queues** instead of driving on (`_queued_ghost`): a
+vehicle stopped behind an engine company cannot clear itself, so each ghost
+drives in, reaches a slot inside the closed block and holds. That is what
+makes the ghost assist queue grow from zero to six while the advised fleets'
+stays empty, and what triage then collapses into one marker.
+
+Approvals are per run and cleared on every start and stop: an approval is
+consent for one advisory in one replay, never a standing permission for the
+next one. An approval for a proposal the running scenario is not held on is
+refused with a 409.
+
+### The fps gate, unchanged
+
+`npm run qa:headsup-load` still fails its 30 fps floor on this laptop, and
+still cannot reach it: the fork alone draws this camera at 13 fps on Intel
+Iris Xe, and the thousand-vehicle cohort costs about 3 of those.
+
+The one confirming run on this step read **8 fps median (p5 4, max 12)**
+against the 10 fps D2.7 recorded. That is 2 fps below the earlier figure and
+it is **not** established that the difference is this step's: the run was
+taken minutes after the full unit suite on the same machine, the feed reported
+its worst tick 0 ms late (so the generator was not the limit), and the gate
+was deliberately measured once rather than re-measured. The two surfaces this
+step added are bounded by the feed's own cadence — assist markers are upserted
+once a second, and a corridor halo is one more *static* clamped polyline, not
+a per-frame write — so there is no mechanism here that should cost a steady
+2 fps; but "should not" is a prediction, and the honest record is the number
+with its uncertainty attached rather than a claim of no change. Anyone who
+needs that attributed should take the ceiling and the loaded reading back to
+back on an idle machine. See the D2.7 section for why the absolute number is
+a property of the hardware either way.

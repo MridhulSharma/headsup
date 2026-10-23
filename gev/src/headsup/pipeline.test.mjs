@@ -158,7 +158,10 @@ test('a stage lights from its own event, and only its own', () => {
 test('a stage lights at its FIRST event and keeps that instant', () => {
   const view = buildPipelineView({
     snapshot: snapshot({
-      proposals: [proposal({ at: 4_500 }), proposal({ id: 'prop-2', at: 9_000 })],
+      proposals: [
+        proposal({ at: 4_500 }),
+        proposal({ id: 'prop-2', at: 9_000 }),
+      ],
     }),
     stats: {},
   });
@@ -351,8 +354,14 @@ test('time to advisory is measured between two observed instants', () => {
   );
   // Still running: no answer yet, and a partial elapsed time would read as
   // one.
-  assert.equal(timeToAdvisoryMs({ firstSignalAt: 1_000, advisoryAt: null }), null);
-  assert.equal(timeToAdvisoryMs({ firstSignalAt: null, advisoryAt: 9_500 }), null);
+  assert.equal(
+    timeToAdvisoryMs({ firstSignalAt: 1_000, advisoryAt: null }),
+    null,
+  );
+  assert.equal(
+    timeToAdvisoryMs({ firstSignalAt: null, advisoryAt: 9_500 }),
+    null,
+  );
   // A publication that appears to precede the signal is not a measurement.
   assert.equal(
     timeToAdvisoryMs({ firstSignalAt: 9_500, advisoryAt: 1_000 }),
@@ -393,7 +402,10 @@ test('the sparkline samples the queue once a second, and bounds the window', () 
     sampleAssistQueue(samples, queue, 10_000 + index * SPARKLINE_SAMPLE_MS);
   assert.equal(samples.length, SPARKLINE_SAMPLES);
   // The window keeps the newest, so the rightmost bar is the latest reading.
-  assert.equal(samples.at(-1).at, 10_000 + (SPARKLINE_SAMPLES * 2 - 1) * SPARKLINE_SAMPLE_MS);
+  assert.equal(
+    samples.at(-1).at,
+    10_000 + (SPARKLINE_SAMPLES * 2 - 1) * SPARKLINE_SAMPLE_MS,
+  );
 });
 
 test('a snapshot with no pipeline at all is a quiet rail, not a throw', () => {

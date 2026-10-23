@@ -432,7 +432,10 @@ test('an acknowledgement carries what the fleet says it did, and why', () => {
       received_at: '2026-04-20T18:50:00Z',
     },
   });
-  assert.equal(ack.actionTaken, 'advisory received; applying at next route refresh');
+  assert.equal(
+    ack.actionTaken,
+    'advisory received; applying at next route refresh',
+  );
   assert.equal(ack.reason, 'fleet-side route solver runs on a 90 second cycle');
   assert.equal(ack.receivedAt, Date.parse('2026-04-20T18:50:00Z'));
 });

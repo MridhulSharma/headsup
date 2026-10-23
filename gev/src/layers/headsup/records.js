@@ -771,8 +771,7 @@ export function normalizeAssistFrame(payload) {
     const position = lonLat([assist.lon, assist.lat]);
     if (!id || !op || !position || ids.has(id)) return null;
     ids.add(id);
-    const cluster =
-      assist.cluster == null ? null : identifier(assist.cluster);
+    const cluster = assist.cluster == null ? null : identifier(assist.cluster);
     if (assist.cluster != null && !cluster) return null;
     const state = String(assist.state ?? 'QUEUED')
       .trim()
