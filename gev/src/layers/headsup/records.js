@@ -87,6 +87,19 @@ function ringPositions(ring) {
   return positions;
 }
 
+/** One corridor: an open path, so two positions are enough. */
+function linePositions(line) {
+  if (!Array.isArray(line) || line.length < 2) return null;
+  if (line.length > MAX_RING_POSITIONS) return null;
+  const positions = [];
+  for (const pair of line) {
+    const point = lonLat(pair);
+    if (!point) return null;
+    positions.push(point);
+  }
+  return positions;
+}
+
 /** One polygon: exterior ring first, holes after. */
 function polygonRings(rings) {
   if (!Array.isArray(rings) || !rings.length) return null;
@@ -117,9 +130,15 @@ function anchorPoints(geometry) {
 
 /**
  * Validate one `{type: 'telemetry', vehicles: [...]}` frame.
+ *
+ * Two optional fields widen a row beyond position: `ghost` marks a vehicle in
+ * the control fleet that is NOT acting on advisories, and `rerouted_by` names
+ * the advisory that moved this one. Both are what makes the Heads Up and
+ * ghost cohorts separable on screen, which is the whole claim the demo makes.
  * @param {unknown} payload Parsed socket frame.
  * @returns {Array<{id: string, op: string, lon: number, lat: number,
- *   heading: number}>|null} Rows, or null when the frame is unusable.
+ *   heading: number, ghost: boolean, reroutedBy: string|null}>|null} Rows, or
+ *   null when the frame is unusable.
  */
 export function normalizeTelemetryFrame(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload))
@@ -144,7 +163,21 @@ export function normalizeTelemetryFrame(payload) {
     const heading = Number(vehicle.heading);
     const bearing =
       Number.isFinite(heading) && heading >= 0 && heading < 360 ? heading : 0;
-    rows.push({ id, op, lon: position[0], lat: position[1], heading: bearing });
+    // A `rerouted_by` that is present but not an identifier rejects the whole
+    // tick: the claim "this vehicle moved because of that advisory" is the
+    // demo's evidence, so a damaged one is not quietly dropped.
+    const reroutedBy =
+      vehicle.rerouted_by == null ? null : identifier(vehicle.rerouted_by);
+    if (vehicle.rerouted_by != null && !reroutedBy) return null;
+    rows.push({
+      id,
+      op,
+      lon: position[0],
+      lat: position[1],
+      heading: bearing,
+      ghost: vehicle.ghost === true,
+      reroutedBy,
+    });
   }
   return rows;
 }
@@ -152,9 +185,11 @@ export function normalizeTelemetryFrame(payload) {
 /**
  * Validate one advisory GeoJSON Feature (`schemas/advisory.schema.json`).
  *
- * Polygon and MultiPolygon geometry becomes drawable rings. The other four
- * geometry kinds normalize to a row with no rings, so an advisory this layer
- * cannot yet draw is still counted and labelled instead of silently dropped.
+ * Polygon and MultiPolygon geometry becomes drawable rings, and LineString
+ * and MultiLineString become drawable corridors — an advisory addressed to a
+ * route rather than to an area. Point geometry normalizes to a row with
+ * neither, so an advisory this layer cannot yet draw is still counted and
+ * labelled instead of silently dropped.
  * @param {unknown} feature Parsed `advisory.feature`.
  * @returns {object|null} One advisory row, or null when it is unusable.
  */
@@ -207,6 +242,20 @@ export function normalizeAdvisoryFeature(feature) {
       polygons.push(rings);
     }
   }
+  const lines = [];
+  if (geometry.type === 'LineString') {
+    const positions = linePositions(geometry.coordinates);
+    if (!positions) return null;
+    lines.push(positions);
+  } else if (geometry.type === 'MultiLineString') {
+    if (!Array.isArray(geometry.coordinates) || !geometry.coordinates.length)
+      return null;
+    for (const line of geometry.coordinates) {
+      const positions = linePositions(line);
+      if (!positions) return null;
+      lines.push(positions);
+    }
+  }
   const anchors = anchorPoints(geometry);
   if (!anchors.length) return null;
 
@@ -215,6 +264,7 @@ export function normalizeAdvisoryFeature(feature) {
     version: Number.isInteger(properties.version) ? properties.version : 1,
     geometryType: geometry.type,
     polygons,
+    lines,
     anchors,
     hazardClass: hazard.class,
     severity,
@@ -230,5 +280,126 @@ export function normalizeAdvisoryFeature(feature) {
     // Whether the advisory ARRIVED carrying a signature. This layer never
     // claims the signature verifies — only the issuer's key can say that.
     signed: typeof properties.signature === 'string' && !!properties.signature,
+  };
+}
+
+/** Scenario run states the viewer socket reports. */
+const SCENARIO_STATES = new Set(['idle', 'running']);
+/** A scenario label is a badge and a short name, never a paragraph. */
+const MAX_SCENARIO_LABEL_CHARS = 64;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/;
+
+function label(value, limit = MAX_SCENARIO_LABEL_CHARS) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > limit) return null;
+  return CONTROL_CHARACTERS.test(trimmed) ? null : trimmed;
+}
+
+/**
+ * Validate one `{type: 'scenario_state', ...}` frame.
+ *
+ * This is the frame the scenario readout — name, sim clock, replay speed — is
+ * driven from, so a damaged one leaves the previous readout standing rather
+ * than blanking a clock that was correct a moment ago.
+ * @param {unknown} payload Parsed socket frame.
+ * @returns {object|null} One scenario-state row, or null when unusable.
+ */
+export function normalizeScenarioStateFrame(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return null;
+  if (payload.type !== 'scenario_state') return null;
+  if (!SCENARIO_STATES.has(payload.state)) return null;
+  const scenario =
+    payload.scenario && typeof payload.scenario === 'object'
+      ? payload.scenario
+      : null;
+  const speed = Number(payload.speed);
+  const elapsed = Number(payload.elapsed_s);
+  return {
+    state: payload.state,
+    id: scenario ? identifier(scenario.id) : null,
+    code: scenario ? label(scenario.code, 8) : null,
+    name: scenario ? label(scenario.name) : null,
+    city: scenario ? label(scenario.city) : null,
+    // The simulator's clock, not ours: shown as the text it sent, parsed only
+    // to prove it is an instant.
+    simTime: instantMs(payload.sim_time),
+    simTimeText: label(payload.sim_time, 40),
+    elapsedS: Number.isFinite(elapsed) && elapsed >= 0 ? elapsed : 0,
+    speed: Number.isFinite(speed) && speed > 0 && speed <= 10_000 ? speed : 1,
+    scripted: payload.scripted === true,
+  };
+}
+
+/** What an operator answered. An ack without a status is an acceptance. */
+export const ACK_STATUSES = Object.freeze(['ACCEPTED', 'DECLINED']);
+
+/**
+ * Validate one `{type: 'ack', ack: {...}}` frame.
+ *
+ * An acknowledgement is an operator's claim that it applied an advisory to a
+ * named number of vehicles. The counter strip reports how many operators have
+ * answered; the agent pipeline rail (D3.6) is what will show the rest.
+ *
+ * `status` is the one field here that changes what is DRAWN: a fleet that
+ * declined is tagged on screen, because an advisory nobody acted on is the
+ * most important thing an operator can be told. A status this build does not
+ * know is read as a refusal rather than as an acceptance — the safe reading
+ * of "something other than yes" is not yes.
+ * @param {unknown} payload Parsed socket frame.
+ * @returns {{advisoryId: string|null, operator: string, vehicles: number,
+ *   status: string}|null}
+ */
+export function normalizeAckFrame(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return null;
+  if (payload.type !== 'ack') return null;
+  const ack = payload.ack;
+  if (!ack || typeof ack !== 'object' || Array.isArray(ack)) return null;
+  const operator = identifier(ack.operator);
+  if (!operator) return null;
+  const vehicles = Number(ack.vehicles);
+  const declined =
+    ack.status != null &&
+    String(ack.status).trim().toUpperCase() !== 'ACCEPTED';
+  return {
+    advisoryId: identifier(ack.advisory_id),
+    operator,
+    vehicles:
+      Number.isInteger(vehicles) && vehicles >= 0 && vehicles <= MAX_VEHICLES
+        ? vehicles
+        : 0,
+    // i18n-ignore: contract values, carried on the wire and never shown
+    status: declined ? 'DECLINED' : 'ACCEPTED',
+  };
+}
+
+/**
+ * Validate one `{type: 'hazard', hazard: {...}}` frame.
+ *
+ * The fused hazard, which arrives BEFORE any advisory exists for it. Only its
+ * identity and class are read here; the advisory feature carries the geometry
+ * this layer draws.
+ * @param {unknown} payload Parsed socket frame.
+ * @returns {{id: string, hazardClass: string, severity: number}|null}
+ */
+export function normalizeHazardFrame(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return null;
+  if (payload.type !== 'hazard') return null;
+  const hazard = payload.hazard;
+  if (!hazard || typeof hazard !== 'object' || Array.isArray(hazard))
+    return null;
+  const id = identifier(hazard.id);
+  if (!id || !HAZARD_CLASSES.has(hazard.class)) return null;
+  const severity = Number(hazard.severity);
+  return {
+    id,
+    hazardClass: hazard.class,
+    severity:
+      Number.isInteger(severity) && severity >= 1 && severity <= 5
+        ? severity
+        : 1,
   };
 }

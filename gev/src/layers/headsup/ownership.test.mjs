@@ -17,6 +17,7 @@ const advisoryRow = (overrides = {}) => ({
   version: 1,
   geometryType: 'Polygon',
   polygons: [[ring]],
+  lines: [],
   anchors: [[-97.745, 30.265]],
   hazardClass: 'FLOOD',
   severity: 4,
@@ -41,7 +42,7 @@ const vehicleRow = (overrides = {}) => ({
 });
 
 /** One layer over fake scene owners the test can inspect and drive. */
-function harness({ clock = { ms: 1_000 } } = {}) {
+function harness({ clock = { ms: 1_000 }, onReset = () => {} } = {}) {
   const primitives = [];
   const dataSources = [];
   const frames = new Set();
@@ -82,6 +83,7 @@ function harness({ clock = { ms: 1_000 } } = {}) {
       close: () => closes++,
       getSnapshot: async () => ({ vehicles: [], advisories: [] }),
       getStatus: () => ({ connected: true }),
+      reset: onReset,
     },
     overlayHost: {
       setEntries(...args) {
@@ -171,13 +173,15 @@ test('two displays own separate collections and destruction', () => {
   assert.equal(a.layer.getStats().vehicles, 1);
   assert.equal(a.layer.getStats().advisories, 1);
   assert.equal(b.layer.getStats().count, 0);
-  assert.equal(a.primitives.length, 1);
+  // Four collections: the vehicle dots, the heading chevrons, the deflection
+  // trails and the dispatch beams.
+  assert.equal(a.primitives.length, 4);
   assert.equal(a.dataSources.length, 1);
 
   a.layer.destroy(a.viewer);
   assert.equal(a.primitives.length, 0);
   assert.equal(a.dataSources.length, 0);
-  assert.equal(b.primitives.length, 1);
+  assert.equal(b.primitives.length, 4);
   assert.equal(b.dataSources.length, 1);
   b.layer.destroy(b.viewer);
 });
@@ -416,4 +420,141 @@ test('an advisory outlives a reconnect, a vehicle position does not', () => {
   });
   assert.equal(source.getStatus().vehicles.length, 1);
   source.close();
+});
+
+test('a corridor advisory draws a clamped line, not an area', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.handle()({
+    vehicles: [],
+    advisories: [
+      advisoryRow({
+        id: 'adv-corridor',
+        geometryType: 'LineString',
+        polygons: [],
+        lines: [
+          [
+            [-97.75, 30.26],
+            [-97.74, 30.265],
+          ],
+        ],
+      }),
+    ],
+  });
+  const entities = h.dataSources[0].entities.values;
+  const value = (property) => property?.getValue(Cesium.JulianDate.now());
+  assert.equal(entities.length, 1);
+  assert.equal(entities[0].polygon, undefined);
+  assert.equal(value(entities[0].polyline.clampToGround), true);
+  assert.equal(
+    value(entities[0].polyline.classificationType),
+    Cesium.ClassificationType.BOTH,
+  );
+  assert.equal(h.layer.getStats().corridors, 1);
+  h.layer.destroy(h.viewer);
+});
+
+test('hiding a cohort stops drawing it and leaves the count alone', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.handle()({
+    vehicles: [],
+    advisories: [
+      advisoryRow(),
+      advisoryRow({
+        id: 'adv-corridor',
+        geometryType: 'LineString',
+        polygons: [],
+        lines: [
+          [
+            [-97.75, 30.26],
+            [-97.74, 30.265],
+          ],
+        ],
+      }),
+    ],
+  });
+  const entities = h.dataSources[0].entities;
+  assert.equal(entities.values.length, 2);
+  h.layer.setCohortVisibility({ hazards: false });
+  assert.equal(entities.values.length, 1);
+  assert.equal(entities.values[0].id, 'headsup-corridor:adv-corridor:0');
+  h.layer.setCohortVisibility({ corridors: false });
+  assert.equal(entities.values.length, 0);
+  // Hiding is a draw decision: both advisories are still in force, so both
+  // are still counted and both come straight back.
+  assert.equal(h.layer.getStats().advisories, 2);
+  h.layer.setCohortVisibility({ hazards: true, corridors: true });
+  assert.equal(entities.values.length, 2);
+  h.layer.destroy(h.viewer);
+});
+
+test('the ghost fleet is one switch, apart from the operator fleets', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.handle()({
+    vehicles: [
+      vehicleRow({ id: 'veh-a', op: 'op_a', reroutedBy: 'adv-1' }),
+      vehicleRow({ id: 'veh-g', op: 'op_ghost', ghost: true }),
+    ],
+    advisories: [],
+  });
+  assert.deepEqual(
+    h.layer.getOperatorLegend().map(({ op, vehicles, rerouted }) => ({
+      op,
+      vehicles,
+      rerouted,
+    })),
+    [{ op: 'op_a', vehicles: 1, rerouted: 1 }],
+  );
+  assert.deepEqual(h.layer.getGhostCohort(), {
+    color: '#8a94a6',
+    vehicles: 1,
+    visible: true,
+  });
+  assert.deepEqual(
+    h.layer.getStats().ghosts + h.layer.getStats().rerouted * 10,
+    11,
+  );
+  const collection = h.primitives[0];
+  const shown = () =>
+    Array.from(
+      { length: collection.length },
+      (_, index) => collection.get(index).show,
+    );
+  h.layer.setCohortVisibility({ ghost: false });
+  assert.deepEqual(shown(), [true, false]);
+  h.layer.setCohortVisibility({ operators: { op_a: false }, ghost: true });
+  assert.deepEqual(shown(), [false, true]);
+  h.layer.destroy(h.viewer);
+});
+
+test('an operator back at the default is forgotten, not stored forever', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.layer.setCohortVisibility({ operators: { op_a: false } });
+  assert.deepEqual(h.layer.getCohortVisibility().operators, { op_a: false });
+  h.layer.setCohortVisibility({ operators: { op_a: true } });
+  assert.deepEqual(h.layer.getCohortVisibility().operators, {});
+  h.layer.destroy(h.viewer);
+});
+
+test('clearing drops the picture and asks the feed to forget it too', () => {
+  const resets = [];
+  const h = harness({ onReset: () => resets.push(1) });
+  h.layer.enable(h.viewer);
+  h.handle()(fleetFrame);
+  assert.equal(h.layer.getStats().vehicles, 1);
+  assert.equal(h.layer.getStats().advisories, 1);
+  h.layer.clearDrawn();
+  assert.deepEqual(
+    {
+      vehicles: h.layer.getStats().vehicles,
+      advisories: h.layer.getStats().advisories,
+      resets: resets.length,
+      stillSubscribed: h.subscribed(),
+    },
+    { vehicles: 0, advisories: 0, resets: 1, stillSubscribed: true },
+  );
+  h.layer.destroy(h.viewer);
 });

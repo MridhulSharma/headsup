@@ -336,3 +336,173 @@ three new `msg()` strings, and two upstream membership counts move from 32 to
 `gev/src/layers/headsup/expiry.js` landed as planned and the layer re-tests the
 advisory windows twice a second from its frame hook, so an advisory expires on
 its own clock without waiting for a socket frame.
+
+## The live layer (D2.7): ports, gestures and the frame budget
+
+### Two ports, one ladder
+
+The viewer asks the **real API on 8765 first** and falls back to the **mock on
+8766**, for both of the contracts it speaks:
+
+| Contract | First | Fallback | Override |
+| --- | --- | --- | --- |
+| Viewer socket | `ws://localhost:8765/viewer` | `ws://localhost:8766/viewer` | `VITE_HEADSUP_VIEWER_URL`, `VITE_HEADSUP_VIEWER_FALLBACK_URL` |
+| Scenario API | `http://localhost:8765` | `http://localhost:8766` | `VITE_HEADSUP_SCENARIO_URL`, `VITE_HEADSUP_SCENARIO_FALLBACK_URL` |
+
+`viz/mock_stream.py` therefore defaults to **8766**, not 8765 as it did before.
+One port each is what makes "the API is not running" something the page
+discovers instead of something a developer has to be told, and the feed chip
+bottom right reads `LIVE`, `MOCK` or `DOWN` accordingly.
+
+Two rules keep the ladder honest, and both are pinned by tests:
+
+- A socket that **never opened** means nothing is listening, so the next
+  candidate is tried after 250 ms. A socket that opened and later **dropped**
+  keeps its endpoint for the first retry — it was serving a moment ago, and
+  moving a working page onto the mock because the API restarted is a worse
+  answer than waiting. Only when that retry also fails to open does the walk
+  continue, and a full lap hands pacing back to the reconnect ladder.
+- On the HTTP side, an origin that **refuses** (any status) or answers
+  unreadably is *not* overridden by the fallback. Something is listening
+  there; asking a second service to answer instead would make the page lie
+  about which API it is driving.
+
+### What the layer draws
+
+Five surfaces, three of them new in this step:
+
+| Surface | Primitive | Why |
+| --- | --- | --- |
+| Vehicles | `PointPrimitiveCollection` | The one thing that moves every frame. |
+| Heading chevrons | `BillboardCollection` | One shared white arrow, tinted per operator, with `alignedAxis` set to the world-space direction of travel — so the bearing reads from an oblique camera and from straight down alike, which a screen-space `rotation` cannot do. |
+| Hazard areas and corridors | entity polygons and clamped polylines on the layer's own `CustomDataSource` | Draped on the photoreal tiles (`classificationType: BOTH`, no height of their own). |
+| Deflection trails | `PolylineCollection` | The last 30 s of every vehicle an advisory moved. |
+| Dispatch beams | `PolylineCollection` | The 1.5 s in which an advisory reaches one fleet. |
+
+### The four gestures, and the restraint rule
+
+One **pulse** per published advisory version, one **beam** per operator per
+publication, one **flash** per answer, and a **refusal tag** that stands as
+long as the refusal does. Every one of them is gated on a scenario actually
+running, because the landing view shows the idle feed, where an advisory in
+force is context rather than news. They are also *seeded silently* at enable:
+a page that opens mid-run shows where the run got to, not a replay of the
+publication that got it there.
+
+Three implementation notes worth keeping:
+
+- **The pulse animates a colour attribute, not geometry.** Draped geometry
+  re-tessellates whenever its positions change, so the advisory's material is
+  a `ColorMaterialProperty` wrapping a `CallbackProperty`. Cesium's
+  `StaticGeometryColorBatch` and `StaticGroundPolylinePerMaterialBatch` update
+  the per-instance colour attribute for a non-constant colour, and
+  `PolygonGeometryUpdater._isDynamic` explicitly exempts a
+  `ColorMaterialProperty` from the dynamic path — so the swell costs one
+  attribute write, and the drawn set is still rebuilt only when the live
+  advisories change.
+- **A trail's fade is in the shader.** `PolylineGlow`'s `taperPower` fades the
+  start of a line, so trails are written oldest-first and tapered rather than
+  having 200 alphas written every frame. Positions are only written when a
+  tick lands.
+- **One material per polyline, never one shared per operator.**
+  `Polyline._destroy` destroys its material, so a shared instance would be
+  freed out from under every other polyline using it. Sharing is not needed
+  for batching: a `PolylineCollection` merges consecutive polylines whose
+  material uniforms have equal *values* into one draw command.
+
+`Cesium.Material` compiles its uniforms against the DOM and cannot be
+constructed without a canvas, which is why the layer takes
+`services.materials.polylineGlow` — a scene resource, arriving the way the
+render governor does, so beams and trails can be exercised off-screen.
+
+### Holding the frame budget with 1,000 vehicles
+
+Four costs had to be bounded, and the first of them was measured rather than
+reasoned about — it was an order of magnitude worse than it looked.
+
+- **Ground heights, by cell and not by vehicle.** `scene.sampleHeight` reads
+  the depth buffer, which costs a render pass per call: **12 ms per call** on
+  the laptop GPU this was first measured on. A rotating window of 24 vehicles
+  a tick bounds the *count* and not the cost — it is 600 ms of every second,
+  and it held the load case to 3 fps. Height is a property of the ground, not
+  of the vehicle standing on it, so it is now cached per `GROUND_CELL_DEGREES`
+  cell (~130 m) and shared by every vehicle over that cell, with at most
+  `GROUND_CELLS_PER_TICK` (4) cells newly sampled per tick. The cost is a
+  bounded transient while a view fills in and nothing at all in the steady
+  state, at any fleet size. That one change took the load case from 3 fps to
+  10 on the same machine.
+- **Degrees only where a bearing needs them.** A frame interpolates in
+  Cartesian space (`Cartesian3.lerp` between the leg's two endpoints) rather
+  than calling `Cartesian3.fromDegrees` per vehicle per frame, which was the
+  largest single entry in the frame profile. Over one 2 Hz leg the chord and
+  the arc differ by a fraction of a millimetre. The endpoints are still the
+  reported positions, a retarget reuses the dot's current Cartesian as the new
+  leg's start, and the oriented cohort — bounded by `CHEVRON_FLEET_LIMIT` —
+  is the only one that still samples degrees per frame.
+- **Colours parsed once.** `Color.fromCssColorString` parses and allocates;
+  `operatorColor` and `vehicleAppearance` were being re-asked for a constant
+  answer a thousand times a tick. Both are memoised now, and hand back a
+  shared (frozen) object — safe because every Cesium setter clones the colour
+  it is given. The appearance cache is capped, because operator identifiers
+  arrive on the feed and feed text is data.
+- **Trails at 1 Hz, not 2.** Every append rewrites a whole polyline — Cesium
+  re-encodes its positions and recomputes its bounding sphere — so a
+  thirty-second line is sampled at `TRAIL_SAMPLE_MS` and a tick that adds
+  nothing rewrites nothing.
+
+Chevrons are the fifth bound and a design decision as much as a budget one:
+past `CHEVRON_FLEET_LIMIT` (400) they are not drawn *and not created*, because
+a chevron per vehicle stops being a bearing and becomes a texture of arrows
+long before a thousand of them. `getStats().oriented` reports which side of the
+line the fleet is on, and the legend says `not drawn`.
+
+Per-frame writes go through reusable `Cartesian3`s per marker, tracks are
+retargeted in place, and the oriented cohort's sample object is reused, so a
+frame of a thousand vehicles allocates nothing.
+
+### What the gate actually reads on a laptop
+
+`npm run qa:headsup-load` **fails its 30 fps floor on integrated graphics, and
+the floor is not reachable there by any amount of work in this layer.** The
+numbers from the machine this step was built on — Intel Iris Xe, headless
+Chrome on ANGLE/D3D11, Google photoreal tiles, the dev server:
+
+| What is drawn | fps (median) |
+| --- | --- |
+| The fork alone, same camera, no Heads Up content | 13 |
+| 1,000 vehicles, 200 trails, hazard, beams, tags | 10 |
+| 1,000 vehicles, before the ground-height cache | 3 |
+
+The first row is the ceiling, and the 1,000-vehicle cohort costs about 3 fps
+of it. So the honest reading of this gate has two parts: the layer's own
+marginal cost is now small, and **the 60 fps budget cannot be demonstrated on
+this hardware** — it needs a discrete GPU to be a claim rather than a hope.
+The harness prints the renderer string for exactly that reason, and the feed's
+own worst tick beside the fps, so a run that was limited by the generator
+cannot be read as a run that was limited by the layer.
+
+### Measuring it
+
+```bash
+uv run python viz/load_stream.py          # 1,000 vehicles, 200 trails, 60 s
+cd gev && npm run dev                     # then ` toggles the fps readout
+cd gev && npm run qa:headsup-load         # both ends, recorded
+```
+
+`viz/load_stream.py` is the load case as a *feed* rather than a fixture,
+because the budget is about frames arriving at the simulator's cadence: 1,000
+vehicles on a lattice of downtown Austin arterials, 800 advised and 200 ghosts,
+with the five advised lanes that cross the hazard swinging clear of it and
+carrying 200 deflection trails. It also publishes one advisory, one acceptance
+and one refusal, so the pulse, the beams, the flash and the tag are all on
+screen while the frame time is being measured. The ghost lanes cross the hazard
+and keep going, which is what a control group is for.
+
+`gev/scripts/qa-headsup-load.mjs` drives both ends and records **the fork's own
+fps readout** (`src/ui/frameRateMonitor.js`, the backquote key) rather than
+counting frames through a hook of its own — a number from the readout a
+developer looks at cannot disagree with what they see. It reports the p5 rather
+than the minimum, because one stalled second during a tile load is not the
+steady state the budget is about, and prints the feed's own worst tick beside
+it: a browser holding 60 fps against a generator that fell behind has not been
+tested.

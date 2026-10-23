@@ -1,6 +1,12 @@
 import { initFirstRunExperience } from '../firstRunExperience.js';
 
-/** Reveal welcome controls only after restoration and the loading transition. */
+/**
+ * Reveal welcome controls only after restoration and the loading transition.
+ *
+ * A mode that offers no provider keys passes `initializeSettings: null`: the
+ * POWER UP surface is then never built, so nothing asks for a key this
+ * console has no use for. See src/headsup/mode.js.
+ */
 export function startApplicationChrome({
   loadingScreen,
   styleManager,

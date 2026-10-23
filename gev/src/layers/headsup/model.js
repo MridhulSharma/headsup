@@ -50,6 +50,23 @@ export const UNKNOWN_HAZARD_COLOR = '#9aa5b1';
 export const VEHICLE_PIXEL_SIZE = 11;
 export const VEHICLE_HEIGHT_OFFSET_M = 2.0;
 
+/**
+ * The ghost fleet's look: one grey, smaller and translucent, for every ghost
+ * operator.
+ *
+ * Deliberately NOT the operator palette. A ghost vehicle is the control group
+ * — the same fleet driving as if no advisory existed — and the claim the demo
+ * makes is about the two COHORTS, not about which company runs which ghost.
+ * Giving ghosts their own colour means a glance separates advised from
+ * unadvised, which is the only comparison on screen that matters.
+ */
+export const GHOST_VEHICLE_COLOR = '#8a94a6';
+export const GHOST_VEHICLE_ALPHA = 0.55;
+export const GHOST_VEHICLE_PIXEL_SIZE = 8;
+
+/** Corridor advisories are lines, drawn heavier than an area's outline. */
+export const CORRIDOR_WIDTH_PX = 5;
+
 /** Interpolation window bounds; the feed's own cadence picks the value between. */
 export const MIN_TRACK_DURATION_MS = 100;
 export const MAX_TRACK_DURATION_MS = 2_000;
@@ -80,7 +97,69 @@ export function operatorCssColor(op) {
  * @returns {Cesium.Color}
  */
 export function operatorColor(op) {
-  return Cesium.Color.fromCssColorString(operatorCssColor(op));
+  const css = operatorCssColor(op);
+  let color = OPERATOR_CESIUM_COLORS.get(css);
+  if (color === undefined) {
+    color = Cesium.Color.fromCssColorString(css);
+    OPERATOR_CESIUM_COLORS.set(css, color);
+  }
+  return color;
+}
+
+/**
+ * Parsed colours and appearances, kept rather than rebuilt.
+ *
+ * `Color.fromCssColorString` parses a string and allocates, and a thousand
+ * vehicles re-asked for it on every telemetry tick: in a frame profile of the
+ * load case that parse was one of the layer's largest costs, for an answer
+ * that never changes.
+ *
+ * Both caches hand back a SHARED instance. Every Cesium setter clones the
+ * colour it is given, and `withAlpha` and `Color.clone` both return a new
+ * one, so sharing is safe as long as nothing mutates what it is handed —
+ * which is why the appearance object is frozen.
+ */
+const OPERATOR_CESIUM_COLORS = new Map();
+const VEHICLE_APPEARANCES = new Map();
+/**
+ * Appearances remembered before the cache is dropped and refilled. Operator
+ * identifiers arrive on the feed, and feed text is data: the cap means a feed
+ * naming thousands of operators cannot keep the memory it costs.
+ */
+const APPEARANCE_LIMIT = 256;
+
+/**
+ * How one vehicle dot is drawn: its colour and its size.
+ *
+ * Pure, and the single place the ghost/advised distinction is made, so the
+ * layer never has to repeat the rule at each of the three points where it
+ * creates, recolours or re-reports a dot.
+ * @param {{op: string, ghost?: boolean}} vehicle
+ * @returns {{color: Cesium.Color, pixelSize: number, css: string}}
+ */
+export function vehicleAppearance({ op, ghost = false } = {}) {
+  const key = ghost ? 'ghost' : `op:${op}`;
+  const known = VEHICLE_APPEARANCES.get(key);
+  if (known !== undefined) return known;
+  const appearance = Object.freeze(
+    ghost
+      ? {
+          color:
+            Cesium.Color.fromCssColorString(GHOST_VEHICLE_COLOR).withAlpha(
+              GHOST_VEHICLE_ALPHA,
+            ),
+          pixelSize: GHOST_VEHICLE_PIXEL_SIZE,
+          css: GHOST_VEHICLE_COLOR,
+        }
+      : {
+          color: operatorColor(op),
+          pixelSize: VEHICLE_PIXEL_SIZE,
+          css: operatorCssColor(op),
+        },
+  );
+  if (VEHICLE_APPEARANCES.size >= APPEARANCE_LIMIT) VEHICLE_APPEARANCES.clear();
+  VEHICLE_APPEARANCES.set(key, appearance);
+  return appearance;
 }
 
 /**
@@ -121,37 +200,52 @@ export function hazardFillAlpha(severity) {
  * @param {number} nowMs Epoch milliseconds.
  * @returns {{lon: number, lat: number, height: number, heading: number}}
  */
-export function sampleTrack(track, nowMs) {
+export function trackProgress(track, nowMs) {
   const duration = Math.max(1, Number(track.durationMs) || 1);
   const elapsed = Number(nowMs) - Number(track.startedAt);
-  const t = Math.min(1, Math.max(0, elapsed / duration));
+  return Math.min(1, Math.max(0, elapsed / duration));
+}
+
+/**
+ * Where one track is at a moment, in degrees.
+ *
+ * Pass `result` to be written into rather than allocated: the layer samples
+ * every vehicle it orients on every frame, and a thousand throwaway objects a
+ * frame is a visible slice of the collector's time.
+ * @param {object} track Track from the layer's vehicle marker.
+ * @param {number} nowMs Wall clock in milliseconds.
+ * @param {{lon: number, lat: number, height: number, heading: number}} [result]
+ * @returns {{lon: number, lat: number, height: number, heading: number}}
+ */
+export function sampleTrack(track, nowMs, result) {
+  const out = result ?? { lon: 0, lat: 0, height: 0, heading: 0 };
+  const t = trackProgress(track, nowMs);
   // The endpoints are returned exactly, as the director's camera sampler also
   // does: a dot at rest must sit ON the position the feed reported, not a
   // float-error nudge away from it.
-  if (t === 0)
-    return {
-      lon: track.fromLon,
-      lat: track.fromLat,
-      height: track.fromHeight,
-      heading: track.fromHeading,
-    };
-  if (t === 1)
-    return {
-      lon: track.toLon,
-      lat: track.toLat,
-      height: track.toHeight,
-      heading: track.toHeading,
-    };
+  if (t === 0) {
+    out.lon = track.fromLon;
+    out.lat = track.fromLat;
+    out.height = track.fromHeight;
+    out.heading = track.fromHeading;
+    return out;
+  }
+  if (t === 1) {
+    out.lon = track.toLon;
+    out.lat = track.toLat;
+    out.height = track.toHeight;
+    out.heading = track.toHeading;
+    return out;
+  }
   // Shortest signed arc, so a vehicle turning past north sweeps the short way
   // (the director's camera sampler reads the same way).
   const turn =
     ((((track.toHeading - track.fromHeading + 540) % 360) + 360) % 360) - 180;
-  return {
-    lon: track.fromLon + (track.toLon - track.fromLon) * t,
-    lat: track.fromLat + (track.toLat - track.fromLat) * t,
-    height: track.fromHeight + (track.toHeight - track.fromHeight) * t,
-    heading: (((track.fromHeading + turn * t) % 360) + 360) % 360,
-  };
+  out.lon = track.fromLon + (track.toLon - track.fromLon) * t;
+  out.lat = track.fromLat + (track.toLat - track.fromLat) * t;
+  out.height = track.fromHeight + (track.toHeight - track.fromHeight) * t;
+  out.heading = (((track.fromHeading + turn * t) % 360) + 360) % 360;
+  return out;
 }
 
 /**
@@ -255,6 +349,246 @@ export function mapAnalystRecord(raw, index = 0) {
     headingDeg: num(raw?.heading),
     kind: 'vehicle',
   };
+}
+
+/**
+ * The chevron that carries a vehicle's heading.
+ *
+ * An SVG data URI rather than a canvas: it is a plain string, so this module
+ * stays pure and portable, every vehicle shares ONE texture-atlas entry, and
+ * the colour comes from the billboard's own `color` rather than from a
+ * per-operator image. White on purpose — the tint is what makes it the
+ * operator's colour.
+ */
+const CHEVRON_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" ' +
+  'viewBox="0 0 24 24"><path d="M12 1.5 21.5 22 12 17.2 2.5 22Z" ' +
+  'fill="#ffffff"/></svg>';
+export const VEHICLE_CHEVRON_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  CHEVRON_SVG,
+)}`;
+/** Chevron size in pixels, and the band over which it fades out. */
+export const VEHICLE_CHEVRON_PX = 15;
+export const CHEVRON_NEAR_M = 400;
+export const CHEVRON_FAR_M = 2_600;
+
+/**
+ * Event animation windows, in milliseconds.
+ *
+ * Each one is a SINGLE gesture with a beginning and an end: one swell of the
+ * hazard area when an advisory is published, one beam out to each fleet, one
+ * flash when that fleet answers. Nothing here loops, because a loop is a
+ * thing that keeps asking for attention it has already been given.
+ */
+export const HAZARD_PULSE_MS = 2_000;
+export const DISPATCH_BEAM_MS = 1_500;
+export const ACK_FLASH_MS = 700;
+export const DEFLECTION_TRAIL_MS = 30_000;
+
+/** How much alpha the pulse adds over the advisory's steady fill, at peak. */
+export const PULSE_PEAK_ALPHA = 0.34;
+/** How much wider a flashing vehicle dot gets, as a fraction of its size. */
+export const FLASH_PEAK_SCALE = 0.7;
+
+/** Dispatch beams and deflection trails. */
+export const BEAM_WIDTH_PX = 4;
+export const BEAM_GLOW_POWER = 0.25;
+export const TRAIL_WIDTH_PX = 3;
+export const TRAIL_ALPHA = 0.7;
+/**
+ * Taper of the deflection trail's glow, which is what makes it FADE.
+ *
+ * The fade is in the shader, not in a per-frame alpha write: a trail tapers
+ * from its newest end to nothing at its oldest, so two hundred of them cost
+ * two hundred vertex buffers that only change when a tick lands, and nothing
+ * at all per frame.
+ */
+export const TRAIL_TAPER_POWER = 0.42;
+
+/** The one red on this screen: a refusal, and nothing else. */
+export const DECLINED_ACCENT = '#ef476f';
+
+/**
+ * One swell and back: 0 at both ends of the window, 1 in the middle.
+ *
+ * Used by the hazard pulse and the acknowledgement flash, so both read as the
+ * same gesture at two sizes. Outside the window it is 0, which is what lets a
+ * caller treat "finished" and "never started" identically.
+ * @param {number} elapsedMs Milliseconds since the event.
+ * @param {number} [durationMs] Window length.
+ * @returns {number} Level in [0, 1].
+ */
+export function pulseLevel(elapsedMs, durationMs = HAZARD_PULSE_MS) {
+  const duration = Math.max(1, Number(durationMs) || 1);
+  const elapsed = Number(elapsedMs);
+  if (!Number.isFinite(elapsed) || elapsed <= 0 || elapsed >= duration)
+    return 0;
+  return Math.sin(Math.PI * (elapsed / duration));
+}
+
+/**
+ * How far one dispatch beam has reached, and how visible it still is.
+ *
+ * The beam GROWS over the first half of its window and then fades where it
+ * arrived, rather than growing all the way and vanishing: the gesture being
+ * drawn is "this went to that fleet", and the end of it is the part that
+ * should still be on screen when it goes.
+ * @param {number} elapsedMs Milliseconds since the advisory was published.
+ * @param {number} [durationMs] Window length.
+ * @returns {{reach: number, alpha: number, done: boolean}}
+ */
+export function beamProgress(elapsedMs, durationMs = DISPATCH_BEAM_MS) {
+  const duration = Math.max(1, Number(durationMs) || 1);
+  const elapsed = Number(elapsedMs);
+  if (!Number.isFinite(elapsed) || elapsed < 0)
+    return { reach: 0, alpha: 0, done: false };
+  if (elapsed >= duration) return { reach: 1, alpha: 0, done: true };
+  const t = elapsed / duration;
+  // Ease-out cubic over the first 55%, so the beam leaves fast and lands soft.
+  const travel = Math.min(1, t / 0.55);
+  return {
+    reach: 1 - (1 - travel) ** 3,
+    alpha: t <= 0.6 ? 1 : 1 - (t - 0.6) / 0.4,
+    done: false,
+  };
+}
+
+/**
+ * The unit direction of travel at one position, in world coordinates.
+ *
+ * This is what orients a vehicle: a billboard's `alignedAxis` points its top
+ * along this vector in screen space, so the chevron reads as the bearing the
+ * simulator reported from any camera angle — including straight down, where a
+ * screen-space rotation would be meaningless.
+ *
+ * The east and north unit vectors are written out rather than taken from
+ * `Transforms.eastNorthUpToFixedFrame`: this runs once per vehicle per frame,
+ * and a thousand 4x4 matrices a frame is a cost with nothing to show for it.
+ * @param {number} lon Degrees.
+ * @param {number} lat Degrees.
+ * @param {number} headingDeg Bearing clockwise from north.
+ * @param {{x: number, y: number, z: number}} result Written in place.
+ * @returns {{x: number, y: number, z: number}} `result`.
+ */
+export function headingDirection(lon, lat, headingDeg, result) {
+  const lonRad = (Number(lon) || 0) * (Math.PI / 180);
+  const latRad = (Number(lat) || 0) * (Math.PI / 180);
+  const heading = (Number(headingDeg) || 0) * (Math.PI / 180);
+  const sinLon = Math.sin(lonRad);
+  const cosLon = Math.cos(lonRad);
+  const sinLat = Math.sin(latRad);
+  const cosLat = Math.cos(latRad);
+  const east = Math.sin(heading);
+  const north = Math.cos(heading);
+  result.x = -sinLon * east - sinLat * cosLon * north;
+  result.y = cosLon * east - sinLat * sinLon * north;
+  result.z = cosLat * north;
+  return result;
+}
+
+/**
+ * The mean position of one fleet, as the dispatch beam's destination.
+ *
+ * A centroid rather than a nearest vehicle: the beam is addressed to the
+ * OPERATOR, and pointing it at one vehicle would claim the advisory was sent
+ * to that vehicle. Returns null for an empty fleet, because there is then no
+ * fleet to draw a beam to.
+ * @param {Iterable<{lon: number, lat: number, height: number}>} samples
+ * @returns {{lon: number, lat: number, height: number}|null}
+ */
+export function fleetCentroid(samples) {
+  let lon = 0;
+  let lat = 0;
+  let height = 0;
+  let count = 0;
+  for (const sample of samples) {
+    if (!Number.isFinite(sample?.lon) || !Number.isFinite(sample?.lat))
+      continue;
+    lon += sample.lon;
+    lat += sample.lat;
+    height += Number.isFinite(sample.height) ? sample.height : 0;
+    count++;
+  }
+  if (!count) return null;
+  return { lon: lon / count, lat: lat / count, height: height / count };
+}
+
+/**
+ * Drop trail samples that have left the window.
+ *
+ * In place and from the front, because the array is in arrival order and the
+ * caller is about to write it to a polyline: a copy per tick per vehicle is
+ * two hundred arrays a tick for nothing.
+ * @param {Array<{at: number}>} samples Oldest first.
+ * @param {number} nowMs Epoch milliseconds.
+ * @param {number} [windowMs] How long a trail is kept.
+ * @returns {Array<{at: number}>} `samples`.
+ */
+export function pruneTrail(samples, nowMs, windowMs = DEFLECTION_TRAIL_MS) {
+  const cutoff = Number(nowMs) - Math.max(0, Number(windowMs) || 0);
+  let drop = 0;
+  while (drop < samples.length && samples[drop].at < cutoff) drop++;
+  if (drop) samples.splice(0, drop);
+  return samples;
+}
+
+/**
+ * Build the source-owned presentation for one DECLINED acknowledgement.
+ *
+ * A refusal is the one thing on this screen that is not an advisory, so it is
+ * labelled on the FLEET that refused rather than on the hazard: the question
+ * it answers is "who did not take it", and that is an operator, not an area.
+ * @param {object} input
+ * @param {string} input.operator Operator identifier.
+ * @param {object} input.position Label anchor (`Cesium.Cartesian3`).
+ * @param {string} input.title Label text, already translated by the surface.
+ * @returns {object} World-overlay entry.
+ */
+export function createDeclinedOverlayEntry({ operator, position, title }) {
+  return {
+    id: `declined:${operator}`,
+    position,
+    variant: 'label',
+    title,
+    accent: DECLINED_ACCENT,
+    // Above every advisory label: a fleet that refused is the most urgent
+    // thing the overlay can be asked to keep when it has to drop some.
+    priority: 9_000,
+    collisionGroup: 'ambient-label',
+    paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 15,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
+
+/**
+ * The hazard classes on screen right now, as a legend reads them.
+ *
+ * Derived from what is DRAWN rather than from the palette, so the legend
+ * never names a colour the viewer cannot see, and never omits one it can.
+ * @param {Array<{hazardClass: string}>} advisories Live advisory rows.
+ * @returns {Array<{hazardClass: string, color: string, advisories: number}>}
+ */
+export function hazardLegendRows(advisories) {
+  const rows = new Map();
+  for (const row of advisories ?? []) {
+    const entry = rows.get(row.hazardClass);
+    if (entry) entry.advisories++;
+    else
+      rows.set(row.hazardClass, {
+        hazardClass: row.hazardClass,
+        color: hazardCssColor(row.hazardClass),
+        advisories: 1,
+      });
+  }
+  return [...rows.values()].sort((a, b) =>
+    a.hazardClass.localeCompare(b.hazardClass),
+  );
 }
 
 export {

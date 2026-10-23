@@ -64,7 +64,7 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests"]
+src = ["src", "tests", "viz"]
 # The God's Eye View fork is vendored with git subtree: third-party code held
 # at upstream's style, not ours. Linting its maintainer scripts to our rules
 # would only create churn against the next subtree pull.
