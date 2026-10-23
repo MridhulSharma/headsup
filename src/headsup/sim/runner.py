@@ -19,6 +19,7 @@ from __future__ import annotations
 import time
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from typing import Protocol
 
 from headsup.bus import Bus
 from headsup.bus.streams import STREAM_ACKS, STREAM_ADVISORIES, STREAM_ASSIST, STREAM_TELEMETRY
@@ -40,6 +41,19 @@ TELEMETRY_MAXLEN = 600
 ADVISORY_GROUP = "sim"
 
 
+class TickTap(Protocol):
+    """A reader of every tick, called before the tick is published.
+
+    What the viewer socket uses: the bus carries telemetry for the fleets and
+    for anything replaying the streams later, and a tap carries the same tick
+    to whatever is watching this run live. It is called synchronously inside
+    the tick loop, so an implementation queues and returns rather than
+    awaiting anything.
+    """
+
+    def __call__(self, mode: SimMode, result: TickResult) -> None: ...
+
+
 class SimRunner:
     """Runs one or both fleet sets on a single clock, optionally on the bus."""
 
@@ -52,6 +66,7 @@ class SimRunner:
         "_net",
         "_sims",
         "_start",
+        "_tap",
         "_verify",
     )
 
@@ -68,10 +83,12 @@ class SimRunner:
         anchors: Sequence[object] = (),
         verify_signatures: bool = True,
         net: DriveNetwork | None = None,
+        tap: TickTap | None = None,
     ) -> None:
         cfg.validate()
         self._cfg = cfg
         self._bus = bus
+        self._tap = tap
         self._clock: Clock = clock or SystemClock()
         self._start = start or datetime.now(UTC).replace(microsecond=0)
         self._verify = verify_signatures
@@ -132,6 +149,8 @@ class SimRunner:
 
                 for mode, sim in self._sims.items():
                     result = sim.step()
+                    if self._tap is not None:
+                        self._tap(mode, result)
                     if self._bus is not None:
                         await self._publish(result, mode)
 

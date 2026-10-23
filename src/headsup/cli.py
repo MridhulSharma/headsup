@@ -12,6 +12,7 @@ from headsup import __version__
 from headsup import infra as infra_mod
 from headsup.agents.cli import register as register_agents
 from headsup.agents.compiler.cli import register as register_compiler
+from headsup.api.cli import register as register_api
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app
@@ -45,6 +46,10 @@ register_sim(app)
 
 # `hu agents` likewise: the event-driven agents are started together.
 register_agents(app)
+
+# `hu serve` and `hu demo`: the API and the agents in one process, which is
+# what lets the viewer start a scenario on demand.
+register_api(app)
 
 console = Console()
 err = Console(stderr=True)

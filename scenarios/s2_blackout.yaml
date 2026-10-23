@@ -18,6 +18,20 @@ hazard_class: SIGNAL_OUTAGE
 # any run of a scripted scenario.
 scripted: true
 
+# The one line the Test Scene launcher shows under the title.
+what_if: >-
+  What if a fleet treated a block of dark intersections as all-way stops
+  instead of meeting them one vehicle at a time?
+
+# Where the viewer puts the camera when this scene opens: the Congress Avenue
+# grid the outage covers, looking north up the avenue.
+start_view:
+  lon: -97.7431
+  lat: 30.2650
+  height: 2200
+  heading: 10
+  pitch: -40
+
 summary: >-
   A feeder failure drops 9 signals on the Congress Avenue grid into
   unscheduled flash during the Wednesday evening peak. The outage starts with
