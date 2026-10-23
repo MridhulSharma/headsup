@@ -60,6 +60,7 @@ def render(blackout: Blackout, *, recording: Path, events: int, bytes_: int) -> 
     noise = ", ".join(f'"{signal.signal_id}"' for signal in blackout.noise)
     decoys = ", ".join(f'"{signal.signal_id}"' for signal in blackout.decoys)
     lon, lat = AUSTIN_DOWNTOWN
+    view_lat = round(lat - 0.0036, 4)
     try:
         relative = recording.relative_to(PROJECT_ROOT).as_posix()
     except ValueError:  # a recording written outside the repo, e.g. in a test
@@ -85,6 +86,20 @@ hazard_class: SIGNAL_OUTAGE
 # True because the signal states were generated. The God's Eye View labels
 # any run of a scripted scenario.
 scripted: true
+
+# The one line the Test Scene launcher shows under the title.
+what_if: >-
+  What if a fleet treated a block of dark intersections as all-way stops
+  instead of meeting them one vehicle at a time?
+
+# Where the viewer puts the camera when this scene opens: the Congress Avenue
+# grid the outage covers, looking north up the avenue.
+start_view:
+  lon: {lon}
+  lat: {view_lat}
+  height: 2200
+  heading: 10
+  pitch: -40
 
 summary: >-
   A feeder failure drops {len(blackout.cluster)} signals on the Congress Avenue grid into

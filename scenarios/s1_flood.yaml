@@ -16,6 +16,21 @@ hazard_class: FLOOD
 # View will label the run.
 scripted: false
 
+# The one line the Test Scene launcher shows under the title.
+what_if: >-
+  What if a fleet knew which low-water crossings were under water before a
+  vehicle drove into one?
+
+# Where the viewer puts the camera when this scene opens: the Salado Creek
+# reach between the two gauges that crossed their action stage, from the
+# south-west, high enough to hold the Loop 410 and Loop 1604 crossings.
+start_view:
+  lon: -98.5430
+  lat: 29.5880
+  height: 7000
+  heading: 20
+  pitch: -42
+
 summary: >-
   NWS Austin/San Antonio ran two back-to-back flash flood warnings over
   north-east Bexar County on the afternoon and evening of 20 April 2026, while

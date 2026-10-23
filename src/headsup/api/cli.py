@@ -1,0 +1,141 @@
+"""`hu serve` and `hu demo`: the API and the agents as one long-lived process.
+
+`hu serve` is the process the viewer talks to. It is one process rather than a
+server plus a separate `hu agents` for a reason the launcher forces: starting a
+scenario means resetting the streams and the simulator, and whatever owns the
+socket has to own those too. So the app's own lifespan brings the agents up
+when a scenario starts and drops them when it stops.
+
+`hu demo s1` is `hu serve` with that scenario started as soon as the server is
+up, which is all the demo ever was: one command, the viewer pointed at
+`ws://localhost:8765/viewer`, and the scenario running.
+
+Nothing here reads the streams or publishes to them. It builds the app, hands
+it to uvicorn, and prints the two URLs a person needs.
+"""
+
+from __future__ import annotations
+
+import logging
+
+import typer
+import uvicorn
+from rich.console import Console
+
+from headsup.api.app import ApiState, create_app, default_host, default_port
+from headsup.api.catalog import CatalogError, ScenarioCatalog
+from headsup.api.runner import StartOptions
+from headsup.llm import mode_from_env
+
+console = Console()
+err = Console(stderr=True)
+
+#: `hu demo s1` rather than `hu demo s1_flood`: the demo names are short.
+DEMO_ALIASES: dict[str, str] = {"s1": "s1_flood", "s2": "s2_blackout"}
+
+_ALIASES = ", ".join(DEMO_ALIASES)
+
+
+def _resolve(name: str, catalog: ScenarioCatalog) -> str:
+    """A demo name or a scenario id, as a scenario id that exists."""
+    scenario_id = DEMO_ALIASES.get(name.strip().lower(), name.strip())
+    return catalog.card(scenario_id).id
+
+
+def _options(speed: float, vehicles: int, seed: int, llm: bool) -> StartOptions:
+    return StartOptions(speed=speed or None, vehicles=vehicles, seed=seed, llm=llm)
+
+
+def _serve(
+    *,
+    host: str,
+    port: int,
+    scenario: str | None,
+    options: StartOptions,
+    namespace: str,
+    log_level: str,
+) -> None:
+    """Run the server, with one scenario started once it is up."""
+    state = ApiState(namespace=namespace)
+    if scenario is not None:
+        state.autostart = (scenario, options)
+    app = create_app(state)
+    console.print(
+        f"[bold]hu serve[/bold] http://{host}:{port}  "
+        f"viewer ws://{host}:{port}/viewer  llm={mode_from_env().value}"
+        + (f"  namespace={namespace}" if namespace else "")
+        + (f"  scenario={scenario}" if scenario else "")
+    )
+    try:
+        uvicorn.run(app, host=host, port=port, log_level=log_level)
+    except KeyboardInterrupt:  # pragma: no cover - interactive only
+        console.print("[yellow]interrupted[/yellow]")
+
+
+def serve(
+    host: str = typer.Option("", "--host", help="Interface to bind. Default 127.0.0.1."),
+    port: int = typer.Option(0, "--port", help="Port to bind. Default 8765."),
+    scenario: str = typer.Option("", "--scenario", help="Start this scenario once up."),
+    speed: float = typer.Option(
+        0.0, "--speed", help="Replay and fleet speed; 0 uses the scenario's."
+    ),
+    vehicles: int = typer.Option(300, "--vehicles", help="Vehicles across all fleets."),
+    seed: int = typer.Option(42, "--seed", help="Run seed; the same seed replays exactly."),
+    namespace: str = typer.Option("", "--namespace", help="Prefix every stream name."),
+    llm: bool = typer.Option(True, "--llm/--no-llm", help="Let the agents ask a model."),
+    log_level: str = typer.Option("warning", "--log-level", help="uvicorn log level."),
+) -> None:
+    """Run the API and the agents on one port, for the viewer to drive."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    chosen: str | None = None
+    try:
+        if scenario:
+            chosen = _resolve(scenario, ScenarioCatalog())
+        options = _options(speed, vehicles, seed, llm)
+    except (CatalogError, ValueError) as exc:
+        err.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    _serve(
+        host=host or default_host(),
+        port=port or default_port(),
+        scenario=chosen,
+        options=options,
+        namespace=namespace,
+        log_level=log_level,
+    )
+
+
+def demo(
+    scenario: str = typer.Argument("s1", help=f"One of: {_ALIASES}, or a scenario id."),
+    host: str = typer.Option("", "--host", help="Interface to bind. Default 127.0.0.1."),
+    port: int = typer.Option(0, "--port", help="Port to bind. Default 8765."),
+    speed: float = typer.Option(
+        0.0, "--speed", help="Replay and fleet speed; 0 uses the scenario's."
+    ),
+    vehicles: int = typer.Option(300, "--vehicles", help="Vehicles across all fleets."),
+    seed: int = typer.Option(42, "--seed", help="Run seed; the same seed replays exactly."),
+    llm: bool = typer.Option(True, "--llm/--no-llm", help="Let the agents ask a model."),
+    log_level: str = typer.Option("warning", "--log-level", help="uvicorn log level."),
+) -> None:
+    """Run `hu serve` with one scenario started: the whole demo, one command."""
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    try:
+        chosen = _resolve(scenario, ScenarioCatalog())
+        options = _options(speed, vehicles, seed, llm)
+    except (CatalogError, ValueError) as exc:
+        err.print(f"[red]{exc}[/red]")
+        raise typer.Exit(2) from exc
+    _serve(
+        host=host or default_host(),
+        port=port or default_port(),
+        scenario=chosen,
+        options=options,
+        namespace="",
+        log_level=log_level,
+    )
+
+
+def register(app: typer.Typer) -> None:
+    """Add `hu serve` and `hu demo` to the top-level app."""
+    app.command("serve")(serve)
+    app.command("demo")(demo)

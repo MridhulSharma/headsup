@@ -45,6 +45,7 @@ from headsup.bus import (
     STREAM_CANDIDATES,
     STREAM_HAZARDS,
     STREAM_PROPOSALS,
+    STREAM_VERDICTS,
     Bus,
     BusError,
     BusMessage,
@@ -190,6 +191,7 @@ class ProposerWorker(_Worker):
         consumer: str = "worker-1",
         group: str | None = None,
         proposals_stream: str = STREAM_PROPOSALS,
+        verdicts_stream: str = STREAM_VERDICTS,
         compiler: Publisher | None = None,
         on_proposal: OnProposal | None = None,
     ) -> None:
@@ -197,6 +199,7 @@ class ProposerWorker(_Worker):
         super().__init__(bus, consumer=consumer, group=group)
         self.proposer = proposer
         self.proposals_stream = proposals_stream
+        self.verdicts_stream = verdicts_stream
         self.compiler = compiler
         self.on_proposal = on_proposal
         #: Proposals handed to the compiler, and what it published.
@@ -238,6 +241,12 @@ class ProposerWorker(_Worker):
     async def _compile(self, proposal: ProposedAdvisory) -> None:
         """Hand one proposal and the stub verdict to the compiler, if there is one.
 
+        The verdict goes on the `verdicts` stream before the compiler sees it,
+        for the same reason the proposal does: the gate acted on it, so a
+        reader of the streams can see what it acted on. It is written only
+        here, where a verdict is actually used -- a pipeline with no compiler
+        attached reaches no verdict and publishes none.
+
         A rejection is the gate working and is already in the `audit` stream,
         so it is logged rather than counted as a skipped message. A `BusError`
         on the way out means the advisory was not written: that one is noted,
@@ -246,8 +255,10 @@ class ProposerWorker(_Worker):
         if self.compiler is None:
             return
         self.compiled += 1
+        verdict = stub_verdict(proposal)
         try:
-            outcome = await self.compiler.publish(proposal, stub_verdict(proposal))
+            await self.bus.publish(verdict, stream=self.verdicts_stream)
+            outcome = await self.compiler.publish(proposal, verdict)
         except BusError as exc:
             self.report.note(f"{proposal.id}: compiler publish failed: {exc}")
             log.warning("%s: %s on %s", self.name, exc, proposal.id)

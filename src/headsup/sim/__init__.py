@@ -49,7 +49,7 @@ from headsup.sim.operators import (
 )
 from headsup.sim.rng import SeedTree, split_seed, substream
 from headsup.sim.router import Router
-from headsup.sim.runner import SimRunner, modes_for
+from headsup.sim.runner import SimRunner, TickTap, modes_for
 from headsup.sim.vehicles import Intent, Vehicle
 
 __all__ = [
@@ -82,6 +82,7 @@ __all__ = [
     "SimRunner",
     "Simulation",
     "TickResult",
+    "TickTap",
     "TrajectoryHash",
     "Vehicle",
     "corridor_polygon",
