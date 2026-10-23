@@ -1,11 +1,13 @@
 /**
  * The Heads Up scenario API: what the Test Scene picker reads and calls.
  *
- * Three calls, matching `viz/mock_stream.py` and the API that replaces it:
+ * Four calls, matching `viz/mock_stream.py` and the API that replaces it:
  *
  * - `GET /scenarios` — the picker's rows, one what-if line each.
  * - `POST /scenarios/{id}/start` — begin a what-if replay.
  * - `POST /scenarios/stop` — return the feed to idle.
+ * - `POST /approvals/{proposal_id}` — the second key a two-key advisory is
+ *   held on, which the agent rail's Compiler card offers as a button.
  *
  * Portable: no Cesium, no DOM. `fetch` is injected so the lifecycle can be
  * exercised offline.
@@ -141,6 +143,24 @@ export function normalizeScenarioListing(payload) {
     normalized.push(scenario);
   }
   return normalized;
+}
+
+/**
+ * Validate the answer to an approval call.
+ *
+ * Only `approved` counts. An origin that answers 200 with something else has
+ * not told this page that a second key was recorded, and a console that read
+ * silence as consent would be the worst possible failure in a two-key
+ * control: the button would look as though it worked.
+ * @param {unknown} payload
+ * @returns {{state: string}|null}
+ */
+export function normalizeApproval(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return null;
+  return payload.state === 'approved'
+    ? Object.freeze({ state: 'approved' })
+    : null;
 }
 
 /**
@@ -316,6 +336,36 @@ export function createScenarioClient({
       if (!result)
         throw new ScenarioApiError(
           msg('The Heads Up scenario API answered with something unreadable.'),
+        );
+      return result;
+    },
+
+    /**
+     * Supply the second key one pending advisory is waiting for.
+     *
+     * `POST /approvals/{proposal_id}`. The compiler holds a severity-4 or
+     * over-area advisory until a person approves it, so this is the one call
+     * in this client that changes what gets PUBLISHED rather than what gets
+     * replayed — which is why its answer is validated strictly and a refusal
+     * is surfaced rather than retried against another origin.
+     * @param {string} proposalId The proposal id the compiler named.
+     * @param {{signal?: AbortSignal}} [options]
+     * @returns {Promise<{state: string}>}
+     */
+    async approve(proposalId, { signal } = {}) {
+      // The id came off the wire once already. Re-check it here, because
+      // this is where it becomes part of a URL.
+      const id = identifier(proposalId);
+      if (!id) throw new TypeError('A proposal id is required');
+      const result = normalizeApproval(
+        await call(`/approvals/${encodeURIComponent(id)}`, {
+          method: 'POST',
+          signal,
+        }),
+      );
+      if (!result)
+        throw new ScenarioApiError(
+          msg('The Heads Up API did not confirm the approval.'),
         );
       return result;
     },

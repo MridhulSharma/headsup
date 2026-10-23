@@ -1680,6 +1680,7 @@
       "src/headsup/scenarios.js",
       "src/headsup/camera.js",
       "src/headsup/console.js",
+      "src/headsup/pipeline.js",
       "src/ui/placeNames.js",
       "src/cyberSonarScene.js",
       "src/cyberSonar.js",

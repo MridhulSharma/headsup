@@ -17,13 +17,19 @@ for the real API outright.
     a scenario it is that scenario's fleet, and after the advisory some
     vehicles carry ``rerouted_by``.
   - ``{"type": "advisory", "feature": <Advisory GeoJSON>}``, plus the
-    ``scenario_state``, ``candidate``, ``hazard``, ``proposal``, ``verdict``
-    and ``ack`` frames the agent pipeline rail is driven from.
+    ``scenario_state``, ``candidate``, ``hazard``, ``proposal``, ``verdict``,
+    ``compile`` and ``ack`` frames the agent pipeline rail is driven from,
+    and the ``assist`` and ``counters`` frames its map markers and counter
+    strip read.
 * ``http://localhost:8766`` — the scenario API.
   - ``GET /scenarios`` lists S1, S2 and S3 with a one-line what-if each.
   - ``POST /scenarios/{id}/start`` starts one; every connected viewer picks it
     up within a tick and replays its scripted sequence.
   - ``POST /scenarios/stop`` returns every viewer to the idle feed.
+  - ``POST /approvals/{proposal_id}`` supplies the second key a severity-4
+    advisory needs. S3 stops at ``PENDING_APPROVAL`` until this is called,
+    which is the whole point of that scenario: the compiler will not publish
+    a two-key advisory on its own.
 
 Run it from the repository root::
 
@@ -44,6 +50,7 @@ import contextlib
 import json
 import logging
 import math
+import re
 from datetime import UTC, datetime, timedelta
 from http import HTTPStatus
 from typing import Any
@@ -54,14 +61,18 @@ from websockets.datastructures import Headers
 from websockets.http11 import Request, Response
 
 from scenario_script import (
-    S1_REROUTE_AT,
-    S1_TIMELINE,
     SCENARIOS,
     SCENARIOS_BY_ID,
-    SCRIPTED_SCENARIO_ID,
+    SCRIPTED_SCENARIO_IDS,
+    SCRIPTS,
+    assist_frame,
+    counters_frame,
+    fleet_assists,
+    fleet_tallies,
+    pending_proposal_id,
     rfc3339,
-    s1_vehicles,
     scenario_state_frame,
+    scenario_vehicles,
     scripted_frame,
 )
 
@@ -73,6 +84,10 @@ VIEWER_PATH = "/viewer"
 DEFAULT_PORT = 8766
 #: The scenario API's collection path.
 SCENARIOS_PATH = "/scenarios"
+#: Where the second key for a two-key advisory is posted.
+APPROVALS_PATH = "/approvals"
+#: Proposal ids share the wire contract's identifier grammar.
+ID_GRAMMAR = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
 
 #: One downtown Austin block: Congress Ave / 6th St, driven clockwise.
 BLOCK_CENTRE_LON = -97.7431
@@ -205,18 +220,43 @@ class ScenarioRunner:
         self.scenario: dict[str, Any] | None = None
         self.generation = 0
         self.started_at: float | None = None
+        #: Proposal ids a person has approved during THIS run. Cleared on
+        #: every start and stop: an approval is consent for one advisory in
+        #: one replay, never a standing permission for the next one.
+        self.approvals: set[str] = set()
 
     def start(self, scenario: dict[str, Any], clock: float) -> None:
         self.scenario = scenario
         self.started_at = clock
+        self.approvals.clear()
         self.generation += 1
 
     def stop(self) -> bool:
         was_running = self.scenario is not None
         self.scenario = None
         self.started_at = None
+        self.approvals.clear()
         self.generation += 1
         return was_running
+
+    def approve(self, proposal_id: str) -> bool:
+        """Record one second key. False when nothing is waiting for it.
+
+        The id has to be the one the RUNNING scenario is actually held on:
+        an approval for some other proposal is not consent for this one, and
+        a replay with nothing pending must not be nudged forward by a stale
+        button in a tab somebody left open.
+        """
+        if self.scenario is None:
+            return False
+        if pending_proposal_id(self.scenario["id"]) != proposal_id:
+            return False
+        self.approvals.add(proposal_id)
+        # Not a generation bump: the run continues, it does not restart.
+        return True
+
+    def is_approved(self, proposal_id: str | None) -> bool:
+        return proposal_id is not None and proposal_id in self.approvals
 
 
 # ── The scenario API ──────────────────────────────────────────────────────
@@ -277,7 +317,7 @@ def _scenario_listing() -> list[dict[str, Any]]:
             "what_if": scenario["what_if"],
             "speed": scenario["speed"],
             "start_view": dict(scenario["start_view"]),
-            "scripted": scenario["id"] == SCRIPTED_SCENARIO_ID,
+            "scripted": scenario["id"] in SCRIPTED_SCENARIO_IDS,
         }
         for scenario in SCENARIOS
     ]
@@ -297,6 +337,22 @@ def route_http(request: Request, runner: ScenarioRunner, clock: float) -> Respon
         was_running = runner.stop()
         LOGGER.info("scenario stopped (was running: %s)", was_running)
         return _json_response(HTTPStatus.OK, {"state": "idle", "was_running": was_running})
+    if path.startswith(f"{APPROVALS_PATH}/"):
+        if method != "POST":
+            return _text_response(HTTPStatus.METHOD_NOT_ALLOWED, "POST /approvals/{proposal_id}\n")
+        proposal_id = path[len(APPROVALS_PATH) + 1 :]
+        # The id came off the wire. It is only ever compared against the one
+        # the running script is held on, and is never echoed back.
+        if not ID_GRAMMAR.match(proposal_id):
+            return _json_response(HTTPStatus.BAD_REQUEST, {"error": "malformed proposal id"})
+        if not runner.approve(proposal_id):
+            LOGGER.warning("refused an approval that nothing is waiting for")
+            return _json_response(
+                HTTPStatus.CONFLICT,
+                {"error": "no advisory is waiting for that approval"},
+            )
+        LOGGER.info("two-key approval accepted")
+        return _json_response(HTTPStatus.OK, {"state": "approved"})
     if path.startswith(f"{SCENARIOS_PATH}/") and path.endswith("/start"):
         if method != "POST":
             return _text_response(HTTPStatus.METHOD_NOT_ALLOWED, "POST /scenarios/{id}/start\n")
@@ -333,7 +389,8 @@ def route_http(request: Request, runner: ScenarioRunner, clock: float) -> Respon
         HTTPStatus.NOT_FOUND,
         f"expected {VIEWER_PATH} (websocket), "
         f"GET {SCENARIOS_PATH}, "
-        f"POST {SCENARIOS_PATH}/<id>/start or POST {SCENARIOS_PATH}/stop\n",
+        f"POST {SCENARIOS_PATH}/<id>/start, POST {SCENARIOS_PATH}/stop "
+        f"or POST {APPROVALS_PATH}/<proposal_id>\n",
     )
 
 
@@ -383,13 +440,29 @@ async def _run_scenario(
     always arrive in timeline order relative to the fleet they describe. The
     script's own offsets are wall-clock seconds from the start call, which is
     what the picker's "replay speed" readout is reported against.
+
+    A script that ESCALATES stops at its last timed step and waits: the
+    frames in ``approved_steps`` go out only once ``POST /approvals/{id}``
+    has supplied the second key, and they are sent in one burst at that
+    moment rather than on offsets of their own, because what paces them is a
+    person pressing a button.
+
+    `entered` is this connection's own cumulative record of which vehicles
+    have been inside the hazard. Per connection rather than per run so two
+    viewers cannot double-count each other's ticks.
     """
-    scripted = scenario["id"] == SCRIPTED_SCENARIO_ID
-    timeline = list(S1_TIMELINE) if scripted else [(0.0, "scenario_state")]
+    script = SCRIPTS.get(scenario["id"])
+    timeline = list(script["timeline"]) if script else [(0.0, "scenario_state")]
+    pending_id = pending_proposal_id(scenario["id"])
+    approved_steps = list(script.get("approved_steps", ())) if script else []
     interval = 1.0 / rate_hz
     started = asyncio.get_running_loop().time()
     tick = 0
     next_step = 0
+    released = False
+    entered: dict[str, set[str]] = {"live": set(), "ghost": set()}
+    #: Set once the approved burst goes out, so the fleet reroutes then.
+    approved_at: float | None = None
     while runner.generation == generation:
         elapsed = asyncio.get_running_loop().time() - started
         # Every step whose offset has passed, in order, before this tick's
@@ -398,15 +471,45 @@ async def _run_scenario(
         while next_step < len(timeline) and timeline[next_step][0] <= elapsed:
             offset, step = timeline[next_step]
             next_step += 1
-            frame = scripted_frame(step, offset, scenario)
+            frame = scripted_frame(step, offset, scenario, approved=False)
             if frame is not None:
                 await _send(connection, frame)
+        # The second key, once a person has turned it. Held until every
+        # timed step has gone out, so a viewer that connected after the
+        # approval still sees the reasoning before the publication: this
+        # connection replays the timeline from its own first tick.
+        if (
+            not released
+            and approved_steps
+            and next_step >= len(timeline)
+            and runner.is_approved(pending_id)
+        ):
+            released = True
+            approved_at = elapsed
+            for step in approved_steps:
+                frame = scripted_frame(step, elapsed, scenario, approved=True)
+                if frame is not None:
+                    await _send(connection, frame)
+        reroute_at = script["reroute_at"] if script else None
+        rerouted = (
+            elapsed >= reroute_at
+            if reroute_at is not None
+            else approved_at is not None and elapsed >= approved_at
+        )
         vehicles = (
-            s1_vehicles(elapsed, rerouted=elapsed >= S1_REROUTE_AT)
-            if scripted
+            scenario_vehicles(scenario["id"], elapsed, rerouted=rerouted)
+            if script
             else [vehicle_at(elapsed)]
         )
         await _send(connection, telemetry_frame(tick, elapsed, vehicles))
+        # Assists and tallies at 1 Hz: they are a queue depth and a running
+        # total, not a position, and a second is the resolution the counter
+        # strip's sparkline reads at.
+        if script and tick % max(1, round(rate_hz)) == 0:
+            assists = fleet_assists(scenario["id"], elapsed, vehicles)
+            hazard_entries, assist_queue = fleet_tallies(scenario["id"], vehicles, assists, entered)
+            await _send(connection, assist_frame(assists))
+            await _send(connection, counters_frame(hazard_entries, assist_queue))
         # The clock readout is re-stated every second so a viewer that
         # connected mid-run converges on the right sim time and speed.
         if tick % max(1, round(rate_hz)) == 0 and next_step >= len(timeline):

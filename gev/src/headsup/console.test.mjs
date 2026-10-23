@@ -28,7 +28,13 @@ function fakeLayer({
   operators = [],
   hazards = [],
 } = {}) {
-  const calls = { cohorts: [], cleared: 0, enabled: [], declinedLabels: [] };
+  const calls = {
+    cohorts: [],
+    cleared: 0,
+    enabled: [],
+    declinedLabels: [],
+    assistLabels: [],
+  };
   let listener = null;
   return {
     calls,
@@ -47,7 +53,8 @@ function fakeLayer({
       getOperatorLegend: () => operators,
       getHazardLegend: () => hazards,
       setDeclinedLabel: (title) => calls.declinedLabels.push(title),
-      getGhostCohort: () => ({ color: '#8a94a6', vehicles: 0, visible: true }),
+      setAssistLabel: (format) => calls.assistLabels.push(format),
+      getGhostCohort: () => ({ color: '#ff5a52', vehicles: 0, visible: true }),
       getCohortVisibility: () => ({ hazards: true, corridors: true }),
       setCohortVisibility: (patch) => calls.cohorts.push(patch),
       clearDrawn: () => calls.cleared++,
@@ -62,7 +69,11 @@ function fakeLayer({
 }
 
 /** A scenario API that answers from memory and records every call. */
-function fakeScenarios({ listing = [SCENARIO], failStart = null } = {}) {
+function fakeScenarios({
+  listing = [SCENARIO],
+  failStart = null,
+  failApprove = null,
+} = {}) {
   const calls = [];
   return {
     calls,
@@ -80,6 +91,11 @@ function fakeScenarios({ listing = [SCENARIO], failStart = null } = {}) {
       stop: async () => {
         calls.push('stop');
         return { state: 'idle', scenario: null };
+      },
+      approve: async (proposalId) => {
+        calls.push(`approve:${proposalId}`);
+        if (failApprove) throw failApprove;
+        return { state: 'approved' };
       },
     },
   };
@@ -217,7 +233,23 @@ test('the readout and the counter strip report the feed, not their own guess', (
         speed: 60,
         scripted: true,
       },
-      pipeline: { tallies: {}, hazards: 1, acks: [{}, {}, {}] },
+      pipeline: {
+        tallies: {},
+        hazardCount: 1,
+        acks: [],
+        candidates: [],
+        hazards: [],
+        proposals: [],
+        verdicts: [],
+        compiles: [],
+        assists: [],
+        counters: {
+          hazardEntries: { live: 0, ghost: 7 },
+          assistQueue: { live: 0, ghost: 3 },
+        },
+        firstSignalAt: 1_000,
+        advisoryAt: 9_500,
+      },
     },
   });
   const page = mount({ layer });
@@ -227,21 +259,55 @@ test('the readout and the counter strip report the feed, not their own guess', (
     .querySelectorAll('.headsup-readout-value')
     .map((node) => node.textContent);
   assert.deepEqual(readout, ['S1 Flash flood', '18:50:00Z', '60×']);
-  const counters = page.hudContent
-    .querySelectorAll('.headsup-counter')
-    .map((cell) => [
-      cell.querySelector('.headsup-counter-label').textContent,
-      cell.querySelector('.headsup-counter-value').textContent,
-    ]);
-  assert.deepEqual(counters, [
-    ['HAZARDS', '1'],
-    ['ADVISORIES', '1'],
-    ['FLEET', '10'],
-    ['REROUTED', '10'],
-    ['GHOST', '6'],
-    ['ACKS', '3'],
-    ['FEED', 'LIVE'],
-  ]);
+  const cell = (key) =>
+    page.hudContent
+      .querySelectorAll('.headsup-counter')
+      .find((node) => node.dataset.counter === key);
+  const pair = (key) => [
+    cell(key).querySelector('.headsup-counter-live').textContent,
+    cell(key).querySelector('.headsup-counter-ghost').textContent,
+  ];
+  // The two cohort tallies are the feed's, not a count of dots.
+  assert.deepEqual(pair('entries'), ['0', '7']);
+  assert.deepEqual(pair('assists'), ['0', '3']);
+  // Rerouted is the one the viewer derives from telemetry it already drew.
+  assert.equal(
+    cell('rerouted').querySelector('.headsup-counter-value').textContent,
+    '10',
+  );
+  // Measured between two observed instants: 9500 - 1000.
+  assert.equal(
+    cell('advisory').querySelector('.headsup-counter-value').textContent,
+    '8.5s',
+  );
+  assert.equal(
+    page.hudContent.querySelector('.headsup-feed .headsup-counter-value')
+      .textContent,
+    'LIVE',
+  );
+});
+
+test('a tally the feed has not reported shows as unknown, not as zero', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true, rerouted: 0 },
+    feed: { scenario: null, pipeline: { acks: [], counters: null } },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const cell = (key) =>
+    page.hudContent
+      .querySelectorAll('.headsup-counter')
+      .find((node) => node.dataset.counter === key);
+  assert.deepEqual(
+    [
+      cell('entries').querySelector('.headsup-counter-live').textContent,
+      cell('entries').querySelector('.headsup-counter-ghost').textContent,
+      cell('advisory').querySelector('.headsup-counter-value').textContent,
+    ],
+    // "Nobody has told us" is not "nothing happened".
+    ['—', '—', '—'],
+  );
 });
 
 test('an idle feed reads as idle, with no replay speed claimed', (t) => {
@@ -314,7 +380,9 @@ test('the legend names the hazard classes drawn, and the marks it draws', (t) =>
     ['WORK_ZONE', '1', false],
     ['Heading', '', false],
     ['Deflection trail', '12', false],
-    // A refusal row with nothing to report is not shown.
+    // Two rows with nothing to report are not shown: a control-panel light
+    // for a condition that is not happening.
+    ['Remote assist', '', true],
     ['Declined', '', true],
   ]);
   const swatches = page.dataToggles
@@ -430,17 +498,27 @@ test('choosing a scenario starts it, flies there, banners it and opens the rail'
   assert.equal(picker.hidden, true);
 });
 
-test('the rail opens empty, naming the six stages it will fill', async (t) => {
+test('the rail opens naming its six stages, none of them lit', async (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
   const rail = page.document.getElementById('headsup-pipeline-rail');
   assert.deepEqual(
     rail
       .querySelectorAll('.headsup-rail-stage')
-      .map((item) => item.dataset.stage),
-    ['sentinel', 'fusion', 'proposer', 'critic', 'compiler', 'ack'],
+      .map((item) => [item.dataset.stage, item.dataset.lit, item.dataset.tone]),
+    [
+      ['feeds', 'false', 'idle'],
+      ['sentinel', 'false', 'idle'],
+      ['fusion', 'false', 'idle'],
+      ['proposer', 'false', 'idle'],
+      ['critic', 'false', 'idle'],
+      ['compiler', 'false', 'idle'],
+    ],
   );
-  assert.ok(rail.querySelector('.headsup-rail-empty').textContent);
+  // No fleet has answered, and the rail says so rather than leaving a gap.
+  assert.equal(rail.querySelector('.headsup-rail-empty').hidden, false);
+  // Nothing is open until somebody clicks a stage.
+  assert.equal(page.document.getElementById('headsup-rail-card').hidden, true);
 });
 
 test('a start that fails leaves the picker open and says why', async (t) => {
@@ -529,4 +607,450 @@ test('teardown takes back every node it added and both panel titles', (t) => {
   // Idempotent: the application defers it, and an abort can also reach it.
   page.console.destroy();
   t.diagnostic('teardown is idempotent');
+});
+
+// ── The agent rail, its cards and the second key ─────────────────────────
+
+/**
+ * A feed snapshot one stage at a time.
+ *
+ * Built as a transcript rather than as flags, because that is what the
+ * socket actually hands over and the rail's whole claim is that it is a
+ * record of frames that arrived.
+ */
+const transcript = (parts = {}) => ({
+  scenario: {
+    state: 'running',
+    id: 's3_emergency',
+    code: 'S3',
+    name: 'Emergency scene',
+    city: 'Austin',
+    simTime: Date.parse('2026-04-23T14:02:00Z'),
+    simTimeText: '2026-04-23T14:02:00Z',
+    elapsedS: 9,
+    speed: 60,
+    scripted: true,
+  },
+  pipeline: {
+    tallies: {},
+    hazardCount: 0,
+    acks: [],
+    candidates: [],
+    hazards: [],
+    proposals: [],
+    verdicts: [],
+    compiles: [],
+    assists: [],
+    counters: null,
+    firstSignalAt: null,
+    advisoryAt: null,
+    ...parts,
+  },
+});
+
+const DISPATCH_TEXT =
+  'AFD INC 2026-0423-00871 BOX ALARM / STRUCTURE E 6TH ST 600 BLK\n' +
+  '2 LANES EB CLOSED // EST 45 MIN';
+
+const s3Candidate = {
+  id: 'cand-1',
+  sentinel: 'dispatch-text',
+  hazardClass: 'EMERGENCY_SCENE',
+  confidence: 0.71,
+  observedAt: null,
+  note: 'structure fire response closing two eastbound lanes',
+  evidence: [
+    {
+      eventId: 'evt-1',
+      source: 'austin_incidents',
+      kind: 'synthetic.austin.active_incident_dispatch',
+      observedAt: null,
+      note: 'box alarm, three units on scene',
+      rawRef: null,
+    },
+  ],
+  rawText: DISPATCH_TEXT,
+  extracted: [
+    { field: 'incident', value: 'AFD INC 2026-0423-00871' },
+    { field: 'lanes_closed', value: '2 eastbound' },
+  ],
+  at: 2_000,
+};
+
+const s3Hazard = {
+  id: 'haz-1',
+  hazardClass: 'EMERGENCY_SCENE',
+  severity: 4,
+  confidence: 0.88,
+  rationale: 'One authoritative dispatch record; units on scene confirm it.',
+  validUntil: null,
+  evidence: s3Candidate.evidence,
+  at: 4_000,
+};
+
+const s3Verdict = {
+  proposalId: 'prop-1',
+  decision: 'ESCALATE',
+  decidedAt: null,
+  checks: [
+    { rule: 'action_allowed_for_class', passed: true },
+    { rule: 'two_key_required', passed: false },
+  ],
+  reasons: ['severity 4 requires a human approval token'],
+  rationale: 'Every policy check passes; severity 4 is over the two-key line.',
+  at: 8_000,
+};
+
+const s3Held = {
+  proposalId: 'prop-1',
+  advisoryId: null,
+  status: 'PENDING_APPROVAL',
+  decidedAt: null,
+  issuer: 'headsup/mock-stream',
+  policyRule: 'emergency_scene.keep_clear.mock',
+  signed: false,
+  signatureVerified: null,
+  reasons: ['two_key_approval_required'],
+  twoKey: true,
+  at: 9_000,
+};
+
+const railStage = (page, key) =>
+  page.document
+    .getElementById('headsup-pipeline-rail')
+    .querySelectorAll('.headsup-rail-stage')
+    .find((row) => row.dataset.stage === key);
+
+const cardText = (page) =>
+  page.document
+    .getElementById('headsup-rail-card')
+    .descendants()
+    .map((node) => node.textContent)
+    .join(' | ');
+
+test('a stage lights when its own event arrives, and not before', (t) => {
+  const feed = transcript();
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  assert.equal(railStage(page, 'sentinel').dataset.lit, 'false');
+  assert.equal(railStage(page, 'fusion').dataset.lit, 'false');
+
+  feed.pipeline.candidates = [s3Candidate];
+  layer.publish();
+  assert.equal(railStage(page, 'sentinel').dataset.lit, 'true');
+  assert.equal(
+    railStage(page, 'sentinel').querySelector('.headsup-rail-stage-value')
+      .textContent,
+    'EMERGENCY_SCENE',
+  );
+  // The feeds row lights off the same evidence, named as a source.
+  assert.equal(railStage(page, 'feeds').dataset.lit, 'true');
+  // And fusion has still not reported, whatever the sentinel said.
+  assert.equal(railStage(page, 'fusion').dataset.lit, 'false');
+
+  feed.pipeline.hazards = [s3Hazard];
+  layer.publish();
+  assert.equal(railStage(page, 'fusion').dataset.lit, 'true');
+  // Fusion's row carries the confidence, which is what fusion produces.
+  assert.equal(
+    railStage(page, 'fusion').querySelector('.headsup-rail-stage-value')
+      .textContent,
+    '88%',
+  );
+});
+
+test('the critic and the compiler read as three states, not two', (t) => {
+  const feed = transcript({ verdicts: [s3Verdict], compiles: [s3Held] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  // Stopped for a person, which is not the same as refused.
+  assert.equal(railStage(page, 'critic').dataset.tone, 'wait');
+  assert.equal(railStage(page, 'compiler').dataset.tone, 'wait');
+  assert.equal(
+    railStage(page, 'compiler').querySelector('.headsup-rail-stage-value')
+      .textContent,
+    'PENDING_APPROVAL',
+  );
+  feed.pipeline.compiles = [{ ...s3Held, status: 'REJECTED', twoKey: false }];
+  layer.publish();
+  assert.equal(railStage(page, 'compiler').dataset.tone, 'alert');
+});
+
+test('every rail row names the id that ties it to the globe', (t) => {
+  const feed = transcript({
+    candidates: [s3Candidate],
+    hazards: [s3Hazard],
+    verdicts: [s3Verdict],
+  });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  assert.equal(railStage(page, 'fusion').title, 'haz-1');
+  assert.equal(railStage(page, 'critic').title, 'prop-1');
+  assert.equal(
+    page.document.querySelector('.headsup-rail-link').textContent,
+    'EMERGENCY_SCENE · haz-1',
+  );
+});
+
+test('clicking a stage opens its card, and clicking again closes it', (t) => {
+  const feed = transcript({ hazards: [s3Hazard] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const card = page.document.getElementById('headsup-rail-card');
+  assert.equal(card.hidden, true);
+  railStage(page, 'fusion').click();
+  assert.equal(card.hidden, false);
+  assert.equal(railStage(page, 'fusion').getAttribute('aria-expanded'), 'true');
+  const text = cardText(page);
+  // The evidence list, the confidence and the rationale fusion wrote.
+  assert.match(text, /haz-1/);
+  assert.match(text, /88%/);
+  assert.match(text, /units on scene confirm it/);
+  assert.match(text, /Austin incidents/);
+  railStage(page, 'fusion').click();
+  assert.equal(card.hidden, true);
+});
+
+test('a stage that has not reported says so rather than inventing a card', (t) => {
+  const layer = fakeLayer({ stats: { connected: true }, feed: transcript() });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'critic').click();
+  assert.match(cardText(page), /has not reported yet/);
+});
+
+test('the S3 Sentinels card shows the dispatch text beside the fields read from it', (t) => {
+  const feed = transcript({ candidates: [s3Candidate] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'sentinel').click();
+  const card = page.document.getElementById('headsup-rail-card');
+  const split = card.querySelector('.headsup-card-split');
+  assert.ok(split, 'the two halves are laid out side by side');
+  // The raw message, written as TEXT and with its line breaks intact.
+  const raw = card.querySelector('.headsup-card-raw');
+  assert.equal(raw.textContent, DISPATCH_TEXT);
+  // And the fields the agent says it pulled out of it, beside it.
+  const fields = card.querySelector('.headsup-card-fields');
+  assert.deepEqual(
+    fields.children.map((node) => node.textContent),
+    [
+      'incident',
+      'AFD INC 2026-0423-00871',
+      'lanes_closed',
+      '2 eastbound',
+    ],
+  );
+});
+
+test('the Compiler card never upgrades an unreported signature into a yes', (t) => {
+  const feed = transcript({ compiles: [s3Held] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'compiler').click();
+  assert.match(cardText(page), /absent/);
+  feed.pipeline.compiles = [
+    { ...s3Held, status: 'SIGNED', advisoryId: 'adv-1', signed: true },
+  ];
+  layer.publish();
+  // Present but unverified: only the issuer's key could say more.
+  assert.match(cardText(page), /present, unverified/);
+  feed.pipeline.compiles = [
+    {
+      ...s3Held,
+      status: 'SIGNED',
+      advisoryId: 'adv-1',
+      signed: true,
+      signatureVerified: false,
+    },
+  ];
+  layer.publish();
+  assert.match(cardText(page), /NOT VERIFIED/);
+});
+
+test('a held two-key advisory offers an Approve button that posts the proposal', async (t) => {
+  const feed = transcript({ verdicts: [s3Verdict], compiles: [s3Held] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const scenarios = fakeScenarios();
+  const page = mount({ layer, scenarios });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'compiler').click();
+  const button = page.document
+    .getElementById('headsup-rail-card')
+    .querySelector('.headsup-card-approve-btn');
+  assert.ok(button, 'the Compiler card offers the second key');
+  assert.match(cardText(page), /needs a second key/);
+  // The critic's reason for escalating is on the Critic card, where it was
+  // produced — the button only says what it is for.
+  button.click();
+  for (let turn = 0; turn < 6; turn++) await Promise.resolve();
+  assert.deepEqual(page.scenarios.calls, ['approve:prop-1']);
+  // The console does not redraw itself as published: what re-enables the
+  // pipeline is the compiler's next frame, not this call returning.
+  assert.match(cardText(page), /Waiting for the compiler/);
+  feed.pipeline.compiles = [
+    ...feed.pipeline.compiles,
+    {
+      ...s3Held,
+      status: 'SIGNED',
+      advisoryId: 'adv-1',
+      signed: true,
+      signatureVerified: false,
+      twoKey: false,
+      at: 12_000,
+    },
+  ];
+  layer.publish();
+  // Signed: the decision is no longer anybody's to make, so the button goes.
+  assert.equal(
+    page.document
+      .getElementById('headsup-rail-card')
+      .querySelector('.headsup-card-approve-btn'),
+    null,
+  );
+});
+
+test('an approval the API refuses says so and leaves the button usable', async (t) => {
+  const feed = transcript({ compiles: [s3Held] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const scenarios = fakeScenarios({ failApprove: new Error('boom') });
+  const page = mount({ layer, scenarios });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'compiler').click();
+  const button = page.document
+    .getElementById('headsup-rail-card')
+    .querySelector('.headsup-card-approve-btn');
+  button.click();
+  for (let turn = 0; turn < 6; turn++) await Promise.resolve();
+  assert.match(cardText(page), /failed/);
+  assert.equal(button.disabled, false);
+});
+
+test('one rail row per operator, carrying what that fleet answered', (t) => {
+  const feed = transcript({
+    compiles: [{ ...s3Held, status: 'SIGNED', advisoryId: 'adv-1' }],
+    acks: [
+      {
+        operator: 'op_a',
+        status: 'ACCEPTED',
+        vehicles: 6,
+        actionTaken: 'KEEP_CLEAR applied; eastbound routes moved to E 7th',
+        reason: null,
+        advisoryId: 'adv-1',
+        seq: 1,
+        at: 10_000,
+      },
+      {
+        operator: 'op_b',
+        status: 'DELAYED',
+        vehicles: 4,
+        actionTaken: 'advisory received; applying at next route refresh',
+        reason: 'fleet-side route solver runs on a 90 second cycle',
+        advisoryId: 'adv-1',
+        seq: 2,
+        at: 10_500,
+      },
+    ],
+  });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const rows = page.document
+    .getElementById('headsup-pipeline-rail')
+    .querySelectorAll('.headsup-rail-stage')
+    .filter((row) => row.dataset.stage.startsWith('ack:'));
+  assert.deepEqual(
+    rows.map((row) => [
+      row.querySelector('.headsup-rail-stage-name').textContent,
+      row.querySelector('.headsup-rail-stage-value').textContent,
+      row.dataset.tone,
+    ]),
+    [
+      ['op_a', 'ACCEPTED', 'ok'],
+      // Not yet is not no, and it has a colour of its own.
+      ['op_b', 'DELAYED', 'wait'],
+    ],
+  );
+  // And a fleet row opens its own card, with the reason it gave.
+  rows[1].click();
+  assert.match(cardText(page), /90 second cycle/);
+});
+
+test('the assist badge is handed to the layer already worded', (t) => {
+  const layer = fakeLayer();
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  assert.equal(layer.calls.assistLabels.length, 1);
+  assert.equal(layer.calls.assistLabels[0](3), 'ASSIST ×3');
+});
+
+test('ending a replay takes the rail`s open card with it', async (t) => {
+  const feed = transcript({ hazards: [s3Hazard] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'fusion').click();
+  assert.equal(page.document.getElementById('headsup-rail-card').hidden, false);
+  page.sceneInner.querySelector('.headsup-scene-exit').click();
+  for (let turn = 0; turn < 6; turn++) await Promise.resolve();
+  // The rail is hidden on the landing, and nothing of the last run is left
+  // open inside it.
+  assert.equal(
+    page.document.getElementById('headsup-pipeline-rail').hidden,
+    true,
+  );
+  assert.equal(page.document.getElementById('headsup-rail-card').hidden, true);
+});
+
+test('Escape closes an open card before it ends the replay', async (t) => {
+  const feed = transcript({ hazards: [s3Hazard] });
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const scenarios = fakeScenarios();
+  const page = mount({ layer, scenarios });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  railStage(page, 'fusion').click();
+  page.document.dispatch('keydown', { key: 'Escape' });
+  assert.equal(page.document.getElementById('headsup-rail-card').hidden, true);
+  assert.deepEqual(page.scenarios.calls, []);
+  // The next one reaches the replay.
+  page.document.dispatch('keydown', { key: 'Escape' });
+  for (let turn = 0; turn < 6; turn++) await Promise.resolve();
+  assert.deepEqual(page.scenarios.calls, ['stop']);
+});
+
+test('a snapshot whose pipeline is not the shape this build knows is a quiet rail', (t) => {
+  // The console renders from data the layer hands over. A publisher sending
+  // a field that is not a list must leave an empty rail, not a dead one: the
+  // render loop also drives the clock, the counters and the legend.
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: { scenario: null, pipeline: { hazards: 3, acks: 'none' } },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  assert.equal(railStage(page, 'fusion').dataset.lit, 'false');
+  assert.equal(
+    page.hudContent.querySelector('.headsup-feed .headsup-counter-value')
+      .textContent,
+    'LIVE',
+  );
 });

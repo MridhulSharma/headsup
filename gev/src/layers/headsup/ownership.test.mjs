@@ -3,6 +3,7 @@ import test from 'node:test';
 import * as Cesium from 'cesium';
 import { createHeadsupLayer } from './index.js';
 import { createHeadsupViewerSource } from './source.js';
+import { GHOST_VEHICLE_COLOR } from './model.js';
 
 const ring = [
   [-97.75, 30.26],
@@ -173,15 +174,15 @@ test('two displays own separate collections and destruction', () => {
   assert.equal(a.layer.getStats().vehicles, 1);
   assert.equal(a.layer.getStats().advisories, 1);
   assert.equal(b.layer.getStats().count, 0);
-  // Four collections: the vehicle dots, the heading chevrons, the deflection
-  // trails and the dispatch beams.
-  assert.equal(a.primitives.length, 4);
+  // Five collections: the vehicle dots, the heading chevrons, the deflection
+  // trails, the dispatch beams and the remote-assist markers.
+  assert.equal(a.primitives.length, 5);
   assert.equal(a.dataSources.length, 1);
 
   a.layer.destroy(a.viewer);
   assert.equal(a.primitives.length, 0);
   assert.equal(a.dataSources.length, 0);
-  assert.equal(b.primitives.length, 4);
+  assert.equal(b.primitives.length, 5);
   assert.equal(b.dataSources.length, 1);
   b.layer.destroy(b.viewer);
 });
@@ -508,7 +509,7 @@ test('the ghost fleet is one switch, apart from the operator fleets', () => {
     [{ op: 'op_a', vehicles: 1, rerouted: 1 }],
   );
   assert.deepEqual(h.layer.getGhostCohort(), {
-    color: '#8a94a6',
+    color: GHOST_VEHICLE_COLOR,
     vehicles: 1,
     visible: true,
   });
@@ -556,5 +557,181 @@ test('clearing drops the picture and asks the feed to forget it too', () => {
     },
     { vehicles: 0, advisories: 0, resets: 1, stillSubscribed: true },
   );
+  h.layer.destroy(h.viewer);
+});
+
+// ── Remote-assist markers, and the clusters triage makes of them ─────────
+
+const assistRow = (overrides = {}) => ({
+  id: 'asr-1',
+  op: 'op_ghost',
+  lon: -98.396,
+  lat: 29.5228,
+  ghost: true,
+  state: 'QUEUED',
+  cluster: null,
+  openedAt: null,
+  ...overrides,
+});
+
+/** The assist marker collection, which `init` adds fifth. */
+const assistCollection = (h) => h.primitives[4];
+
+test('one assist marker per request, and one per cluster when triage groups them', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: {
+      acks: [],
+      assists: [
+        assistRow({ id: 'asr-1', lon: -98.396 }),
+        assistRow({ id: 'asr-2', lon: -98.3955 }),
+        assistRow({ id: 'asr-3', lon: -98.395 }),
+      ],
+    },
+  });
+  // Nothing clustered yet: three requests, three rings.
+  assert.equal(assistCollection(h).length, 3);
+  assert.deepEqual(
+    [h.layer.getStats().assists, h.layer.getStats().assistClusters],
+    [3, 0],
+  );
+
+  // Triage groups them, and the three rings collapse into one.
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: {
+      acks: [],
+      assists: [
+        assistRow({ id: 'asr-1', lon: -98.396, cluster: 'trg-1' }),
+        assistRow({ id: 'asr-2', lon: -98.3955, cluster: 'trg-1' }),
+        assistRow({ id: 'asr-3', lon: -98.395, cluster: 'trg-1' }),
+      ],
+    },
+  });
+  assert.equal(assistCollection(h).length, 1);
+  assert.deepEqual(
+    [
+      h.layer.getStats().assists,
+      h.layer.getStats().assistMarkers,
+      h.layer.getStats().assistClusters,
+    ],
+    // Three requests still, drawn as one marker, which is one cluster.
+    [3, 1, 1],
+  );
+
+  // A request a human cleared leaves the screen.
+  h.handle()({ vehicles: [], advisories: [], pipeline: { acks: [], assists: [] } });
+  assert.equal(assistCollection(h).length, 0);
+  assert.equal(h.layer.getStats().assists, 0);
+  h.layer.destroy(h.viewer);
+});
+
+test('a collapsed cluster carries a count badge, a single request does not', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.layer.setAssistLabel((count) => `WAITING ${count}`);
+  const badges = () =>
+    (h.overlay.entries.at(-1)?.[1] ?? [])
+      .filter((entry) => entry.id.startsWith('assist:'))
+      .map((entry) => entry.title);
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: { acks: [], assists: [assistRow()] },
+  });
+  // One request needs no number: "x1" would be noise with a count in it.
+  assert.deepEqual(badges(), []);
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: {
+      acks: [],
+      assists: [
+        assistRow({ id: 'asr-1', cluster: 'trg-1' }),
+        assistRow({ id: 'asr-2', lon: -98.3955, cluster: 'trg-1' }),
+      ],
+    },
+  });
+  assert.deepEqual(badges(), ['WAITING 2']);
+  h.layer.destroy(h.viewer);
+});
+
+test('hiding the ghost fleet hides the queue it is responsible for', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  h.handle()({
+    vehicles: [],
+    advisories: [],
+    pipeline: {
+      acks: [],
+      assists: [
+        assistRow({ id: 'asr-ghost', ghost: true }),
+        assistRow({ id: 'asr-live', op: 'op_a', ghost: false, lon: -98.3955 }),
+      ],
+    },
+  });
+  const collection = assistCollection(h);
+  const shown = () =>
+    Array.from({ length: collection.length }, (_, index) =>
+      collection.get(index).show,
+    );
+  // Markers are held in key order, so the ghost request is the first.
+  assert.deepEqual(shown(), [true, true]);
+  h.layer.setCohortVisibility({ ghost: false });
+  // The ghost request goes; the advised fleet's own stays.
+  assert.deepEqual(shown(), [false, true]);
+  h.layer.setCohortVisibility({ ghost: true, operators: { op_a: false } });
+  assert.deepEqual(shown(), [true, false]);
+  h.layer.destroy(h.viewer);
+});
+
+test('a KEEP_CLEAR corridor is drawn with a halo under it, other lines are not', () => {
+  const h = harness();
+  h.layer.enable(h.viewer);
+  const corridor = (action) =>
+    advisoryRow({
+      id: `adv-${action}`,
+      geometryType: 'LineString',
+      action,
+      polygons: [],
+      lines: [
+        [
+          [-97.7399, 30.26712],
+          [-97.7372, 30.26714],
+        ],
+      ],
+    });
+  h.handle()({
+    vehicles: [],
+    advisories: [corridor('KEEP_CLEAR'), corridor('SPEED_CAP')],
+  });
+  const ids = h.dataSources[0].entities.values.map((entity) => entity.id);
+  // The glow is a second, wider clamped polyline rather than a glow
+  // material: both stay on the colour-attribute path the pulse needs.
+  assert.deepEqual(ids, [
+    'headsup-corridor:adv-KEEP_CLEAR:0:halo',
+    'headsup-corridor:adv-KEEP_CLEAR:0',
+    'headsup-corridor:adv-SPEED_CAP:0',
+  ]);
+  const value = (property) => property?.getValue(Cesium.JulianDate.now());
+  const halo = h.dataSources[0].entities.values[0];
+  const core = h.dataSources[0].entities.values[1];
+  assert.ok(value(halo.polyline.width) > value(core.polyline.width));
+  assert.equal(value(halo.polyline.clampToGround), true);
+  assert.equal(
+    value(halo.polyline.classificationType),
+    Cesium.ClassificationType.BOTH,
+  );
+  // The halo is fainter than the line it sits under, at rest.
+  assert.ok(
+    value(halo.polyline.material.color).alpha <
+      value(core.polyline.material.color).alpha,
+  );
+  // Both legs of one corridor are still one corridor.
+  assert.equal(h.layer.getStats().corridors, 2);
   h.layer.destroy(h.viewer);
 });

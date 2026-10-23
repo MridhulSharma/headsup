@@ -22,11 +22,15 @@ export const HEADSUP_RENDER_HOLD_ID = 'headsup';
  * keeps one operator's color STABLE across runs and processes, which is what
  * an observer actually relies on, at the price of a possible collision when
  * more than eight operators are on screen.
+ *
+ * No red in this palette, on purpose. Red is spoken for twice on this
+ * screen — the unadvised ghost cohort and a refusal — and a fleet that
+ * happened to hash to it would read as one of those at a glance.
  */
 export const OPERATOR_COLORS = Object.freeze([
   '#38f0c0',
   '#ffd166',
-  '#ef476f',
+  '#4cc9f0',
   '#8ecae6',
   '#b5e48c',
   '#c792ea',
@@ -51,21 +55,52 @@ export const VEHICLE_PIXEL_SIZE = 11;
 export const VEHICLE_HEIGHT_OFFSET_M = 2.0;
 
 /**
- * The ghost fleet's look: one grey, smaller and translucent, for every ghost
- * operator.
+ * The ghost fleet's look: one faint red, smaller and translucent, for every
+ * ghost operator.
  *
  * Deliberately NOT the operator palette. A ghost vehicle is the control group
  * — the same fleet driving as if no advisory existed — and the claim the demo
  * makes is about the two COHORTS, not about which company runs which ghost.
  * Giving ghosts their own colour means a glance separates advised from
  * unadvised, which is the only comparison on screen that matters.
+ *
+ * Red rather than the grey this started as, and faint rather than solid. Red
+ * because the ghost fleet is the cohort driving into a hazard nobody told it
+ * about, and grey read as "inactive" — the opposite of what is happening.
+ * Faint because the ghosts are the BACKGROUND of the comparison: they are
+ * numerous, they are what the advised fleet is being judged against, and a
+ * screen of saturated red dots would bury the fleets the advisory reached.
  */
-export const GHOST_VEHICLE_COLOR = '#8a94a6';
-export const GHOST_VEHICLE_ALPHA = 0.55;
+export const GHOST_VEHICLE_COLOR = '#ff5a52';
+export const GHOST_VEHICLE_ALPHA = 0.42;
 export const GHOST_VEHICLE_PIXEL_SIZE = 8;
 
-/** Corridor advisories are lines, drawn heavier than an area's outline. */
+/**
+ * Corridor advisories are lines, drawn heavier than an area's outline, with
+ * a wider and fainter halo under them.
+ *
+ * The halo is what makes a corridor GLOW. Two clamped polylines rather than
+ * a `PolylineGlow` material, because both of these carry a colour that the
+ * publication pulse animates: Cesium updates the per-instance colour
+ * attribute of draped geometry for a `ColorMaterialProperty` without
+ * re-tessellating it (`PolygonGeometryUpdater._isDynamic` exempts it), and
+ * that exemption is what the whole pulse design rests on. A glow material
+ * would move the corridor onto a different batch and put that property at
+ * risk for an effect two lines already give.
+ */
 export const CORRIDOR_WIDTH_PX = 5;
+export const CORRIDOR_HALO_WIDTH_PX = 16;
+/** How much of the corridor's colour the halo carries at rest. */
+export const CORRIDOR_HALO_ALPHA = 0.26;
+/**
+ * The action whose advisory IS a corridor rather than merely line-shaped.
+ *
+ * `KEEP_CLEAR` is addressed to a route: keep this lane open. Every other
+ * action can arrive with line geometry too, so the glow is keyed on the
+ * action and not on the geometry — a `SPEED_CAP` along a road is a limit on
+ * a route, not a lane somebody is asking to be kept clear.
+ */
+export const CORRIDOR_ACTION = 'KEEP_CLEAR';
 
 /** Interpolation window bounds; the feed's own cadence picks the value between. */
 export const MIN_TRACK_DURATION_MS = 100;
@@ -591,8 +626,131 @@ export function hazardLegendRows(advisories) {
   );
 }
 
+/**
+ * The remote-assist mark: an exclamation inside a ring.
+ *
+ * One shared texture-atlas entry for every marker, tinted per cohort by the
+ * billboard's own `color`, the same arrangement the heading chevron uses.
+ * White in the image, because the tint is what carries the meaning.
+ */
+const ASSIST_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" ' +
+  'viewBox="0 0 28 28"><circle cx="14" cy="14" r="11" fill="none" ' +
+  'stroke="#ffffff" stroke-width="2.6"/><path d="M14 8v8" stroke="#ffffff" ' +
+  'stroke-width="2.6" stroke-linecap="round"/>' +
+  '<circle cx="14" cy="20.2" r="1.5" fill="#ffffff"/></svg>';
+export const ASSIST_MARKER_IMAGE = `data:image/svg+xml;utf8,${encodeURIComponent(
+  ASSIST_SVG,
+)}`;
+/** Marker size, and the size one collapsed cluster is drawn at instead. */
+export const ASSIST_MARKER_PX = 20;
+export const ASSIST_CLUSTER_PX = 26;
+/**
+ * A request waiting on a human is amber; one from the unadvised cohort keeps
+ * the ghost fleet's red.
+ *
+ * Which cohort is queueing for a human IS the comparison S2 and S3 make, so
+ * the marker says it without anybody having to click: a screen of red rings
+ * over the ghost lane beside an empty advised lane is the whole claim.
+ */
+export const ASSIST_LIVE_COLOR = '#ffd166';
+export const ASSIST_GHOST_COLOR = GHOST_VEHICLE_COLOR;
+export const ASSIST_MARKER_ALPHA = 0.95;
+/** How high above the ground an assist marker floats, in metres. */
+export const ASSIST_HEIGHT_OFFSET_M = 18;
+
+/**
+ * Collapse assist requests into the markers that get drawn.
+ *
+ * Surge triage is what decides a group of requests is one event, and it says
+ * so by giving them a shared `cluster` id. This function only ever follows
+ * that: requests WITHOUT a cluster stay one marker each, however close
+ * together they are. A viewer that clustered by distance on its own would be
+ * asserting a triage decision nobody made, and the number on the badge would
+ * stop meaning "this many requests were grouped".
+ *
+ * A cluster sits at the mean of its members, carries their count, and is a
+ * ghost cluster only when every member is — a group containing one advised
+ * vehicle is not a statement about the control cohort.
+ * @param {Array<object>} rows Normalized assist rows.
+ * @returns {Array<{key: string, lon: number, lat: number, count: number,
+ *   ghost: boolean, cluster: string|null, ops: string[]}>}
+ */
+export function groupAssists(rows) {
+  const groups = new Map();
+  for (const row of rows ?? []) {
+    const key = row.cluster ? `cluster:${row.cluster}` : `assist:${row.id}`;
+    const group = groups.get(key);
+    if (group) {
+      group.lon += row.lon;
+      group.lat += row.lat;
+      group.count++;
+      group.ghost = group.ghost && row.ghost === true;
+      if (!group.ops.includes(row.op)) group.ops.push(row.op);
+    } else
+      groups.set(key, {
+        key,
+        lon: row.lon,
+        lat: row.lat,
+        count: 1,
+        ghost: row.ghost === true,
+        cluster: row.cluster ?? null,
+        ops: [row.op],
+      });
+  }
+  const markers = [];
+  for (const group of groups.values())
+    markers.push({
+      ...group,
+      lon: group.lon / group.count,
+      lat: group.lat / group.count,
+      ops: group.ops.sort(),
+    });
+  // Stable order, so a marker keeps its billboard across ticks.
+  return markers.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+/**
+ * The count badge over a collapsed cluster of assist requests.
+ *
+ * Only ever built for a cluster — a single request needs no number, and
+ * writing "x1" over one marker would be noise with the word count in it.
+ * The text arrives already translated, because this module is a portable
+ * package and the console owns `t()`.
+ * @param {object} input
+ * @param {string} input.key Marker key from `groupAssists`.
+ * @param {object} input.position Label anchor (`Cesium.Cartesian3`).
+ * @param {string} input.title Badge text, already translated.
+ * @param {boolean} input.ghost Whether every member is a ghost.
+ * @returns {object} World-overlay entry.
+ */
+export function createAssistOverlayEntry({ key, position, title, ghost }) {
+  return {
+    id: `assist:${key}`,
+    position,
+    variant: 'label',
+    title,
+    accent: ghost ? ASSIST_GHOST_COLOR : ASSIST_LIVE_COLOR,
+    // Above an advisory label and below a refusal tag: a queue of vehicles
+    // waiting on a human outranks a hazard's name, and a fleet that refused
+    // outranks both.
+    priority: 7_000,
+    collisionGroup: 'ambient-label',
+    paintLane: 'ambient-label',
+    interactive: false,
+    edgeFade: 'keyhole',
+    horizonCull: true,
+    terrainOcclusion: false,
+    gapPx: 12,
+    verticalOnly: true,
+    placement: 'above',
+  };
+}
+
 export {
   normalizeAdvisoryFeature,
+  normalizeAssistFrame,
+  normalizeCountersFrame,
   normalizeTelemetryFrame,
 } from './records.js';
 export {

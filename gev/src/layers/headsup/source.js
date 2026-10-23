@@ -1,9 +1,15 @@
 import {
   normalizeAckFrame,
   normalizeAdvisoryFeature,
+  normalizeAssistFrame,
+  normalizeCandidateFrame,
+  normalizeCompileFrame,
+  normalizeCountersFrame,
   normalizeHazardFrame,
+  normalizeProposalFrame,
   normalizeScenarioStateFrame,
   normalizeTelemetryFrame,
+  normalizeVerdictFrame,
 } from './records.js';
 
 /**
@@ -21,12 +27,18 @@ import {
  *
  * The socket carries more than the two drawable frame kinds. A scenario run
  * announces itself with `scenario_state`, and the agent pipeline narrates
- * itself with `candidate`, `hazard`, `proposal`, `verdict` and `ack` frames.
- * Those are held here as a RUN TALLY rather than a transcript: this step only
- * needs the counts the Heads Up counter strip reports, and the rail that
- * shows the reasoning is D3.6's. Tallies are bounded and reset whenever a new
- * run starts, so a long session cannot grow them without limit and a second
- * replay never counts the first one's hazards.
+ * itself with `candidate`, `hazard`, `proposal`, `verdict`, `compile` and
+ * `ack` frames, while `assist` and `counters` carry the remote-assist
+ * requests and the fleet tallies.
+ *
+ * Those are held here as a RUN TRANSCRIPT: the agent rail shows what each
+ * stage actually produced, so the reasoning has to survive the frame that
+ * carried it. The transcript is bounded per kind and reset whenever a new run
+ * starts, so a long session cannot grow it without limit and a second replay
+ * never shows the first one's reasoning. Arrival times are recorded with each
+ * record, because "how long from the first public signal to a signed
+ * advisory" is a question about when frames ARRIVED and not about the
+ * timestamps inside them.
  *
  * Two ownership rules keep the single-socket invariant under late events:
  * every handler re-checks that the module still owns THAT socket object
@@ -76,8 +88,15 @@ const MAX_ADVISORIES = 512;
 /** Distinct hazards and acknowledging operators remembered per run. */
 const MAX_RUN_HAZARDS = 512;
 const MAX_RUN_ACKS = 64;
-/** Pipeline frame kinds that are counted but not otherwise read here. */
-const COUNTED_FRAMES = Object.freeze(['candidate', 'proposal', 'verdict']);
+/**
+ * Reasoning records kept per kind, per run.
+ *
+ * The rail shows the latest of each stage and offers the earlier ones in its
+ * card, so a handful is what a person can read. Over the bound the OLDEST
+ * goes: a replay that revised a proposal nine times is still explainable by
+ * its last few rounds, and the first one stopped mattering.
+ */
+const MAX_RUN_RECORDS = 16;
 
 /**
  * Subscribe to the Heads Up viewer socket.
@@ -137,16 +156,66 @@ export function createHeadsupViewerSource({
     hazard: 0,
     proposal: 0,
     verdict: 0,
+    compile: 0,
     advisory: 0,
     ack: 0,
   });
   let runTallies = emptyTallies();
+  /**
+   * What each stage of the agent pipeline produced during this run.
+   *
+   * Arrays in arrival order, oldest first, so "the latest" is the last entry
+   * and the rail can also show the rounds that came before it.
+   */
+  const emptyRecords = () => ({
+    candidates: [],
+    hazards: [],
+    proposals: [],
+    verdicts: [],
+    compiles: [],
+  });
+  let runRecords = emptyRecords();
+  /** @type {Array<object>} Every assist request open right now. */
+  let runAssists = [];
+  /** @type {object|null} The latest fleet tallies the simulator reported. */
+  let runCounters = null;
+  /**
+   * When the run's first public signal arrived, and when its first advisory
+   * did. The two together are the only honest basis for "time to advisory":
+   * both are instants THIS page observed, so the number cannot be inflated
+   * or flattered by a publisher's own clock.
+   */
+  let firstSignalAt = null;
+  let advisoryAt = null;
 
-  /** Start a fresh run tally. A new replay never inherits the last one's. */
+  /** Append one record, dropping the oldest once the bound is reached. */
+  const remember = (list, record) => {
+    list.push(record);
+    if (list.length > MAX_RUN_RECORDS) list.splice(0, list.length - MAX_RUN_RECORDS);
+  };
+
+  /**
+   * Note the run's first public signal.
+   *
+   * A candidate is the usual first frame, but a run whose sentinel output
+   * was missed — a page that connected late, a feed that fuses without
+   * publishing a candidate — still has a first signal, so the first frame of
+   * either kind sets it.
+   */
+  const noteSignal = (at) => {
+    if (firstSignalAt == null) firstSignalAt = at;
+  };
+
+  /** Start a fresh run. A new replay never inherits the last one's. */
   const resetRun = () => {
     runHazards.clear();
     runAcks.clear();
     runTallies = emptyTallies();
+    runRecords = emptyRecords();
+    runAssists = [];
+    runCounters = null;
+    firstSignalAt = null;
+    advisoryAt = null;
   };
   /** @type {Set<(snapshot: object) => void>} */
   const listeners = new Set();
@@ -163,8 +232,18 @@ export function createHeadsupViewerSource({
     scenario,
     pipeline: {
       tallies: { ...runTallies },
-      hazards: runHazards.size,
+      /** Distinct hazards fused this run, however many frames said so. */
+      hazardCount: runHazards.size,
       acks: [...runAcks.values()],
+      candidates: runRecords.candidates,
+      hazards: runRecords.hazards,
+      proposals: runRecords.proposals,
+      verdicts: runRecords.verdicts,
+      compiles: runRecords.compiles,
+      assists: runAssists,
+      counters: runCounters,
+      firstSignalAt,
+      advisoryAt,
     },
     lastFrameAt,
     lastError,
@@ -223,6 +302,8 @@ export function createHeadsupViewerSource({
         advisories.delete(oldest.value);
       }
       runTallies.advisory++;
+      noteSignal(now());
+      if (advisoryAt == null) advisoryAt = now();
     } else if (payload?.type === 'scenario_state') {
       const state = normalizeScenarioStateFrame(payload);
       if (!state) {
@@ -242,6 +323,59 @@ export function createHeadsupViewerSource({
       }
       if (runHazards.size < MAX_RUN_HAZARDS) runHazards.add(hazard.id);
       runTallies.hazard++;
+      noteSignal(now());
+      remember(runRecords.hazards, { ...hazard, at: now() });
+    } else if (payload?.type === 'candidate') {
+      const candidate = normalizeCandidateFrame(payload);
+      if (!candidate) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      runTallies.candidate++;
+      noteSignal(now());
+      remember(runRecords.candidates, { ...candidate, at: now() });
+    } else if (payload?.type === 'proposal') {
+      const proposal = normalizeProposalFrame(payload);
+      if (!proposal) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      runTallies.proposal++;
+      remember(runRecords.proposals, { ...proposal, at: now() });
+    } else if (payload?.type === 'verdict') {
+      const verdict = normalizeVerdictFrame(payload);
+      if (!verdict) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      runTallies.verdict++;
+      remember(runRecords.verdicts, { ...verdict, at: now() });
+    } else if (payload?.type === 'compile') {
+      const result = normalizeCompileFrame(payload);
+      if (!result) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      runTallies.compile++;
+      // Keyed by nothing: a compiler that answers twice about one proposal
+      // has changed its answer (held for approval, then signed), and both
+      // rounds belong in the card. The rail reads the LATEST per proposal.
+      remember(runRecords.compiles, { ...result, at: now() });
+    } else if (payload?.type === 'assist') {
+      const assists = normalizeAssistFrame(payload);
+      if (!assists) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      // Whole-state, like telemetry: an assist a human cleared leaves.
+      runAssists = assists;
+    } else if (payload?.type === 'counters') {
+      const counters = normalizeCountersFrame(payload);
+      if (!counters) {
+        reject(msg('Malformed Heads Up frame'));
+        return false;
+      }
+      runCounters = counters;
     } else if (payload?.type === 'ack') {
       const ack = normalizeAckFrame(payload);
       if (!ack) {
@@ -257,15 +391,10 @@ export function createHeadsupViewerSource({
       // answer, and it can only tell two answers apart if the entry moves.
       if (runAcks.has(ack.operator) || runAcks.size < MAX_RUN_ACKS)
         runAcks.set(ack.operator, {
-          operator: ack.operator,
-          vehicles: ack.vehicles,
-          status: ack.status,
+          ...ack,
           seq: runTallies.ack,
+          at: now(),
         });
-    } else if (COUNTED_FRAMES.includes(payload?.type)) {
-      // Counted, not read: the reasoning these carry belongs to the agent
-      // pipeline rail, which lands in D3.6.
-      runTallies[payload.type]++;
     } else {
       // An unrecognized frame kind is a newer publisher talking, not a
       // defect: ignore it without disturbing what is drawn or the ladder.

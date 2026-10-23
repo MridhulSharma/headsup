@@ -1079,5 +1079,7 @@
   "src/headsup/console.test.mjs",
   "src/layers/headsup/events.test.mjs",
   "src/testSupport/headsupConsoleDocument.mjs",
-  "scripts/qa-headsup-load.mjs"
+  "scripts/qa-headsup-load.mjs",
+  "src/headsup/pipeline.test.mjs",
+  "src/headsup/layout.test.mjs"
 ]

@@ -1,10 +1,20 @@
 import * as Cesium from 'cesium';
 import {
   ACK_FLASH_MS,
+  ASSIST_CLUSTER_PX,
+  ASSIST_GHOST_COLOR,
+  ASSIST_HEIGHT_OFFSET_M,
+  ASSIST_LIVE_COLOR,
+  ASSIST_MARKER_ALPHA,
+  ASSIST_MARKER_IMAGE,
+  ASSIST_MARKER_PX,
   BEAM_GLOW_POWER,
   BEAM_WIDTH_PX,
   CHEVRON_FAR_M,
   CHEVRON_NEAR_M,
+  CORRIDOR_ACTION,
+  CORRIDOR_HALO_ALPHA,
+  CORRIDOR_HALO_WIDTH_PX,
   CORRIDOR_WIDTH_PX,
   DISPATCH_BEAM_MS,
   FLASH_PEAK_SCALE,
@@ -23,8 +33,10 @@ import {
   VEHICLE_HEIGHT_OFFSET_M,
   beamProgress,
   createAdvisoryOverlayEntry,
+  createAssistOverlayEntry,
   createDeclinedOverlayEntry,
   fleetCentroid,
+  groupAssists,
   hazardCssColor,
   hazardFillAlpha,
   hazardLegendRows,
@@ -74,7 +86,15 @@ export {
  *   because draped geometry re-tessellates whenever its positions do.
  * - **Corridors** are the same advisory contract addressed to a route rather
  *   than an area: LineString and MultiLineString geometry, drawn as
- *   ground-clamped polylines in the hazard class's colour.
+ *   ground-clamped polylines in the hazard class's colour. A `KEEP_CLEAR`
+ *   corridor also gets a wider, fainter halo under it, so a lane somebody
+ *   has asked to be kept clear GLOWS rather than reading as one more line
+ *   over a street grid full of them.
+ * - **Remote-assist markers** are a `BillboardCollection`: one ring per
+ *   vehicle waiting on a human, collapsing to one ring with a count badge
+ *   wherever surge triage has grouped the requests. The collapse follows
+ *   triage's own `cluster` id and never a distance this layer picked, so the
+ *   badge's number always means "this many requests were grouped".
  * - **Dispatch beams and deflection trails** are two `PolylineCollection`s.
  *   A beam is the one-and-a-half seconds in which an advisory reaches one
  *   operator's fleet; a trail is the last thirty seconds of a vehicle the
@@ -194,7 +214,26 @@ export function createHeadsupLayer({
   let _chevrons = null;
   let _trails = null;
   let _beams = null;
+  let _assists = null;
   let _dataSource = null;
+  /**
+   * One billboard per drawn assist marker, keyed by the marker key
+   * `groupAssists` gives it — so a request that joins a cluster takes its own
+   * marker off the screen and the cluster's marker grows, rather than both
+   * being drawn over each other.
+   * @type {Map<string, object>}
+   */
+  const _assistMarkers = new Map();
+  /** @type {Array<object>} The grouped markers, as the overlay badges read them. */
+  let _assistGroups = [];
+  /**
+   * How a cluster's count badge is worded.
+   *
+   * A function rather than a string, because the badge carries a NUMBER and
+   * only the console owns `t()`. The English default is what a test, or a
+   * surface that never sets one, gets.
+   */
+  let _assistLabel = (count) => `ASSIST ×${count}`;
   /** @type {Map<string, object>} */
   const _markers = new Map();
   /** @type {object[]} */
@@ -479,6 +518,78 @@ export function createHeadsupLayer({
   const clearBeams = () => {
     for (const beam of _beamRecords.values()) _beams?.remove(beam.polyline);
     _beamRecords.clear();
+  };
+
+  /** Drop every assist marker, keeping the collection itself. */
+  const clearAssists = () => {
+    for (const marker of _assistMarkers.values()) _assists?.remove(marker);
+    _assistMarkers.clear();
+    _assistGroups = [];
+  };
+
+  /** Whether one grouped assist marker belongs to a cohort being drawn. */
+  const assistVisible = (group) =>
+    group.ghost ? _visible.ghost : group.ops.some((op) => operatorVisible(op));
+
+  /**
+   * Draw one assist marker per request, or per cluster where triage made one.
+   *
+   * Upserted by key rather than rebuilt: the marker set changes when a
+   * vehicle starts or stops waiting, which is a once-a-second event, and
+   * removing and re-adding every billboard on every frame would churn the
+   * texture atlas for a picture that did not move.
+   *
+   * The ground height comes from the vehicle cell cache, not from a fresh
+   * `sampleHeight` — a marker floats above a position the fleet is already
+   * reporting, so the ground under it has been paid for once already.
+   */
+  const drawAssists = (rows) => {
+    if (!_assists) return;
+    const groups = groupAssists(rows);
+    _assistGroups = groups;
+    const seen = new Set();
+    for (const group of groups) {
+      seen.add(group.key);
+      const css = group.ghost ? ASSIST_GHOST_COLOR : ASSIST_LIVE_COLOR;
+      const height =
+        groundHeight(group.lon, group.lat, undefined) + ASSIST_HEIGHT_OFFSET_M;
+      const position = Cesium.Cartesian3.fromDegrees(
+        group.lon,
+        group.lat,
+        height,
+      );
+      const size = group.count > 1 ? ASSIST_CLUSTER_PX : ASSIST_MARKER_PX;
+      const existing = _assistMarkers.get(group.key);
+      if (existing) {
+        existing.position = position;
+        existing.width = size;
+        existing.height = size;
+        existing.color =
+          Cesium.Color.fromCssColorString(css).withAlpha(ASSIST_MARKER_ALPHA);
+        existing.show = assistVisible(group);
+        continue;
+      }
+      _assistMarkers.set(
+        group.key,
+        _assists.add({
+          position,
+          image: ASSIST_MARKER_IMAGE,
+          width: size,
+          height: size,
+          color:
+            Cesium.Color.fromCssColorString(css).withAlpha(ASSIST_MARKER_ALPHA),
+          verticalOrigin: Cesium.VerticalOrigin.CENTER,
+          disableDepthTestDistance: 4000,
+          show: assistVisible(group),
+          id: `headsup-assist:${group.key}`,
+        }),
+      );
+    }
+    for (const [key, marker] of [..._assistMarkers]) {
+      if (seen.has(key)) continue;
+      _assists.remove(marker);
+      _assistMarkers.delete(key);
+    }
   };
 
   const clearAdvisories = () => {
@@ -853,24 +964,43 @@ export function createHeadsupLayer({
       const cohortVisible = isCorridor ? _visible.corridors : _visible.hazards;
       if (_visible.corridors)
         row.lines.forEach((positions, index) => {
+          const line = Cesium.Cartesian3.fromDegreesArray(positions.flat());
+          const properties = {
+            advisoryId: row.id,
+            hazardClass: row.hazardClass,
+            severity: row.severity,
+            action: row.action,
+            validUntil: row.validUntil,
+            corridor: true,
+          };
+          // The glow, under the line rather than in its material: a wider,
+          // fainter clamped polyline, which keeps both of them on the colour
+          // attribute path the pulse depends on. See `CORRIDOR_HALO_WIDTH_PX`.
+          if (row.action === CORRIDOR_ACTION)
+            entities.push(
+              new Cesium.Entity({
+                id: `${CORRIDOR_PREFIX}:${row.id}:${index}:halo`,
+                polyline: {
+                  positions: line,
+                  clampToGround: true,
+                  width: CORRIDOR_HALO_WIDTH_PX,
+                  material: edgeMaterial(row.id, CORRIDOR_HALO_ALPHA),
+                  classificationType: Cesium.ClassificationType.BOTH,
+                },
+                properties: { ...properties, halo: true },
+              }),
+            );
           entities.push(
             new Cesium.Entity({
               id: `${CORRIDOR_PREFIX}:${row.id}:${index}`,
               polyline: {
-                positions: Cesium.Cartesian3.fromDegreesArray(positions.flat()),
+                positions: line,
                 clampToGround: true,
                 width: CORRIDOR_WIDTH_PX,
                 material: edgeMaterial(row.id, 0.85),
                 classificationType: Cesium.ClassificationType.BOTH,
               },
-              properties: {
-                advisoryId: row.id,
-                hazardClass: row.hazardClass,
-                severity: row.severity,
-                action: row.action,
-                validUntil: row.validUntil,
-                corridor: true,
-              },
+              properties,
             }),
           );
         });
@@ -982,11 +1112,34 @@ export function createHeadsupLayer({
         }),
       });
     }
+    // A count badge, and only for a cluster: see `createAssistOverlayEntry`.
+    const badges = [];
+    for (const group of _assistGroups) {
+      if (group.count < 2 || !assistVisible(group)) continue;
+      badges.push({
+        group,
+        entry: createAssistOverlayEntry({
+          key: group.key,
+          position: Cesium.Cartesian3.fromDegrees(
+            group.lon,
+            group.lat,
+            groundHeight(group.lon, group.lat, undefined) +
+              ASSIST_HEIGHT_OFFSET_M,
+          ),
+          title: _assistLabel(group.count),
+          ghost: group.ghost,
+        }),
+      });
+    }
     const signature = [
       _drawnSignature,
       ...tags.map(
         ({ op, centroid }) =>
           `${op}@${centroid.lon.toFixed(5)},${centroid.lat.toFixed(5)}`,
+      ),
+      ...badges.map(
+        ({ group }) =>
+          `${group.key}×${group.count}@${group.lon.toFixed(5)},${group.lat.toFixed(5)}`,
       ),
     ].join('|');
     if (signature === _overlaySignature) return;
@@ -995,6 +1148,7 @@ export function createHeadsupLayer({
       HEADSUP_OVERLAY_SOURCE_ID,
       selectAdvisoryOverlayCohort([
         ..._overlayLabels,
+        ...badges.map(({ entry }) => entry),
         ...tags.map(({ entry }) => entry),
       ]),
       {
@@ -1118,6 +1272,9 @@ export function createHeadsupLayer({
     _lastError = snapshot.lastError ?? null;
     _scenarioRunning = snapshot.scenario?.state === 'running';
     drawVehicles(snapshot.vehicles ?? [], snapshot.vehiclesAt);
+    // After the vehicles, so the ground under a marker is already cached:
+    // an assist request sits on a vehicle this tick has just drawn.
+    drawAssists(snapshot.pipeline?.assists ?? []);
     // Paint before events, so a publication has colours to pulse, and draw
     // after them, so the first frame of the pulse is the one being requested.
     drawAdvisories(nowMs);
@@ -1160,6 +1317,14 @@ export function createHeadsupLayer({
       _beams = new Cesium.PolylineCollection();
       viewer.scene.primitives.add(_beams);
       _beams.show = false;
+      // No `scene` here either: an assist marker takes its height from the
+      // ground cell under the vehicle that raised it, which this layer has
+      // already paid for.
+      _assists = new Cesium.BillboardCollection({
+        blendOption: Cesium.BlendOption.TRANSLUCENT,
+      });
+      viewer.scene.primitives.add(_assists);
+      _assists.show = false;
       _dataSource = new Cesium.CustomDataSource('headsup');
       _dataSource.show = false;
       viewer.dataSources.add(_dataSource);
@@ -1179,6 +1344,7 @@ export function createHeadsupLayer({
       if (_points) _points.show = true;
       if (_trails) _trails.show = true;
       if (_beams) _beams.show = true;
+      if (_assists) _assists.show = true;
       if (_dataSource) _dataSource.show = true;
       overlayHost.setVisible(HEADSUP_OVERLAY_SOURCE_ID, true);
       // Vehicle positions are written every frame while this layer is on, so
@@ -1200,6 +1366,7 @@ export function createHeadsupLayer({
       releaseContinuousRender(HEADSUP_RENDER_HOLD_ID);
       clearVehicles();
       clearBeams();
+      clearAssists();
       clearAdvisories();
       _advisories = [];
       _liveCorridors = 0;
@@ -1210,6 +1377,7 @@ export function createHeadsupLayer({
       if (_chevrons) _chevrons.show = false;
       if (_trails) _trails.show = false;
       if (_beams) _beams.show = false;
+      if (_assists) _assists.show = false;
       if (_dataSource) _dataSource.show = false;
       overlayHost.setVisible(HEADSUP_OVERLAY_SOURCE_ID, false);
     },
@@ -1238,12 +1406,13 @@ export function createHeadsupLayer({
 
     destroy(viewer = _viewer) {
       this.disable();
-      for (const collection of [_points, _chevrons, _trails, _beams])
+      for (const collection of [_points, _chevrons, _trails, _beams, _assists])
         if (collection) viewer?.scene?.primitives?.remove(collection);
       _points = null;
       _chevrons = null;
       _trails = null;
       _beams = null;
+      _assists = null;
       if (_dataSource) {
         viewer?.dataSources?.remove(_dataSource, true);
         _dataSource = null;
@@ -1356,6 +1525,21 @@ export function createHeadsupLayer({
       publishOverlay();
     },
 
+    /**
+     * Set how a collapsed cluster's count badge is worded.
+     *
+     * A formatter rather than a string, because the badge carries a count
+     * and only the console owns `t()` — the same division of labour as
+     * `setDeclinedLabel`, with the one extra argument a number needs.
+     * @param {(count: number) => string} format
+     */
+    setAssistLabel(format) {
+      if (typeof format !== 'function') return;
+      _assistLabel = format;
+      _overlaySignature = '';
+      publishOverlay();
+    },
+
     /** Which cohorts are drawn right now. */
     getCohortVisibility() {
       return {
@@ -1392,6 +1576,13 @@ export function createHeadsupLayer({
         if (marker.billboard) marker.billboard.show = marker.point.show;
         if (marker.trail) marker.trail.polyline.show = marker.point.show;
       }
+      // An assist marker belongs to the cohort that raised it, so hiding the
+      // ghost fleet hides the queue it is responsible for too.
+      for (const group of _assistGroups) {
+        const marker = _assistMarkers.get(group.key);
+        if (marker) marker.show = assistVisible(group);
+      }
+      _overlaySignature = '';
       drawAdvisories(now());
       governorRequestRender('headsup-cohorts');
     },
@@ -1409,6 +1600,7 @@ export function createHeadsupLayer({
       source.reset?.();
       clearVehicles();
       clearBeams();
+      clearAssists();
       clearAdvisories();
       _advisories = [];
       _liveCorridors = 0;
@@ -1453,6 +1645,14 @@ export function createHeadsupLayer({
         if (marker.reroutedBy) rerouted++;
         if (marker.trail) trails++;
       }
+      // Requests, then markers: the two differ exactly when triage has
+      // collapsed some, and the gap between them is what the badge shows.
+      let assistRequests = 0;
+      let assistClusters = 0;
+      for (const group of _assistGroups) {
+        assistRequests += group.count;
+        if (group.count > 1) assistClusters++;
+      }
       return {
         count: _markers.size + _drawnAdvisories,
         vehicles: _markers.size,
@@ -1461,6 +1661,9 @@ export function createHeadsupLayer({
         ghosts,
         rerouted,
         trails,
+        assists: assistRequests,
+        assistMarkers: _assistGroups.length,
+        assistClusters,
         declined: _declined.size,
         oriented: _chevrons?.show === true,
         connected: status.connected === true,

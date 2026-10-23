@@ -129,7 +129,7 @@ test('a control answer is a state, with the scenario only when sent', () => {
   assert.equal(normalizeScenarioControl(null), null);
 });
 
-test('the client asks the three paths it is documented to ask', async () => {
+test('the client asks the four paths it is documented to ask', async () => {
   const calls = [];
   const client = createScenarioClient({
     baseUrl: 'http://localhost:8765/',
@@ -138,7 +138,9 @@ test('the client asks the three paths it is documented to ask', async () => {
       return json(
         url.endsWith('/scenarios')
           ? { scenarios: [row()] }
-          : { state: url.endsWith('/stop') ? 'idle' : 'running' },
+          : url.includes('/approvals/')
+            ? { state: 'approved' }
+            : { state: url.endsWith('/stop') ? 'idle' : 'running' },
       );
     },
   });
@@ -146,10 +148,12 @@ test('the client asks the three paths it is documented to ask', async () => {
   assert.equal((await client.list()).length, 1);
   assert.equal((await client.start('s1_flood')).state, 'running');
   assert.equal((await client.stop()).state, 'idle');
+  assert.equal((await client.approve('prop-1')).state, 'approved');
   assert.deepEqual(calls, [
     'GET http://localhost:8765/scenarios',
     'POST http://localhost:8765/scenarios/s1_flood/start',
     'POST http://localhost:8765/scenarios/stop',
+    'POST http://localhost:8765/approvals/prop-1',
   ]);
 });
 
@@ -178,6 +182,51 @@ test('an id that is not an identifier never becomes part of a URL', async () => 
   });
   await assert.rejects(() => client.start('../../etc/passwd'), TypeError);
   await assert.rejects(() => client.start(''), TypeError);
+  // The approval path takes an id off the wire too, and it is the one call
+  // that changes what gets PUBLISHED.
+  await assert.rejects(() => client.approve('../../admin'), TypeError);
+  await assert.rejects(() => client.approve(''), TypeError);
+});
+
+test('only an approved answer counts as a second key', async () => {
+  // A 200 with something else in it has not told this page that a key was
+  // recorded, and a button that looked as though it worked would be the
+  // worst possible failure in a two-key control.
+  for (const payload of [{}, { state: 'pending' }, { ok: true }, null]) {
+    const client = createScenarioClient({
+      baseUrl: 'http://localhost:8765',
+      fetchImpl: async () => json(payload),
+    });
+    await assert.rejects(() => client.approve('prop-1'), ScenarioApiError);
+  }
+  const client = createScenarioClient({
+    baseUrl: 'http://localhost:8765',
+    fetchImpl: async () => json({ state: 'approved' }),
+  });
+  assert.deepEqual(await client.approve('prop-1'), { state: 'approved' });
+});
+
+test('an approval the API refuses is never retried against the fallback', async () => {
+  // Something is listening there, and asking a second service to override
+  // the first one's "no" would make the page lie about which API it drove.
+  const asked = [];
+  const client = createScenarioClient({
+    baseUrl: 'http://localhost:8765',
+    fallbackUrl: 'http://localhost:8766',
+    fetchImpl: async (url) => {
+      asked.push(url);
+      return json({ error: 'nothing is waiting' }, { ok: false, status: 409 });
+    },
+  });
+  await assert.rejects(
+    () => client.approve('prop-1'),
+    (error) => {
+      assert.ok(error instanceof ScenarioApiError);
+      assert.equal(error.status, 409);
+      return true;
+    },
+  );
+  assert.deepEqual(asked, ['http://localhost:8765/approvals/prop-1']);
 });
 
 test('an unreachable, refusing or unreadable API is one explained failure', async () => {
