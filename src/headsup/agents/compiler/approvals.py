@@ -6,6 +6,10 @@ severity 4 or above, and anything covering more ground than its playbook's
 endpoints on it (`POST /approvals/{proposal_id}`, `GET /approvals`); this
 module is the store behind them, and the shape the compiler checks.
 
+`PendingCompiles` is the other half of the same rule: the proposals the gate
+has already refused for want of a token, kept so that issuing one can put them
+back through it.
+
 A token is deliberately boring: an opaque string bound to one proposal id,
 with who issued it and when it stops counting. It is not a capability the
 holder can spend elsewhere, because the compiler only ever looks up the
@@ -14,14 +18,24 @@ approval for the proposal in front of it.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from secrets import token_urlsafe
 from typing import Annotated, Protocol, runtime_checkable
 
 from pydantic import Field, StringConstraints, model_validator
 
-from headsup.contracts import FreeText, HeadsUpModel, Identifier, UtcDatetime, utcnow
+from headsup.contracts import (
+    CriticVerdict,
+    FreeText,
+    HeadsUpModel,
+    Identifier,
+    ProposedAdvisory,
+    UtcDatetime,
+    utcnow,
+)
 
 #: An approval token: opaque, URL-safe, long enough not to be guessed.
 Token = Annotated[
@@ -153,3 +167,82 @@ class InMemoryApprovals:
 
     def __len__(self) -> int:
         return len(self._by_proposal)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingCompile:
+    """One proposal the gate refused only for want of a second key."""
+
+    proposal: ProposedAdvisory
+    verdict: CriticVerdict
+    recorded_at: datetime
+
+    @property
+    def proposal_id(self) -> str:
+        return self.proposal.id
+
+
+class PendingCompiles:
+    """The proposals waiting on a human, and what they were judged against.
+
+    A compile is synchronous: the proposer hands the gate a proposal, the gate
+    answers, and a proposal refused for want of an approval token would
+    otherwise be gone before anyone could issue one. Proposal ids are drawn at
+    random, so nobody can approve one in advance either.
+
+    So the gate keeps it. `CompilerService.publish` records every rejection
+    whose only failed rule was `two_key_approved`, with the verdict it was
+    judged against, and `CompilerService.recompile` puts the pair back through
+    the same rules once a token exists. Nothing here decides anything: the
+    second trip through the gate is a full one, and an approval that arrived
+    too late, for the wrong proposal or from nobody is refused again.
+
+    Bounded, oldest dropped first. A long run can reach a lot of proposals
+    nobody will ever approve, and a store that grew without limit would be a
+    slow leak holding every hazard it ever saw.
+    """
+
+    def __init__(self, *, limit: int = 256) -> None:
+        if limit < 1:
+            raise ValueError(f"limit must be at least 1, got {limit}")
+        self.limit = limit
+        self._waiting: OrderedDict[str, PendingCompile] = OrderedDict()
+        #: Proposals recorded and proposals put back through the gate: what a
+        #: run reports about its own second key.
+        self.recorded = 0
+        self.recompiled = 0
+
+    def remember(
+        self,
+        proposal: ProposedAdvisory,
+        verdict: CriticVerdict,
+        *,
+        now: datetime | None = None,
+    ) -> PendingCompile:
+        """Record a proposal that needs a token, replacing any earlier one."""
+        entry = PendingCompile(proposal=proposal, verdict=verdict, recorded_at=now or utcnow())
+        self._waiting.pop(entry.proposal_id, None)
+        self._waiting[entry.proposal_id] = entry
+        while len(self._waiting) > self.limit:
+            self._waiting.popitem(last=False)
+        self.recorded += 1
+        return entry
+
+    def forget(self, proposal_id: str) -> bool:
+        """Drop a proposal. True if there was one waiting."""
+        return self._waiting.pop(proposal_id, None) is not None
+
+    def get(self, proposal_id: str) -> PendingCompile | None:
+        """The proposal waiting under this id, or None."""
+        return self._waiting.get(proposal_id)
+
+    def waiting(self) -> tuple[PendingCompile, ...]:
+        """Every proposal waiting on a second key, oldest first."""
+        return tuple(sorted(self._waiting.values(), key=lambda item: item.recorded_at))
+
+    def clear(self) -> None:
+        """Forget everything. A new scenario run starts with an empty store."""
+        self._waiting.clear()
+
+    def __len__(self) -> int:
+        return len(self._waiting)

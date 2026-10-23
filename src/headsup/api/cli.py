@@ -10,6 +10,14 @@ when a scenario starts and drops them when it stops.
 up, which is all the demo ever was: one command, the viewer pointed at
 `ws://localhost:8765/viewer`, and the scenario running.
 
+It also brings up the stand-in operator in `api.second_key`, because S1's
+narrowed flood hazard is a severity 4 and will not publish without a human
+approval token. The stand-in issues one the way a person would, through
+`POST /approvals/{proposal_id}`, and signs it `demo_operator` so no audit
+record of a demo claims a person reviewed the hazard. `--no-approve` leaves
+the second key unheld and the gate refusing, which is the other half of the
+demo. `hu serve` never runs it.
+
 Nothing here reads the streams or publishes to them. It builds the app, hands
 it to uvicorn, and prints the two URLs a person needs.
 """
@@ -25,6 +33,7 @@ from rich.console import Console
 from headsup.api.app import ApiState, create_app, default_host, default_port
 from headsup.api.catalog import CatalogError, ScenarioCatalog
 from headsup.api.runner import StartOptions
+from headsup.api.second_key import DEMO_APPROVER
 from headsup.llm import mode_from_env
 
 console = Console()
@@ -54,11 +63,14 @@ def _serve(
     options: StartOptions,
     namespace: str,
     log_level: str,
+    second_key: bool = False,
 ) -> None:
     """Run the server, with one scenario started once it is up."""
     state = ApiState(namespace=namespace)
     if scenario is not None:
         state.autostart = (scenario, options)
+    if second_key:
+        state.second_key_url = f"http://{host}:{port}"
     app = create_app(state)
     console.print(
         f"[bold]hu serve[/bold] http://{host}:{port}  "
@@ -66,6 +78,12 @@ def _serve(
         + (f"  namespace={namespace}" if namespace else "")
         + (f"  scenario={scenario}" if scenario else "")
     )
+    if second_key:
+        console.print(
+            f"[yellow]second key held by {DEMO_APPROVER}[/yellow]: two-key advisories are "
+            "approved through POST /approvals/{proposal_id} by a stand-in, not by a person. "
+            "Pass --no-approve to watch the gate refuse them instead."
+        )
     try:
         uvicorn.run(app, host=host, port=port, log_level=log_level)
     except KeyboardInterrupt:  # pragma: no cover - interactive only
@@ -115,6 +133,11 @@ def demo(
     vehicles: int = typer.Option(300, "--vehicles", help="Vehicles across all fleets."),
     seed: int = typer.Option(42, "--seed", help="Run seed; the same seed replays exactly."),
     llm: bool = typer.Option(True, "--llm/--no-llm", help="Let the agents ask a model."),
+    approve: bool = typer.Option(
+        True,
+        "--approve/--no-approve",
+        help="Have a stand-in operator approve two-key advisories over the approvals API.",
+    ),
     log_level: str = typer.Option("warning", "--log-level", help="uvicorn log level."),
 ) -> None:
     """Run `hu serve` with one scenario started: the whole demo, one command."""
@@ -132,6 +155,7 @@ def demo(
         options=options,
         namespace="",
         log_level=log_level,
+        second_key=approve,
     )
 
 

@@ -48,7 +48,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.websockets import WebSocketDisconnect
 
 from headsup import __version__
-from headsup.agents.compiler.approvals import DEFAULT_TTL, Approval, InMemoryApprovals
+from headsup.agents.compiler.approvals import (
+    DEFAULT_TTL,
+    Approval,
+    InMemoryApprovals,
+    PendingCompiles,
+)
+from headsup.agents.compiler.geo import area_km2
 from headsup.agents.compiler.signing import verify
 from headsup.api.catalog import CatalogError, ScenarioCard, ScenarioCatalog
 from headsup.api.frames import RailIndex
@@ -60,6 +66,7 @@ from headsup.api.operators import (
     OperatorSession,
 )
 from headsup.api.runner import AlreadyRunning, ScenarioError, ScenarioRunner, StartOptions
+from headsup.api.second_key import DEMO_APPROVER, hold_the_second_key
 from headsup.api.store import QueryError, parse_bbox, read_advisories, read_hazards
 from headsup.api.tail import StreamTailer
 from headsup.bus import STREAM_ACKS, STREAM_ADVISORIES, Bus, BusError
@@ -130,6 +137,7 @@ class ApiState:
     index: RailIndex = field(default_factory=RailIndex)
     registry: OperatorRegistry = field(default_factory=OperatorRegistry)
     approvals: InMemoryApprovals = field(default_factory=InMemoryApprovals)
+    pending: PendingCompiles = field(default_factory=PendingCompiles)
     bus: Bus | None = None
     writer_bus: Bus | None = None
     runner: ScenarioRunner | None = None
@@ -138,8 +146,13 @@ class ApiState:
     #: task, not inline: building a city world takes seconds, and the viewer
     #: should be able to connect while it happens.
     autostart: tuple[str, StartOptions] | None = None
+    #: `http://host:port` for the stand-in operator `hu demo` runs, which
+    #: approves what the gate is waiting on through `POST /approvals/...`.
+    #: Unset on `hu serve`: there, the second key belongs to a person.
+    second_key_url: str = ""
     _tail_task: asyncio.Task[None] | None = None
     _autostart_task: asyncio.Task[None] | None = None
+    _second_key_task: asyncio.Task[None] | None = None
     _operators: dict[int, _OperatorLink] = field(default_factory=dict)
     _next_link: int = 0
 
@@ -167,6 +180,7 @@ class ApiState:
             self.index,
             self.registry,
             approvals=self.approvals,
+            pending=self.pending,
             namespace=self.namespace,
         )
         self.tailer = StreamTailer(self.bus, self.hub, self.index, on_advisory=self.fan_advisory)
@@ -174,6 +188,16 @@ class ApiState:
         self.hub.reset(self.runner.status())
         if self.autostart is not None:
             self._autostart_task = asyncio.create_task(self._autostart(), name="autostart")
+        if self.second_key_url:
+            log.warning(
+                "a stand-in operator is holding the second key at %s: every two-key "
+                "advisory this run publishes was approved by %s, not by a person",
+                self.second_key_url,
+                DEMO_APPROVER,
+            )
+            self._second_key_task = asyncio.create_task(
+                hold_the_second_key(self.second_key_url), name="second-key"
+            )
 
     async def _autostart(self) -> None:
         """Start the scenario `hu demo` asked for, and report if it cannot."""
@@ -192,7 +216,7 @@ class ApiState:
         if self.runner is not None:
             with contextlib.suppress(Exception):
                 await self.runner.stop()
-        for task in (self._autostart_task, self._tail_task):
+        for task in (self._second_key_task, self._autostart_task, self._tail_task):
             if task is not None:
                 task.cancel()
                 with contextlib.suppress(asyncio.CancelledError, Exception):
@@ -406,7 +430,22 @@ def create_app(state: ApiState | None = None) -> FastAPI:
                         "note": item.note,
                     }
                     for item in api.approvals.pending()
-                ]
+                ],
+                # What the gate is actually waiting on: the proposals it
+                # refused with `two_key_approved` as their only failed rule.
+                # This is the list whoever holds the second key works from.
+                "awaiting_approval": [
+                    {
+                        "proposal_id": item.proposal_id,
+                        "hazard_id": item.proposal.hazard.id,
+                        "hazard_class": item.proposal.hazard.hazard_class.value,
+                        "severity": item.proposal.hazard.severity,
+                        "action": item.proposal.action.type.value,
+                        "area_km2": round(area_km2(item.proposal.geometry), 4),
+                        "recorded_at": item.recorded_at.isoformat(),
+                    }
+                    for item in api.pending.waiting()
+                ],
             }
         )
 
@@ -433,7 +472,27 @@ def create_app(state: ApiState | None = None) -> FastAPI:
                 status.HTTP_422_UNPROCESSABLE_CONTENT, f"not a usable approval: {exc.error_count()}"
             ) from exc
         api.approvals.add(approval)
-        return _json(approval.to_wire(), code=status.HTTP_201_CREATED)
+
+        # A compile happens the instant a proposal is made, so by the time a
+        # person has issued a token the gate has already refused the proposal
+        # once. Hand it back: every rule runs again, including this approval's
+        # own validity, and a second audit record says what came of it. The
+        # token is not a bypass and this is not one either - a proposal that
+        # fails any other rule is refused again, with its reasons.
+        published: str | None = None
+        runner = api.runner
+        if runner is not None:
+            outcome = await runner.recompile(proposal_id)
+            if outcome is not None and outcome.ok:
+                published = outcome.result.advisory_id
+        body = dict(approval.to_wire())
+        # `fingerprint` is a property rather than a field, so `to_wire` does
+        # not carry it. It is what every audit record of this approval is
+        # stamped with, so the caller that holds the token gets it here and
+        # can match the two up without reading the token back out of anything.
+        body["fingerprint"] = approval.fingerprint
+        body["advisory_id"] = published
+        return _json(body, code=status.HTTP_201_CREATED)
 
     # --- scenario control ---------------------------------------------------
 

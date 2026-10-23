@@ -33,6 +33,48 @@
           "minLength": 1,
           "title": "Raw Ref",
           "type": "string"
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "LineString": "#/$defs/LineString",
+                  "MultiLineString": "#/$defs/MultiLineString",
+                  "MultiPoint": "#/$defs/MultiPoint",
+                  "MultiPolygon": "#/$defs/MultiPolygon",
+                  "Point": "#/$defs/Point",
+                  "Polygon": "#/$defs/Polygon"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Point"
+                },
+                {
+                  "$ref": "#/$defs/MultiPoint"
+                },
+                {
+                  "$ref": "#/$defs/LineString"
+                },
+                {
+                  "$ref": "#/$defs/MultiLineString"
+                },
+                {
+                  "$ref": "#/$defs/Polygon"
+                },
+                {
+                  "$ref": "#/$defs/MultiPolygon"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry"
         }
       },
       "required": [

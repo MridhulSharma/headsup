@@ -31,6 +31,22 @@ recording replayed at 60x ages its own groups 60 times faster, and a feed that
 stops reporting expires nothing at all. That is the safe direction: the hazard
 stays until something says otherwise.
 
+**Narrowing a FLOOD hazard to the reach its gauges cover.** An NWS flash flood
+warning polygon is a county-scale forecast area - S1's is 1440 km2 - and the
+flood sentinel publishes it unchanged on purpose, because that is what the
+office issued. Fusion is where a county becomes a crossing: the hazard geometry
+is clipped to the union of `FLOOD_REACH_RADIUS_M` buffers around the gauges
+that are above their action stage and cite this hazard, which is the only part
+of the polygon anything has actually observed water in.
+
+Four rules hold it in place. The clip only ever intersects, so it can never
+widen a hazard. A hazard no gauge corroborates is not clipped at all - the full
+polygon travels on and the compiler's area cap decides, which is the behaviour
+attack A3 turns on. An empty, invalid or non-areal intersection is discarded
+and the full polygon kept. And either way a `GeometryNarrowing` is attached
+carrying the original geometry, the narrowed one, both areas and the reason, so
+an audit record shows what the feed drew as well as what a fleet was told.
+
 **The evidence threshold.** Severity 3 and above needs one authoritative source
 (NWS, USGS or city dispatch) or two independent ones. A group that has neither
 is still emitted, capped at `CAPPED_SEVERITY`, with the cap stated in the
@@ -54,9 +70,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from pydantic import Field
+from shapely.errors import ShapelyError
 from shapely.geometry import base as shapely_base
 from shapely.ops import unary_union
 
+from headsup.agents.compiler.geo import area_km2
+from headsup.agents.compiler.playbooks import PlaybookSet, default_playbooks
 from headsup.agents.sentinels.base import noisy_or, pad_m, stable_id
 from headsup.contracts import (
     AUTHORITATIVE_SOURCES,
@@ -64,6 +83,7 @@ from headsup.contracts import (
     Evidence,
     FreeText,
     Geometry,
+    GeometryNarrowing,
     Hazard,
     HazardClass,
     HeadsUpModel,
@@ -123,6 +143,39 @@ COORD_DIGITS = 7
 #: Geometry types that can be unioned into an area somebody drew.
 AREA_TYPES = frozenset({"Polygon", "MultiPolygon"})
 
+#: How far from a gauge above its action stage a flood hazard is believed to
+#: reach, in metres. A hazard of a narrowed class is clipped to the union of
+#: these buffers around its corroborating gauges.
+#:
+#: Deliberately *not* `sentinels.flood.GAUGE_RADIUS_M`, which is 2000 m: that
+#: radius answers whether a gauge counts as evidence for a warning, and this
+#: one answers how far from the gauge the water is believed to be on the road.
+#: Two questions, two numbers.
+#:
+#: 1500 m is a prototype value tuned on the S1 fixture, not a hydrological
+#: derivation. It puts one interior gauge's reach at pi * 1.5^2 = 7.07 km2,
+#: inside the 12 km2 `playbooks/flood.yaml` area cap and still above its 4 km2
+#: two-key area, so a narrowed S1 advisory needs a human approval token on its
+#: area as well as on its severity. A radius above sqrt(12 / pi) = 1954 m would
+#: put a single gauge's reach over that cap on its own.
+FLOOD_REACH_RADIUS_M = 1500.0
+
+#: The hazard classes whose geometry is narrowed to its corroborated reach.
+#: Only FLOOD: a signal outage is already a point set a sentinel placed, and
+#: there is nothing wider to cut it down from.
+NARROWED_CLASSES = frozenset({HazardClass.FLOOD})
+
+#: The citation a narrowed class's reach is measured from, by source and kind.
+#: The flood sentinel attaches a point geometry to exactly those gauges that
+#: are above their action stage and within reach of its polygon, so a cited
+#: `usgs`/`gauge_height` reading carrying a point is a corroborating gauge.
+REACH_CITATIONS: dict[HazardClass, tuple[Source, str]] = {
+    HazardClass.FLOOD: (Source.USGS, "gauge_height"),
+}
+
+#: Citation geometries a reach can be buffered from.
+POINT_TYPES = frozenset({"Point", "MultiPoint"})
+
 #: Fixed instruction text for the judgment call. Nothing from a feed is ever
 #: added to this: it is the whole `system` prefix, identical call to call,
 #: which is what makes the provider's prompt cache worth using here.
@@ -172,6 +225,11 @@ class _Group:
     #: so a hazard keeps one identity as evidence accumulates under it.
     seed: str
     members: dict[str, CandidateHazard] = field(default_factory=dict)
+    #: The narrowed geometry this group last emitted inside its class's area
+    #: cap: what a live advisory for this hazard was built from. A later
+    #: reading that corroborates a second reach too far away to cover as one
+    #: area renews against this rather than letting the advisory lapse.
+    held: Geometry | None = None
 
     def add(self, candidate: CandidateHazard) -> None:
         self.members[candidate.id] = candidate
@@ -179,6 +237,10 @@ class _Group:
     def absorb(self, other: _Group) -> None:
         """Take another group's candidates; the host's older seed is kept."""
         self.members.update(other.members)
+        # The host keeps its own reach if it has one: it is the older group,
+        # so its advisory is the one more likely to be in force.
+        if self.held is None:
+            self.held = other.held
 
     @property
     def candidates(self) -> list[CandidateHazard]:
@@ -238,6 +300,37 @@ def _rings(area: shapely_base.BaseGeometry) -> list[list[list[float]]]:
     ]
 
 
+def _area_geometry(area: shapely_base.BaseGeometry) -> Polygon | MultiPolygon | None:
+    """A shapely area as a contract geometry, or None if it has no usable area.
+
+    Everything that is not an area somebody could be told to stay out of -
+    empty, invalid, a bare line where two polygons touched, a ring with too
+    few points to close - comes back None, and the caller keeps what it had.
+    """
+    if area.is_empty or not area.is_valid:
+        return None
+    try:
+        if area.geom_type == "Polygon":
+            rings = _rings(area)
+            return Polygon(coordinates=rings) if rings else None
+        if area.geom_type == "MultiPolygon":
+            parts = [rings for part in area.geoms if (rings := _rings(part))]
+            return MultiPolygon(coordinates=parts) if parts else None
+        if area.geom_type == "GeometryCollection":
+            areas = [part for part in area.geoms if part.geom_type in AREA_TYPES]
+            return _area_geometry(unary_union(areas)) if areas else None
+    except ValueError as exc:
+        log.warning("%s: discarding an unusable %s: %s", FUSION_NAME, area.geom_type, exc)
+        return None
+    return None
+
+
+def _with_citations(record: GeometryNarrowing, cited: list[str]) -> GeometryNarrowing:
+    """The narrowing record, naming the citations its reach was measured from."""
+    record.corroborated_by = sorted(cited)
+    return record
+
+
 def _sentence(text: str) -> str:
     """One line, capitalised and stopped, for a rationale built from facts."""
     body = " ".join(text.split())
@@ -254,11 +347,18 @@ class Fusion:
         llm: LlmClient | None = None,
         window: timedelta = GROUP_WINDOW,
         overlap_m: float = OVERLAP_PAD_M,
+        flood_reach_radius_m: float = FLOOD_REACH_RADIUS_M,
+        playbooks: PlaybookSet | None = None,
         name: str = FUSION_NAME,
     ) -> None:
         self.llm = llm
         self.window = window
         self.overlap_m = overlap_m
+        self.flood_reach_radius_m = flood_reach_radius_m
+        #: Read for one thing only: `max_area_km2`, to know when two reaches
+        #: cannot both be advised on. Never written, and the compiler still
+        #: applies every cap itself.
+        self.playbooks = playbooks if playbooks is not None else default_playbooks()
         self.name = name
         self._groups: dict[str, _Group] = {}
         self._now: datetime | None = None
@@ -372,13 +472,228 @@ class Fusion:
         candidates = group.candidates
         if len(candidates) == 1:
             return candidates[0].geometry
+        leader = max(candidates, key=lambda item: (item.severity, item.confidence, item.id))
         if any(item.geometry.type not in AREA_TYPES for item in candidates):
-            leader = max(candidates, key=lambda item: (item.severity, item.confidence, item.id))
             return leader.geometry
-        union = group.shape
-        if union.geom_type == "Polygon":
-            return Polygon(coordinates=_rings(union))
-        return MultiPolygon(coordinates=[_rings(part) for part in union.geoms])
+        union = _area_geometry(group.shape)
+        return union if union is not None else leader.geometry
+
+    # --- narrowing to the corroborated reach ---------------------------------
+
+    def _reach_citations(self, group: _Group) -> list[Evidence]:
+        """The citations a narrowed class measures its reach from.
+
+        Empty means nothing corroborates: that is not an empty reach, it is no
+        reach at all, and the caller must not clip a hazard to nothing on the
+        strength of it.
+        """
+        wanted = REACH_CITATIONS.get(group.hazard_class)
+        if wanted is None:
+            return []
+        source, kind = wanted
+        return [
+            cite
+            for cite in group.evidence
+            if cite.source is source
+            and cite.kind == kind
+            and cite.geometry is not None
+            and cite.geometry.type in POINT_TYPES
+        ]
+
+    def _reach_clips(
+        self, shape: shapely_base.BaseGeometry, cited: list[Evidence]
+    ) -> list[tuple[str, shapely_base.BaseGeometry]]:
+        """Per citation, the part of the published area within its reach.
+
+        Kept per citation rather than unioned up front, because when two
+        reaches cannot be advised on as one area the choice of which to keep
+        has to be reported against the observation that produced it. The union
+        of these is the narrowed geometry in the ordinary case.
+        """
+        clips: list[tuple[str, shapely_base.BaseGeometry]] = []
+        for cite in cited:
+            if cite.geometry is None:  # pragma: no cover - filtered by the caller
+                continue
+            reach = pad_m(cite.geometry.to_shapely(), self.flood_reach_radius_m)
+            try:
+                part = shape.intersection(reach)
+            except ShapelyError as exc:
+                log.warning("%s: cannot clip against %s: %s", self.name, cite.event_id, exc)
+                continue
+            if not part.is_empty:
+                clips.append((cite.event_id, part))
+        return clips
+
+    def _area_cap(self, hazard_class: HazardClass) -> float | None:
+        """The class's `max_area_km2`, read from the playbook. Never written.
+
+        Fusion needs it to answer one question - which reach to renew when two
+        of them cannot both be advised on - and that is a narrowing decision,
+        not a cap. The compiler still enforces the cap on whatever comes out.
+        """
+        playbook = self.playbooks.get(hazard_class)
+        return None if playbook is None else playbook.max_area_km2
+
+    def _narrow(
+        self, group: _Group, geometry: Geometry
+    ) -> tuple[Geometry, GeometryNarrowing | None]:
+        """`geometry` clipped to the group's corroborated reach, and the record.
+
+        Answers with the geometry to publish and the `GeometryNarrowing` that
+        explains it. The original geometry is returned unchanged, with the
+        reason recorded, whenever the clip cannot be trusted: nothing
+        corroborates, the hazard has no area to cut down, or the intersection
+        is empty, invalid or not an area. Narrowing is a refinement of a feed's
+        own claim, so failing to narrow is always the safe direction.
+        """
+        if group.hazard_class not in NARROWED_CLASSES:
+            return geometry, None
+
+        original_area = area_km2(geometry)
+
+        def record(reason: str, *, narrowed: Geometry | None = None) -> GeometryNarrowing:
+            return GeometryNarrowing(
+                narrowed=narrowed is not None,
+                reason=_sentence(reason),
+                original_geometry=geometry,
+                original_area_km2=round(original_area, 6),
+                area_km2=round(area_km2(narrowed) if narrowed is not None else original_area, 6),
+                reach_radius_m=self.flood_reach_radius_m,
+                corroborated_by=[],
+            )
+
+        if geometry.type not in AREA_TYPES:
+            return geometry, record(
+                f"a {geometry.type} hazard has no area to narrow, so the geometry "
+                f"{group.hazard_class.value}'s feeds published travels on unchanged"
+            )
+
+        citations = self._reach_citations(group)
+        if not citations:
+            # The A3 case: a warning is active and no gauge is above its action
+            # stage. Nothing has observed water anywhere in particular, so
+            # there is no honest way to say which part of the polygon is the
+            # hazard. The office's own area travels on and the compiler's area
+            # cap decides what may be done with it.
+            return geometry, record(
+                "no corroborating observation carries a location, so the full "
+                "geometry the feeds published is kept and the area cap decides"
+            )
+
+        cited = [cite.event_id for cite in citations]
+        clips = self._reach_clips(geometry.to_shapely(), citations)
+        clipped = _area_geometry(unary_union([part for _, part in clips])) if clips else None
+        if clipped is None:
+            return geometry, _with_citations(
+                record(
+                    f"the intersection of the published geometry with the reach of "
+                    f"{len(cited)} corroborating observation(s) is empty or is not an "
+                    f"area, so the full geometry is kept"
+                ),
+                cited,
+            )
+
+        clipped_area = area_km2(clipped)
+        if clipped_area > original_area:
+            # Unreachable by construction - an intersection cannot grow a
+            # shape - and checked anyway, because this is the one direction
+            # narrowing must never go and the check costs one measurement.
+            log.warning(
+                "%s: a clip grew %s from %.4f to %.4f km2; keeping the original",
+                self.name,
+                group.hazard_class.value,
+                original_area,
+                clipped_area,
+            )
+            return geometry, _with_citations(
+                record("the clip did not narrow the geometry, so the original is kept"), cited
+            )
+
+        kept, excluded, renewal = self._renew_one_reach(group, clips, clipped, clipped_area)
+        if kept is not None:
+            clipped, clipped_area = kept, area_km2(kept)
+            dropped = set(excluded)
+            cited = [item for item in cited if item not in dropped]
+
+        narrowing = _with_citations(
+            record(
+                f"narrowed from {original_area:.4f} km2 to {clipped_area:.4f} km2: the "
+                f"part of the published geometry within {self.flood_reach_radius_m:.0f} m "
+                f"of {len(cited)} corroborating observation(s)"
+                + (f". {renewal}" if renewal else ""),
+                narrowed=clipped,
+            ),
+            cited,
+        )
+        narrowing.excluded = sorted(excluded)
+        # What a live advisory was built from, for the next renewal to find.
+        # Only an area the class allows: a geometry the compiler was always
+        # going to refuse never had an advisory in force to renew.
+        cap = self._area_cap(group.hazard_class)
+        if cap is None or clipped_area <= cap:
+            group.held = clipped
+        return clipped, narrowing
+
+    def _renew_one_reach(
+        self,
+        group: _Group,
+        clips: list[tuple[str, shapely_base.BaseGeometry]],
+        clipped: Geometry,
+        clipped_area: float,
+    ) -> tuple[Geometry | None, list[str], str]:
+        """Keep the reach the advisory in force already covers, drop the rest.
+
+        Two gauges far enough apart are two crossings, not one area, and their
+        union can be over the class's cap while each reach is well under it.
+        Emitting it means the compiler refuses the renewal and the advisory
+        already protecting one of those crossings quietly lapses - the worst
+        of the three options. Splitting into two advisories is another, and
+        this is not where that decision belongs: fusion emits one hazard per
+        group and that is deliberate.
+
+        So the hazard is renewed against the reach it is already advising on,
+        and the reaches it cannot also cover are excluded and named. Nothing
+        here widens anything or touches a cap: the kept geometry is a subset
+        of the clip, which is a subset of what the feeds published, and the
+        compiler still measures whatever comes out.
+
+        Answers `(None, [], "")` when this does not apply - the union is
+        inside the cap, the reaches are not disjoint, there is no advisory in
+        force to renew against, or dropping would not get under the cap.
+        """
+        cap = self._area_cap(group.hazard_class)
+        if cap is None or clipped_area <= cap:
+            return None, [], ""
+        if clipped.type != "MultiPolygon" or len(clips) < 2:
+            # One connected area that is simply too big. There is no reach to
+            # choose between, so the cap is the compiler's to apply.
+            return None, [], ""
+        if group.held is None:
+            # Nothing is in force, so there is nothing to renew: no reach has
+            # a better claim than any other and fusion must not pick one.
+            return None, [], ""
+
+        held = group.held.to_shapely()
+        keep = [(name, part) for name, part in clips if part.intersects(held)]
+        drop = sorted({name for name, part in clips if not part.intersects(held)})
+        if not keep or not drop:
+            # Either the reach in force no longer corroborates - the advisory
+            # is about to lapse on its own window, and should - or there is
+            # nothing to drop.
+            return None, [], ""
+
+        kept = _area_geometry(unary_union([part for _, part in keep]))
+        if kept is None or area_km2(kept) > cap:
+            return None, [], ""
+        return (
+            kept,
+            drop,
+            f"{len(clips)} corroborated reaches are disjoint and cover "
+            f"{clipped_area:.4f} km2 together, over the {cap:g} km2 cap for "
+            f"{group.hazard_class.value}, so the hazard is renewed against the reach "
+            f"the advisory in force already covers and {len(drop)} other reach(es) "
+            f"are excluded: {', '.join(drop)}",
+        )
 
     def _threshold(self, group: _Group) -> tuple[int, str | None]:
         """The severity the evidence supports, and why it was capped if it was.
@@ -404,19 +719,24 @@ class Fusion:
     async def _fuse(self, group: _Group) -> Hazard:
         severity, cap = self._threshold(group)
         confidence = self._confidence(group)
-        rationale = await self._rationale(group, severity=severity, cap=cap)
+        geometry, narrowing = self._narrow(group, self._geometry(group))
+        rationale = await self._rationale(group, severity=severity, cap=cap, narrowing=narrowing)
         return Hazard(
             id=stable_id("haz", self.name, group.hazard_class.value, group.seed),
             hazard_class=group.hazard_class,
             severity=severity,
             confidence=confidence,
-            geometry=self._geometry(group),
+            geometry=geometry,
+            # Every citation the group holds, the clip notwithstanding: a gauge
+            # whose reach shaped the geometry and a warning whose polygon was
+            # cut back are both still part of why this hazard is believed.
             evidence=group.evidence,
             valid_until=group.valid_until,
             first_seen=group.first_seen,
             updated_at=utcnow(),
             candidates=[item.id for item in group.candidates],
             rationale=rationale,
+            narrowing=narrowing,
         )
 
     # --- the model ----------------------------------------------------------
@@ -439,7 +759,14 @@ class Fusion:
             lines.append(line)
         return "\n".join(lines)
 
-    def _rules_rationale(self, group: _Group, *, severity: int, cap: str | None) -> str:
+    def _rules_rationale(
+        self,
+        group: _Group,
+        *,
+        severity: int,
+        cap: str | None,
+        narrowing: GeometryNarrowing | None = None,
+    ) -> str:
         """The rationale with no model in it: what the feeds said, in order."""
         sources = ", ".join(sorted(source.value for source in group.sources))
         detectors = ", ".join(sorted(group.detectors))
@@ -449,11 +776,20 @@ class Fusion:
                 f"{group.hazard_class.value} hazard at severity {severity}, cited to {sources}"
             )
         ]
+        if narrowing is not None:
+            parts.append(_sentence(f"geometry: {narrowing.reason}"))
         if cap is not None:
             parts.append(_sentence(cap))
         return " ".join(parts)[:MAX_RATIONALE]
 
-    async def _rationale(self, group: _Group, *, severity: int, cap: str | None) -> str:
+    async def _rationale(
+        self,
+        group: _Group,
+        *,
+        severity: int,
+        cap: str | None,
+        narrowing: GeometryNarrowing | None = None,
+    ) -> str:
         """One paragraph for the audit record, from the model or from the rules.
 
         The group summary goes in a `data_block` in the user turn and the fixed
@@ -461,7 +797,7 @@ class Fusion:
         can reach. Any failure is logged and answered with the rules rationale:
         a hazard is never dropped because a model was unavailable.
         """
-        rules = self._rules_rationale(group, severity=severity, cap=cap)
+        rules = self._rules_rationale(group, severity=severity, cap=cap, narrowing=narrowing)
         if self.llm is None:
             return rules
         try:
@@ -476,9 +812,16 @@ class Fusion:
             self.llm_failures += 1
             log.warning("%s: %s fell back to rules: %s", self.name, PURPOSE, exc)
             return rules
-        return self._compose(result.value, group, cap=cap)
+        return self._compose(result.value, group, cap=cap, narrowing=narrowing)
 
-    def _compose(self, answer: FusionRationale, group: _Group, *, cap: str | None) -> str:
+    def _compose(
+        self,
+        answer: FusionRationale,
+        group: _Group,
+        *,
+        cap: str | None,
+        narrowing: GeometryNarrowing | None = None,
+    ) -> str:
         """The model's paragraph, plus the facts it was not allowed to set.
 
         `primary_source` is dropped unless the hazard actually cites it: a
@@ -489,6 +832,10 @@ class Fusion:
         if answer.primary_source in group.sources:
             parts.append(f"Primary source: {answer.primary_source.value}.")
         parts.extend(_sentence(f"conflict: {item}") for item in answer.conflicts)
+        if narrowing is not None:
+            # The model is not allowed to set the geometry, so what happened to
+            # it is stated by the rules, after whatever the model wrote.
+            parts.append(_sentence(f"geometry: {narrowing.reason}"))
         if cap is not None:
             parts.append(_sentence(cap))
         return " ".join(parts)[:MAX_RATIONALE]

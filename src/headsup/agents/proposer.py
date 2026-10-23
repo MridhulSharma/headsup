@@ -23,6 +23,14 @@ path they remove the blocking actions outright. The result is that the proposer
 does not spend a compile on a closure the compiler was always going to refuse
 on `CRITICAL_ACCESS_OPEN`.
 
+That question is asked once per proposal and in a worker thread. Resolving a
+geometry to road edges is synchronous CPU work that scales with the area, and
+it used to run three times per hazard here - once to filter the actions, twice
+more to describe the POIs to the model - on the event loop, with a fourth in
+the compiler behind it. Over an NWS flood warning polygon nobody had narrowed
+that is about three seconds each: twelve seconds of dead loop with a replay,
+two fleets and a viewer socket waiting on it. See `_blocked_map`.
+
 **The rules path is the real path, not the fallback.** Variant V1 of the
 ablation runs on it, `rules_only=True` selects it, and every `LlmError` -
 `JudgmentUnavailable` from `ollama` mode included - lands on it. So does a
@@ -37,8 +45,9 @@ action from a closed list and writes a sentence about why.
 
 from __future__ import annotations
 
+import asyncio
 import logging
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
 
 from headsup.agents.compiler.playbooks import Playbook, PlaybookSet, default_playbooks
@@ -176,6 +185,16 @@ def _params_for(action: ActionType, severity: int) -> dict[str, ParamValue]:
     return {}
 
 
+def _poi_lines(blocked: Mapping[ActionType, tuple[BlockedAccess, ...]]) -> list[str]:
+    """The critical facilities a closure here would cut off, as data."""
+    return [
+        f"{action.value} would close every way into {item.kind.value} "
+        f"{item.name} ({item.access_blocked} of {item.access_total} access edges)"
+        for action in sorted(blocked, key=lambda item: item.value)
+        for item in blocked[action][:MAX_POIS]
+    ]
+
+
 class Proposer:
     """A hazard and its playbook in, one `ProposedAdvisory` out."""
 
@@ -221,7 +240,8 @@ class Proposer:
             log.info("%s: %s has no usable window left", self.name, hazard.id)
             return None
 
-        allowed = self._candidates(hazard, playbook)
+        blocked = await self._blocked_map(hazard)
+        allowed = self._candidates(hazard, playbook, blocked)
         if not allowed:
             log.info(
                 "%s: %s leaves no allowed action for %s",
@@ -231,7 +251,7 @@ class Proposer:
             )
             return None
 
-        action_type, reason = await self._choose(hazard, playbook, allowed)
+        action_type, reason = await self._choose(hazard, playbook, allowed, blocked)
         action = Action(
             type=action_type,
             applies_to=AppliesTo(operators=["*"], vehicle_classes=["*"]),
@@ -270,7 +290,43 @@ class Proposer:
         """Critical facilities this action would cut off, from the road graph."""
         return self.poi.blocked_access(hazard.geometry, action)
 
-    def _candidates(self, hazard: Hazard, playbook: Playbook) -> list[ActionType]:
+    def _blocked_now(self, hazard: Hazard) -> dict[ActionType, tuple[BlockedAccess, ...]]:
+        """Ask the POI checker once per blocking action, synchronously.
+
+        Asked per action rather than once and reused, because `PoiChecker` is
+        a protocol: a checker is entitled to answer NO_ENTRY and PAUSE_SERVICE
+        differently, and the ones in this repo happening not to is not
+        something a caller should lean on.
+        """
+        return {
+            action: tuple(self._blocked_by(hazard, action))
+            for action in sorted(BLOCKING_ACTIONS, key=lambda item: item.value)
+        }
+
+    async def _blocked_map(self, hazard: Hazard) -> Mapping[ActionType, tuple[BlockedAccess, ...]]:
+        """The same answers, off the event loop, computed once per proposal.
+
+        `WorldPoiChecker` resolves the hazard geometry to road edges through an
+        H3 cover, which is a few milliseconds for a crossing and seconds for a
+        county: a flood warning polygon nobody has narrowed covers around
+        84 000 cells. That is a synchronous CPU burn, it used to run three
+        times per proposal on the loop thread, and a loop that is not running
+        is a replay losing its pacing, a fleet not ticking and a socket going
+        quiet. So it is asked once, in a thread, and the answers are passed
+        down to everything that needs them.
+
+        A checker that raises raises here, exactly as it did when this ran on
+        the loop: `ProposerWorker` notes it and no proposal is made, which is
+        the safe answer to not knowing what a closure would cut off.
+        """
+        return await asyncio.to_thread(self._blocked_now, hazard)
+
+    def _candidates(
+        self,
+        hazard: Hazard,
+        playbook: Playbook,
+        blocked: Mapping[ActionType, tuple[BlockedAccess, ...]],
+    ) -> list[ActionType]:
         """The actions this hazard may be asked for, most restrictive first.
 
         Three filters, in order: the playbook's own list; the severity gate on
@@ -287,7 +343,7 @@ class Proposer:
             if action in BLOCKING_ACTIONS:
                 if hazard.severity < BLOCKING_SEVERITY:
                     continue
-                if self._blocked_by(hazard, action):
+                if blocked.get(action):
                     continue
             usable.append(action)
         return usable
@@ -304,7 +360,11 @@ class Proposer:
         )
 
     async def _choose(
-        self, hazard: Hazard, playbook: Playbook, allowed: list[ActionType]
+        self,
+        hazard: Hazard,
+        playbook: Playbook,
+        allowed: list[ActionType],
+        blocked: Mapping[ActionType, tuple[BlockedAccess, ...]],
     ) -> tuple[ActionType, str]:
         """The model's choice if it picked an allowed action, else the rules.
 
@@ -320,7 +380,7 @@ class Proposer:
                 tier=Tier.JUDGMENT,
                 schema=ProposedAction,
                 system=(PROPOSER_RULES, playbook_block(playbook)),
-                messages=data_block("hazard_context", self._context(hazard, allowed)),
+                messages=data_block("hazard_context", self._context(hazard, allowed, blocked)),
             )
         except LlmError as exc:
             self.llm_failures += 1
@@ -343,7 +403,12 @@ class Proposer:
             return self._rules_choice(allowed, hazard)
         return answer.action, " ".join(answer.reason.split())
 
-    def _context(self, hazard: Hazard, allowed: list[ActionType]) -> str:
+    def _context(
+        self,
+        hazard: Hazard,
+        allowed: list[ActionType],
+        blocked: Mapping[ActionType, tuple[BlockedAccess, ...]],
+    ) -> str:
         """What the model is told about the hazard and the city around it."""
         lines = [
             f"hazard class: {hazard.hazard_class.value}",
@@ -356,17 +421,5 @@ class Proposer:
         ]
         if hazard.rationale:
             lines.append(f"fused rationale: {hazard.rationale}")
-        lines.extend(self._poi_lines(hazard))
+        lines.extend(_poi_lines(blocked))
         return "\n".join(lines)
-
-    def _poi_lines(self, hazard: Hazard) -> list[str]:
-        """The critical facilities a closure here would cut off, as data."""
-        lines: list[str] = []
-        for action in sorted(BLOCKING_ACTIONS, key=lambda item: item.value):
-            for blocked in self._blocked_by(hazard, action)[:MAX_POIS]:
-                lines.append(
-                    f"{action.value} would close every way into {blocked.kind.value} "
-                    f"{blocked.name} ({blocked.access_blocked} of "
-                    f"{blocked.access_total} access edges)"
-                )
-        return lines
