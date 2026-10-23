@@ -1,12 +1,13 @@
 <?xml version='1.0' encoding='utf-8'?>
 <graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
-  <key id="d12" for="edge" attr.name="maxspeed" attr.type="string" />
-  <key id="d11" for="edge" attr.name="length" attr.type="string" />
-  <key id="d10" for="edge" attr.name="reversed" attr.type="string" />
-  <key id="d9" for="edge" attr.name="oneway" attr.type="string" />
-  <key id="d8" for="edge" attr.name="highway" attr.type="string" />
-  <key id="d7" for="edge" attr.name="name" attr.type="string" />
-  <key id="d6" for="edge" attr.name="osmid" attr.type="string" />
+  <key id="d13" for="edge" attr.name="maxspeed" attr.type="string" />
+  <key id="d12" for="edge" attr.name="length" attr.type="string" />
+  <key id="d11" for="edge" attr.name="reversed" attr.type="string" />
+  <key id="d10" for="edge" attr.name="oneway" attr.type="string" />
+  <key id="d9" for="edge" attr.name="highway" attr.type="string" />
+  <key id="d8" for="edge" attr.name="name" attr.type="string" />
+  <key id="d7" for="edge" attr.name="osmid" attr.type="string" />
+  <key id="d6" for="node" attr.name="highway" attr.type="string" />
   <key id="d5" for="node" attr.name="street_count" attr.type="string" />
   <key id="d4" for="node" attr.name="y" attr.type="string" />
   <key id="d3" for="node" attr.name="x" attr.type="string" />
@@ -38,41 +39,49 @@
       <data key="d3">-97.7389581610994</data>
       <data key="d4">30.266</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000005">
       <data key="d3">-97.7389581610994</data>
       <data key="d4">30.2668998308318</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000006">
       <data key="d3">-97.7389581610994</data>
       <data key="d4">30.267799661663606</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000007">
       <data key="d3">-97.7389581610994</data>
       <data key="d4">30.268699492495408</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000008">
       <data key="d3">-97.73791632219881</data>
       <data key="d4">30.266</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000009">
       <data key="d3">-97.73791632219881</data>
       <data key="d4">30.2668998308318</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000010">
       <data key="d3">-97.73791632219881</data>
       <data key="d4">30.267799661663606</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000011">
       <data key="d3">-97.73791632219881</data>
       <data key="d4">30.268699492495408</data>
       <data key="d5">4</data>
+      <data key="d6">traffic_signals</data>
     </node>
     <node id="1000012">
       <data key="d3">-97.73687448329822</data>
@@ -95,436 +104,436 @@
       <data key="d5">4</data>
     </node>
     <edge source="1000000" target="1000004" id="0">
-      <data key="d6">500000</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500000</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000000" target="1000001" id="0">
-      <data key="d6">500001</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500001</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000001" target="1000000" id="0">
-      <data key="d6">500001</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500001</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000001" target="1000005" id="0">
-      <data key="d6">500002</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500002</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000001" target="1000002" id="0">
-      <data key="d6">500003</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500003</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000002" target="1000001" id="0">
-      <data key="d6">500003</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500003</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000002" target="1000006" id="0">
-      <data key="d6">500004</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500004</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000002" target="1000003" id="0">
-      <data key="d6">500005</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500005</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000003" target="1000002" id="0">
-      <data key="d6">500005</data>
-      <data key="d7">N 0 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500005</data>
+      <data key="d8">N 0 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000003" target="1000007" id="0">
-      <data key="d6">500006</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500006</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000004" target="1000000" id="0">
-      <data key="d6">500000</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500000</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000004" target="1000008" id="0">
-      <data key="d6">500007</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500007</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000004" target="1000005" id="0">
-      <data key="d6">500008</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500008</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000005" target="1000001" id="0">
-      <data key="d6">500002</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500002</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000005" target="1000004" id="0">
-      <data key="d6">500008</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500008</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000005" target="1000009" id="0">
-      <data key="d6">500009</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500009</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000005" target="1000006" id="0">
-      <data key="d6">500010</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500010</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000006" target="1000002" id="0">
-      <data key="d6">500004</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500004</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000006" target="1000005" id="0">
-      <data key="d6">500010</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500010</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000006" target="1000010" id="0">
-      <data key="d6">500011</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500011</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000006" target="1000007" id="0">
-      <data key="d6">500012</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500012</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000007" target="1000003" id="0">
-      <data key="d6">500006</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500006</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000007" target="1000006" id="0">
-      <data key="d6">500012</data>
-      <data key="d7">N 1 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500012</data>
+      <data key="d8">N 1 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000007" target="1000011" id="0">
-      <data key="d6">500013</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500013</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000008" target="1000004" id="0">
-      <data key="d6">500007</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500007</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000008" target="1000012" id="0">
-      <data key="d6">500014</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500014</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000008" target="1000009" id="0">
-      <data key="d6">500015</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500015</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000009" target="1000005" id="0">
-      <data key="d6">500009</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500009</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000009" target="1000008" id="0">
-      <data key="d6">500015</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500015</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000009" target="1000013" id="0">
-      <data key="d6">500016</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500016</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000009" target="1000010" id="0">
-      <data key="d6">500017</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500017</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000010" target="1000006" id="0">
-      <data key="d6">500011</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500011</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000010" target="1000009" id="0">
-      <data key="d6">500017</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500017</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000010" target="1000014" id="0">
-      <data key="d6">500018</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500018</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000010" target="1000011" id="0">
-      <data key="d6">500019</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500019</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000011" target="1000007" id="0">
-      <data key="d6">500013</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500013</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000011" target="1000010" id="0">
-      <data key="d6">500019</data>
-      <data key="d7">N 2 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500019</data>
+      <data key="d8">N 2 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000011" target="1000015" id="0">
-      <data key="d6">500020</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500020</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000012" target="1000008" id="0">
-      <data key="d6">500014</data>
-      <data key="d7">W 0 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500014</data>
+      <data key="d8">W 0 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000012" target="1000013" id="0">
-      <data key="d6">500021</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500021</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000013" target="1000009" id="0">
-      <data key="d6">500016</data>
-      <data key="d7">W 1 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500016</data>
+      <data key="d8">W 1 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000013" target="1000012" id="0">
-      <data key="d6">500021</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500021</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000013" target="1000014" id="0">
-      <data key="d6">500022</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500022</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000014" target="1000010" id="0">
-      <data key="d6">500018</data>
-      <data key="d7">W 2 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500018</data>
+      <data key="d8">W 2 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000014" target="1000013" id="0">
-      <data key="d6">500022</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500022</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000014" target="1000015" id="0">
-      <data key="d6">500023</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
+      <data key="d7">500023</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
       <data key="d10">False</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d11">False</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000015" target="1000011" id="0">
-      <data key="d6">500020</data>
-      <data key="d7">W 3 St</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500020</data>
+      <data key="d8">W 3 St</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <edge source="1000015" target="1000014" id="0">
-      <data key="d6">500023</data>
-      <data key="d7">N 3 Ave</data>
-      <data key="d8">residential</data>
-      <data key="d9">False</data>
-      <data key="d10">True</data>
-      <data key="d11">100.0</data>
-      <data key="d12">30 mph</data>
+      <data key="d7">500023</data>
+      <data key="d8">N 3 Ave</data>
+      <data key="d9">residential</data>
+      <data key="d10">False</data>
+      <data key="d11">True</data>
+      <data key="d12">100.0</data>
+      <data key="d13">30 mph</data>
     </edge>
     <data key="d0">epsg:4326</data>
     <data key="d1">True</data>

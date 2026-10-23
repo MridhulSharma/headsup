@@ -6,9 +6,15 @@ scenario means resetting the streams and the simulator, and whatever owns the
 socket has to own those too. So the app's own lifespan brings the agents up
 when a scenario starts and drops them when it stops.
 
-`hu demo s1` is `hu serve` with that scenario started as soon as the server is
-up, which is all the demo ever was: one command, the viewer pointed at
-`ws://localhost:8765/viewer`, and the scenario running.
+`hu demo s1` and `hu demo s2` are `hu serve` with that scenario started as
+soon as the server is up, which is all the demo ever was: one command, the
+viewer pointed at `ws://localhost:8765/viewer`, and the scenario running.
+
+* **s1** is the San Antonio flood: a real NWS and USGS recording, a hazard
+  narrowed to the reach of the gauges that corroborated it, and one NO_ENTRY.
+* **s2** is the downtown Austin signal blackout: a generated feed on the
+  city's own signal map, and three advisories for one hazard -- the junctions
+  become all-way stops, with a density cap and a speed cap beside it.
 
 It also brings up the stand-in operator in `api.second_key`, because S1's
 narrowed flood hazard is a severity 4 and will not publish without a human
@@ -17,6 +23,14 @@ approval token. The stand-in issues one the way a person would, through
 record of a demo claims a person reviewed the hazard. `--no-approve` leaves
 the second key unheld and the gate refusing, which is the other half of the
 demo. `hu serve` never runs it.
+
+S2 asks nothing of the second key and that is the scenario, not a shortcut.
+The signal sentinel publishes its cluster at severity 3; fusion then caps it
+at 2, because the Austin signal feed is not in `AUTHORITATIVE_SOURCES` and is
+the only source the cluster has. Either figure is under the severity 4 that
+`playbooks/signal_outage.yaml` wants a token for, and 0.2 km2 is well under
+its 3 km2. The stand-in is still started and simply never has anything to
+approve.
 
 Nothing here reads the streams or publishes to them. It builds the app, hands
 it to uvicorn, and prints the two URLs a person needs.
@@ -39,7 +53,9 @@ from headsup.llm import mode_from_env
 console = Console()
 err = Console(stderr=True)
 
-#: `hu demo s1` rather than `hu demo s1_flood`: the demo names are short.
+#: `hu demo s1` rather than `hu demo s1_flood`: the demo names are short. Any
+#: scenario id in `scenarios/` also works, so this is a convenience rather
+#: than the list of what can be run.
 DEMO_ALIASES: dict[str, str] = {"s1": "s1_flood", "s2": "s2_blackout"}
 
 _ALIASES = ", ".join(DEMO_ALIASES)

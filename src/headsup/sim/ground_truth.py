@@ -11,6 +11,12 @@ measured. So hazards are an input to the simulation, not a consequence of the
 agent pipeline, and `hu sim` can run them from a scenario file with no agents
 running at all.
 
+A SIGNAL_OUTAGE resolves to the *signalised* intersections inside its area
+and to no edges at all. Signals are what a blackout takes away; the stop-sign
+corners between them keep working, and treating them as dark made an outage
+region's severity a function of how finely OSM happened to split the streets
+in it.
+
 Resolution to edge and node id sets happens once, at load. `snapshot()` is
 memoised by validity boundary, so the tick loop pays a dict lookup on all but
 the two or three ticks per run where the hazard set actually changes.
@@ -20,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -37,6 +43,12 @@ IMPASSABLE_CLASSES: frozenset[HazardClass] = frozenset(
 )
 
 #: Hazard classes that darken intersections rather than close roads.
+#:
+#: Only *signalised* intersections inside the area go dark: a stop-sign corner
+#: has no signal to lose, and counting it would make an outage region as
+#: hostile as the number of intersections in it rather than as the number of
+#: signals in it. `RoadGraph.signalized_nodes` is the authority, and it is OSM
+#: `highway=traffic_signals` carried over from the node tags.
 DARK_CLASSES: frozenset[HazardClass] = frozenset({HazardClass.SIGNAL_OUTAGE})
 
 
@@ -140,7 +152,7 @@ class ScriptedHazardField:
             shape = as_shapely(region.geometry)
             edge_ids = frozenset(graph.edge_ids_in_polygon(shape))
             if region.hazard_class in DARK_CLASSES:
-                nodes = frozenset(_nodes_inside(net, edge_ids, shape))
+                nodes = frozenset(_nodes_inside(net, edge_ids, shape)) & graph.signalized_nodes
                 edge_ids = frozenset()
             else:
                 nodes = frozenset()
@@ -209,7 +221,13 @@ class ScriptedHazardField:
 
 
 def _nodes_inside(net: DriveNetwork, edge_ids: frozenset[int], shape: object) -> set[int]:
-    """Endpoints of the matched edges that actually fall inside the area."""
+    """Endpoints of the matched edges that actually fall inside the area.
+
+    Every endpoint, signalised or not. `from_regions` is what narrows a dark
+    class down to the signals, because the same question - which intersections
+    does this area contain - is also the right one for a class that is not
+    about signals at all.
+    """
     area = as_shapely(shape)
     position = net.world.graph.position_of
     candidates: set[int] = set()
@@ -224,12 +242,33 @@ def _nodes_inside(net: DriveNetwork, edge_ids: frozenset[int], shape: object) ->
     return inside
 
 
-def load_regions(path: str | Path) -> tuple[HazardRegion, ...]:
+def load_regions(
+    path: str | Path,
+    *,
+    valid_from: datetime | None = None,
+    valid_until: datetime | None = None,
+) -> tuple[HazardRegion, ...]:
     """Read a `ground_truth:` block from a scenario YAML file.
 
     Shape, per entry: `{id, class, severity, geometry, valid_from, valid_until}`
     where `geometry` is GeoJSON. A scenario without the block yields nothing,
     so an existing scenario file stays valid.
+
+    `valid_from` and `valid_until` are the window for an entry that names
+    none, and this is the usual case: a descriptor states *where* the ground
+    truth is, and the caller states *when*, because a hazard is in force for
+    the run that replays the scenario rather than for the feed's own
+    timestamps. A run starts when it is started; the recording's clock is
+    months old. An entry that names its own window keeps it.
+
+    An entry can also place itself *within* the run, with
+    `from_offset_minutes` and `until_offset_minutes` measured from
+    `valid_from`. That is how a hazard lines up with the recording that
+    reports it: S2's signals drop out ten minutes into the feed and are
+    restored at eighty-five, and a simulator that darkened them from the
+    first tick would be charging the fleet for an outage no feed had
+    mentioned yet -- which is the sentinel's unavoidable latency plus ten
+    minutes of invented damage.
     """
     import yaml
 
@@ -240,17 +279,57 @@ def load_regions(path: str | Path) -> tuple[HazardRegion, ...]:
     entries = document.get("ground_truth") or []
     regions: list[HazardRegion] = []
     for index, entry in enumerate(entries):
+        region_id = str(entry.get("id") or f"{document.get('id', 'scenario')}-haz-{index}")
         regions.append(
             HazardRegion(
-                id=str(entry.get("id") or f"{document.get('id', 'scenario')}-haz-{index}"),
+                id=region_id,
                 hazard_class=HazardClass(entry["class"]),
                 geometry=entry["geometry"],
-                valid_from=_as_datetime(entry["valid_from"]),
-                valid_until=_as_datetime(entry["valid_until"]),
+                valid_from=_edge(
+                    entry, "valid_from", valid_from, origin=valid_from, path=target, rid=region_id
+                ),
+                valid_until=_edge(
+                    entry, "valid_until", valid_until, origin=valid_from, path=target, rid=region_id
+                ),
                 severity=int(entry.get("severity", 3)),
             )
         )
     return tuple(regions)
+
+
+#: Which offset key shifts which end of the window.
+_OFFSET_KEY = {"valid_from": "from_offset_minutes", "valid_until": "until_offset_minutes"}
+
+
+def _edge(
+    entry: Mapping[str, object],
+    field: str,
+    default: datetime | None,
+    *,
+    origin: datetime | None,
+    path: Path,
+    rid: str,
+) -> datetime:
+    """One end of an entry's window: its own instant, an offset, or the caller's.
+
+    An offset is measured from `origin`, the start of the caller's window, for
+    *both* ends, so a pair of them reads as "from ten minutes in until
+    eighty-five minutes in" rather than one of them counting backwards from
+    the end. An offset with no caller window to measure from is the same
+    error as naming no window at all.
+    """
+    value = entry.get(field)
+    if value is not None:
+        return _as_datetime(value)
+    offset = entry.get(_OFFSET_KEY[field])
+    if offset is not None and origin is not None:
+        return origin + timedelta(minutes=float(offset))  # type: ignore[arg-type]
+    if default is not None:
+        return default
+    raise ValueError(
+        f"{path.as_posix()}: ground truth {rid!r} names no {field} and the caller "
+        "supplied no default window"
+    )
 
 
 def _as_datetime(value: object) -> datetime:

@@ -41,6 +41,22 @@ rules, and `rejected_actions` counts the attempt.
 evidence (the hazard's own), not the severity, not the window, and not the
 `policy_rule` - that comes from `playbook.rule_for(action)`. It chooses one
 action from a closed list and writes a sentence about why.
+
+**One hazard can need more than one action.** A block of dark signals is not
+one problem. Telling a fleet to treat the junctions as all-way stops settles
+the right of way and nothing else: it does not keep the queue the stops create
+off the junction, and it does not slow a vehicle approaching a signal head
+that is dark and cross traffic that may not have been told anything. So
+`playbooks/signal_outage.yaml` allows three actions, and `COMPANIONS` asks for
+all three rather than picking one and discarding the others. Each is a
+proposal of its own, because an advisory carries one action, and the compiler
+gates each one separately - a companion the gate refuses leaves the others
+standing. The masks then union in the simulator, which is what `masks.merge`
+is for.
+
+A companion is not a second guess at the same question: the judgment call
+still chooses the *primary* action alone, and a companion is only asked for if
+the playbook allows it and the critical-access filter left it in place.
 """
 
 from __future__ import annotations
@@ -93,6 +109,20 @@ PREFERENCE: dict[str, tuple[ActionType, ...]] = {
     "WORK_ZONE": (ActionType.NO_ENTRY, ActionType.SPEED_CAP, ActionType.DENSITY_CAP),
     "SEVERE_WEATHER": (ActionType.PAUSE_SERVICE, ActionType.SPEED_CAP, ActionType.DENSITY_CAP),
     "SCHOOL_ZONE": (ActionType.SPEED_CAP, ActionType.DENSITY_CAP),
+}
+
+#: Actions asked for *alongside* the primary one, by hazard class. Ordered as
+#: they are asked for, and every one of them still has to survive
+#: `_candidates`: the playbook is the vocabulary here as everywhere.
+#:
+#: Only SIGNAL_OUTAGE has any. A dark intersection needs the stop rule, a cap
+#: on how many vehicles may be in the junction at once, and a cap on the
+#: approach speed, and asking for one of the three would leave the fleet
+#: holding an incomplete answer. A flood does not work that way - NO_ENTRY and
+#: a SPEED_CAP over the same water are two answers to one question, and the
+#: more restrictive one is the answer.
+COMPANIONS: dict[str, tuple[ActionType, ...]] = {
+    "SIGNAL_OUTAGE": (ActionType.DENSITY_CAP, ActionType.SPEED_CAP),
 }
 
 #: Below this severity nothing is closed. A hazard fusion could not evidence
@@ -222,23 +252,39 @@ class Proposer:
         self.rejected_actions = 0
 
     async def propose(self, hazard: Hazard) -> ProposedAdvisory | None:
-        """One proposal for this hazard, or None if nothing may be asked for.
+        """The primary proposal for this hazard, or None if nothing may be asked.
 
         None has three causes, and all three are normal: the hazard's class has
         no playbook, its window has already closed, or every action the
         playbook allows is ruled out for this geometry.
+
+        `propose_all` is what the pipeline calls; this is the one action the
+        judgment call chose, for a caller that wants a single answer.
+        """
+        proposals = await self.propose_all(hazard)
+        return proposals[0] if proposals else None
+
+    async def propose_all(self, hazard: Hazard) -> list[ProposedAdvisory]:
+        """Every action this hazard is asked for: the primary, then companions.
+
+        One proposal per action, in the order a reader should see them. The
+        primary comes from the judgment call (or the rules path); the
+        companions are `COMPANIONS` for this class, filtered by the same
+        `_candidates` the primary was chosen from, so a playbook that does not
+        allow one simply yields fewer proposals. Empty for the three reasons
+        `propose` documents.
         """
         self.hazards += 1
         playbook = self.playbooks.get(hazard.hazard_class)
         if playbook is None:
             log.info("%s: no playbook for %s", self.name, hazard.hazard_class.value)
-            return None
+            return []
 
         valid_from = utcnow()
         valid_until = self._window(hazard, playbook, valid_from)
         if valid_until is None:
             log.info("%s: %s has no usable window left", self.name, hazard.id)
-            return None
+            return []
 
         blocked = await self._blocked_map(hazard)
         allowed = self._candidates(hazard, playbook, blocked)
@@ -249,9 +295,47 @@ class Proposer:
                 playbook.hazard_class.value,
                 hazard.id,
             )
-            return None
+            return []
 
-        action_type, reason = await self._choose(hazard, playbook, allowed, blocked)
+        primary, reason = await self._choose(hazard, playbook, allowed, blocked)
+        asked: list[tuple[ActionType, str]] = [(primary, reason)]
+        for companion in COMPANIONS.get(hazard.hazard_class.value, ()):
+            if companion == primary or companion not in allowed:
+                continue
+            asked.append((companion, self._companion_reason(hazard, primary, companion)))
+
+        return [
+            self._proposal(
+                hazard,
+                playbook,
+                action_type,
+                why,
+                valid_from=valid_from,
+                valid_until=valid_until,
+            )
+            for action_type, why in asked
+        ]
+
+    def _companion_reason(self, hazard: Hazard, primary: ActionType, companion: ActionType) -> str:
+        """Why a companion was asked for alongside the primary action."""
+        return (
+            f"Asked for alongside {primary.value}: "
+            f"{self.playbooks.require(hazard.hazard_class).policy_rule} allows "
+            f"{companion.value} for this class, and {primary.value} on its own does not "
+            "address what it addresses."
+        )
+
+    def _proposal(
+        self,
+        hazard: Hazard,
+        playbook: Playbook,
+        action_type: ActionType,
+        reason: str,
+        *,
+        valid_from: datetime,
+        valid_until: datetime,
+    ) -> ProposedAdvisory:
+        """One action as a proposal. Counted here, where one is actually made."""
         action = Action(
             type=action_type,
             applies_to=AppliesTo(operators=["*"], vehicle_classes=["*"]),

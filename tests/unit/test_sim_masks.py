@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from fixtures.sim import advisory_for, barrier_edges, grid_net, tiny_config
-from fixtures.world import block_box, grid_world
+from fixtures.world import SIGNALIZED, block_box, grid_world
 from headsup.contracts import ActionType
 from headsup.sim.masks import EMPTY_MASK, Mask, _keyed, merge, resolve, weights_for
 
@@ -74,6 +74,45 @@ def test_all_way_stop_penalises_incoming_edges_only() -> None:
     for edge in range(net.edge_count):
         if edge not in delayed:
             assert weights[edge] == pytest.approx(net.free_flow_s[edge])
+
+
+def test_an_all_way_stop_names_signalised_junctions_and_steers_around_them() -> None:
+    """The delay lands on the dark signals, so the stop-sign corners win.
+
+    "Treat it as an all-way stop" is an instruction about a junction that had
+    a signal. Putting the delay on every intersection in the area would both
+    charge a cost nothing changed and flatten the weights again, which is
+    exactly the routing advantage the unsignalised streets are supposed to
+    have under an outage.
+    """
+    net = grid_net()
+    whole_grid = block_box(-0.2, -0.2, 3.2, 3.2)
+    mask = _resolve(
+        ActionType.ALL_WAY_STOP, geometry=whole_grid.__geo_interface__, params={"delay_s": 4}
+    )
+    assert mask.all_way_stop == SIGNALIZED
+
+    weights = weights_for(mask, net)
+    into_signal = [edge for edge in range(net.edge_count) if net.head[edge] in SIGNALIZED]
+    into_corner = [edge for edge in range(net.edge_count) if net.head[edge] not in SIGNALIZED]
+    assert into_signal and into_corner
+    for edge in into_signal:
+        assert weights[edge] == pytest.approx(net.free_flow_s[edge] + 4)
+    for edge in into_corner:
+        assert weights[edge] == pytest.approx(net.free_flow_s[edge])
+
+
+def test_an_all_way_stop_still_takes_a_node_the_advisory_names_itself() -> None:
+    """`applies_to.nodes` is the advisory's own word, signal or not.
+
+    The signal filter removes intersections the *geometry* happened to clip.
+    A node an advisory names by osmid was chosen, and dropping it would
+    silently discard part of what was asked for.
+    """
+    unsignalised = sorted(set(range(grid_net().node_count)) - SIGNALIZED)[0]
+    osmid = grid_world().graph.osmid_of(unsignalised)
+    mask = _resolve(ActionType.ALL_WAY_STOP, nodes=(osmid,), params={"delay_s": 4})
+    assert unsignalised in mask.all_way_stop
 
 
 def test_density_cap_is_a_queue_and_never_touches_the_weights() -> None:

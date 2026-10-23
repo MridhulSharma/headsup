@@ -7,6 +7,12 @@ flood polygon costs 3.3 ms to resolve and nothing per tick, while testing the
 same polygon per vehicle per tick would cost about 45 ms a tick and miss the
 budget on its own.
 
+`ALL_WAY_STOP` is resolved to the **signalised** junctions in the area, the
+same set `sim.ground_truth` darkens, so an advisory covers every intersection
+the outage took out and no others. The unsignalised corners between them keep
+their free-flow weight, which is what makes `weights_for` prefer a route
+through them.
+
 Two actions deliberately do **not** touch edge weights:
 
 * `DENSITY_CAP` is a queue, not a cost. Putting occupancy into the weights
@@ -212,7 +218,14 @@ def resolve(advisory: Advisory, net: DriveNetwork, cfg: SimConfig) -> Mask:
 
     if kind is ActionType.ALL_WAY_STOP:
         delay = int(params.get("delay_s", cfg.all_way_stop_delay_s))
-        nodes = _endpoint_nodes(net, area_edges) | named_nodes
+        # Signalised junctions only, plus any node the advisory names itself.
+        # "Treat it as an all-way stop" is an instruction about a junction
+        # that had a signal; a stop-sign corner already is one, and putting
+        # the delay on it would both charge a cost nothing changed and, in
+        # `weights_for`, remove the unsignalised streets' routing advantage --
+        # which is the detour the advisory is trying to buy.
+        signalized = net.world.graph.signalized_nodes
+        nodes = (_endpoint_nodes(net, area_edges) & signalized) | named_nodes
         return _keyed(
             Mask(
                 all_way_stop=frozenset(nodes),

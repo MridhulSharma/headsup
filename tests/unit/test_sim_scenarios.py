@@ -12,11 +12,14 @@ runner) that has not run `hu world build`.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 from headsup.agents.compiler.geo import area_km2
 from headsup.agents.compiler.playbooks import PlaybookSet
 from headsup.contracts import HazardClass
+from headsup.scenario.blackout import CLEAR_MIN, ONSET_MIN
 from headsup.sim.config import SimConfig
 from headsup.sim.ground_truth import ScriptedHazardField
 from headsup.sim.masks import EMPTY_KEY
@@ -25,11 +28,11 @@ from headsup.sim.rng import SeedTree
 from headsup.sim.router import Router
 from headsup.sim.scenarios import (
     SCENARIO_CITY,
-    austin_signal_cluster,
     s1_flood_regions,
     s2_blackout_regions,
     salado_creek_corridor,
 )
+from headsup.world.graph import as_shapely
 from headsup.world.model import is_built, load_world
 
 #: The bar the exposure has to clear, for each scenario.
@@ -124,9 +127,43 @@ def test_the_s1_corridor_stays_inside_the_flood_playbooks_area_cap() -> None:
 
 
 def test_the_s2_cluster_stays_inside_the_signal_outage_area_cap() -> None:
+    from samples import T0
+
     book = PlaybookSet.load().require(HazardClass.SIGNAL_OUTAGE)
-    area = area_km2(austin_signal_cluster())
+    regions = s2_blackout_regions(valid_from=T0, valid_until=T0.replace(year=T0.year + 1))
+    area = area_km2(as_shapely(regions[0].geometry))
     assert area <= book.max_area_km2, f"{area:.2f} km2 exceeds the {book.max_area_km2} km2 cap"
+
+
+def test_the_s2_hazard_is_the_descriptors_own_and_runs_on_the_feeds_clock() -> None:
+    """The geometry lives in `scenarios/s2_blackout.yaml`, and so does the timing.
+
+    D2.2 kept a hand-placed box here; the descriptor now carries the hull of
+    the signals the recording actually darkens, and the minutes into the run
+    at which they drop out and come back. The run's *start* is still the
+    caller's -- a run starts when it is started and the recording's own
+    timestamps are months old -- but how the outage sits inside it is the
+    feed's, because a simulator that darkened the signals from the first tick
+    would be charging the fleet for an outage no feed had reported yet.
+    """
+    from samples import T0
+
+    regions = s2_blackout_regions(valid_from=T0, valid_until=T0 + timedelta(hours=24))
+    assert len(regions) == 1
+    region = regions[0]
+    assert region.id == "s2-downtown-signals"
+    assert region.hazard_class is HazardClass.SIGNAL_OUTAGE
+    assert region.severity == 3
+    assert as_shapely(region.geometry).geom_type == "Polygon"
+
+    # `scenarios/s2_blackout.yaml` phases: the first signals drop out at
+    # minute 10 and the grid is back at 85.
+    assert region.valid_from == T0 + timedelta(minutes=ONSET_MIN)
+    assert region.valid_until == T0 + timedelta(minutes=CLEAR_MIN)
+    # Nothing is dark before the feed says so, or after it says the grid is back.
+    assert not region.active_at(T0)
+    assert region.active_at(T0 + timedelta(minutes=(ONSET_MIN + CLEAR_MIN) / 2))
+    assert not region.active_at(T0 + timedelta(minutes=CLEAR_MIN))
 
 
 def test_the_s1_corridor_covers_the_two_gauges_that_crossed_their_action_stage() -> None:
@@ -170,5 +207,7 @@ def test_the_s2_cluster_darkens_real_intersections() -> None:
     hazard = field.hazards[0]
     assert hazard.hazard_class is HazardClass.SIGNAL_OUTAGE
     assert len(hazard.nodes) > 10
+    # Signals only: a stop-sign corner inside the hull has none to lose.
+    assert hazard.nodes <= net.world.graph.signalized_nodes
     # A signal outage darkens intersections; it does not close roads.
     assert hazard.edges == frozenset()
