@@ -49,7 +49,13 @@ from headsup.contracts.enums import (
     VehicleStatus,
     Verdict,
 )
-from headsup.contracts.events import CandidateHazard, CivicEvent, Evidence, Hazard
+from headsup.contracts.events import (
+    CandidateHazard,
+    CivicEvent,
+    Evidence,
+    GeometryNarrowing,
+    Hazard,
+)
 from headsup.contracts.fleet import (
     Ack,
     AssistRequest,
@@ -124,6 +130,7 @@ __all__ = [
     "Evidence",
     "FreeText",
     "Geometry",
+    "GeometryNarrowing",
     "Hazard",
     "HazardClass",
     "Heading",

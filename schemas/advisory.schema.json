@@ -210,6 +210,48 @@
           "minLength": 1,
           "title": "Raw Ref",
           "type": "string"
+        },
+        "geometry": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "LineString": "#/$defs/LineString",
+                  "MultiLineString": "#/$defs/MultiLineString",
+                  "MultiPoint": "#/$defs/MultiPoint",
+                  "MultiPolygon": "#/$defs/MultiPolygon",
+                  "Point": "#/$defs/Point",
+                  "Polygon": "#/$defs/Polygon"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Point"
+                },
+                {
+                  "$ref": "#/$defs/MultiPoint"
+                },
+                {
+                  "$ref": "#/$defs/LineString"
+                },
+                {
+                  "$ref": "#/$defs/MultiLineString"
+                },
+                {
+                  "$ref": "#/$defs/Polygon"
+                },
+                {
+                  "$ref": "#/$defs/MultiPolygon"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Geometry"
         }
       },
       "required": [
@@ -220,6 +262,101 @@
         "raw_ref"
       ],
       "title": "Evidence",
+      "type": "object"
+    },
+    "GeometryNarrowing": {
+      "additionalProperties": false,
+      "description": "Why a fused hazard's area is, or is not, narrower than its feeds' own.\n\nA sentinel publishes the area a feed drew. Fusion may cut that down to the\npart its corroborating observations actually cover - an NWS flood warning\npolygon clipped to the reach of the gauges above their action stage under\nit. Either way the decision is recorded here and travels with the hazard,\nso an audit record carries both the geometry the feed published and the\ngeometry a fleet was told about, and the reason they differ or do not.\n\nNever a widening: `area_km2` is always at or below `original_area_km2`.",
+      "properties": {
+        "narrowed": {
+          "title": "Narrowed",
+          "type": "boolean"
+        },
+        "reason": {
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Reason",
+          "type": "string"
+        },
+        "original_geometry": {
+          "discriminator": {
+            "mapping": {
+              "LineString": "#/$defs/LineString",
+              "MultiLineString": "#/$defs/MultiLineString",
+              "MultiPoint": "#/$defs/MultiPoint",
+              "MultiPolygon": "#/$defs/MultiPolygon",
+              "Point": "#/$defs/Point",
+              "Polygon": "#/$defs/Polygon"
+            },
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "$ref": "#/$defs/MultiPoint"
+            },
+            {
+              "$ref": "#/$defs/LineString"
+            },
+            {
+              "$ref": "#/$defs/MultiLineString"
+            },
+            {
+              "$ref": "#/$defs/Polygon"
+            },
+            {
+              "$ref": "#/$defs/MultiPolygon"
+            }
+          ],
+          "title": "Original Geometry"
+        },
+        "original_area_km2": {
+          "minimum": 0.0,
+          "title": "Original Area Km2",
+          "type": "number"
+        },
+        "area_km2": {
+          "minimum": 0.0,
+          "title": "Area Km2",
+          "type": "number"
+        },
+        "reach_radius_m": {
+          "minimum": 0.0,
+          "title": "Reach Radius M",
+          "type": "number"
+        },
+        "corroborated_by": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:\\-]+$",
+            "type": "string"
+          },
+          "title": "Corroborated By",
+          "type": "array"
+        },
+        "excluded": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9._:\\-]+$",
+            "type": "string"
+          },
+          "title": "Excluded",
+          "type": "array"
+        }
+      },
+      "required": [
+        "narrowed",
+        "reason",
+        "original_geometry",
+        "original_area_km2",
+        "area_km2",
+        "reach_radius_m"
+      ],
+      "title": "GeometryNarrowing",
       "type": "object"
     },
     "Hazard": {
@@ -328,6 +465,17 @@
           ],
           "default": null,
           "title": "Rationale"
+        },
+        "narrowing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GeometryNarrowing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [

@@ -22,6 +22,7 @@ from headsup.agents.compiler.compiler import CompileResult
 from headsup.agents.compiler.rules import two_key_reason
 from headsup.contracts import (
     ActionType,
+    GeometryNarrowing,
     HazardClass,
     HeadsUpModel,
     Identifier,
@@ -77,6 +78,12 @@ class CompileAudit(HeadsUpModel):
     lifetime_cap_minutes: float | None = None
 
     # the second key
+    # what fusion did to the geometry before any of this: both the area the
+    # feeds published and the area that was judged, with the reason they
+    # differ. Carried here so the audit stream alone answers "what was cut,
+    # and why" without a reader having to join it to the hazards stream.
+    hazard_narrowing: GeometryNarrowing | None = None
+
     two_key_required: bool = False
     two_key_reason: AuditText | None = None
     approved_by: Identifier | None = None
@@ -134,6 +141,7 @@ class CompileAudit(HeadsUpModel):
             record.hazard_class = proposal.hazard.hazard_class
             record.severity = proposal.hazard.severity
             record.action = proposal.action.type
+            record.hazard_narrowing = proposal.hazard.narrowing
         if context is not None:
             record.verdict = context.verdict.verdict
             record.policy_rule = context.playbook.rule_for(context.action)

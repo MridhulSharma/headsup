@@ -22,6 +22,7 @@ The rules, in order, and where each one lives:
 | the window is ordered and not already over | `rules` |
 | a critic REVISE narrows, never widens | `rules` |
 | severity 4+ or over the two-key area needs a human token | `approvals` |
+| a proposal refused for want of that token, kept for a retry | `approvals` |
 | hospital, fire and EMS access is never fully closed | `poi` |
 | the advisory validates and signs | `signing` |
 
@@ -37,6 +38,8 @@ from headsup.agents.compiler.approvals import (
     ApprovalStore,
     InMemoryApprovals,
     NoApprovals,
+    PendingCompile,
+    PendingCompiles,
     new_token,
 )
 from headsup.agents.compiler.audit import AuditCheck, CompileAudit, Decision
@@ -110,6 +113,8 @@ __all__ = [
     "InMemoryApprovals",
     "NoApprovals",
     "NullPoiChecker",
+    "PendingCompile",
+    "PendingCompiles",
     "Playbook",
     "PlaybookError",
     "PlaybookSet",

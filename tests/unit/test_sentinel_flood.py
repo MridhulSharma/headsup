@@ -328,3 +328,48 @@ async def test_a_late_event_does_not_rewind_the_clock() -> None:
     await sentinel.on_event(gauge("1.00", at=T0 + timedelta(hours=4)))
     await sentinel.on_event(gauge("1.00", at=T0))
     assert sentinel.now == T0 + timedelta(hours=4)
+
+
+# --- what the citations carry, and what they must not change ----------------
+
+
+async def test_a_gauge_citation_carries_the_gauges_own_point() -> None:
+    """Fusion narrows a flood hazard to its gauges' reach, so it needs where.
+
+    The citation is the only thing that travels, so the point travels on it.
+    Nothing else gains a geometry: the NWS product's own polygon is already
+    the candidate's, and copying it into its citation would be bus traffic for
+    nothing.
+    """
+    sentinel = FloodSentinel()
+    (warning,) = nws_events(alert())
+    (plain,) = await sentinel.on_event(warning)
+    assert [item.geometry for item in plain.evidence] == [None]
+
+    (stronger,) = await sentinel.on_event(gauge("4.77", at=T0 + timedelta(minutes=20)))
+    cited = {item.source: item for item in stronger.evidence}
+    assert cited[Source.NWS].geometry is None
+    gauge_cite = cited[Source.USGS]
+    assert gauge_cite.kind == "gauge_height"
+    assert gauge_cite.geometry is not None
+    assert gauge_cite.geometry.type == "Point"
+    assert tuple(gauge_cite.geometry.coordinates) == pytest.approx(BLANCO_RD)
+
+
+async def test_the_published_polygon_is_the_products_own_however_it_is_cited() -> None:
+    """A3's premise: corroboration changes the confidence, never the area.
+
+    Narrowing a flood hazard to its gauges' reach is fusion's job, and it is
+    only possible because this is true: the sentinel hands on the area the
+    office drew, corroborated or not, so there is always an original to
+    narrow from and an unnarrowed one to refuse.
+    """
+    sentinel = FloodSentinel()
+    (warning,) = nws_events(alert())
+    (plain,) = await sentinel.on_event(warning)
+    published = warning.geometry
+
+    (stronger,) = await sentinel.on_event(gauge("4.77", at=T0 + timedelta(minutes=20)))
+    assert plain.geometry == published
+    assert stronger.geometry == published
+    assert stronger.confidence > plain.confidence

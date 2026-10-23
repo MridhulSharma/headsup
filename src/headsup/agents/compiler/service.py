@@ -9,6 +9,13 @@ the point of having an audit stream at all.
         outcome = await service.publish(proposal, verdict)
         print(outcome.audit.summary())
 
+A proposal refused with `two_key_approved` as its only failed rule is kept in
+`pending`, because a compile happens the instant a proposal is made and
+proposal ids are drawn at random: nobody can issue a token in advance, so
+without this there would be no proposal left to apply one to. `recompile`
+hands the pair back to the same rules. It is a retry, not a bypass - a second
+full trip through the gate, with its own audit record.
+
 Two locks hold the single-writer rule. `Bus(writer="compiler")` refuses to
 `XADD` to `advisories` from any other writer name, and the Redis ACL in
 `headsup.bus.acl` refuses it from any other user. The first is a typo guard;
@@ -25,12 +32,14 @@ from. Here, unguarded means do not start.
 
 from __future__ import annotations
 
+import asyncio
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from types import TracebackType
 from typing import Any
 
+from headsup.agents.compiler.approvals import PendingCompiles
 from headsup.agents.compiler.audit import CompileAudit, Decision
 from headsup.agents.compiler.compiler import (
     ENV_CITY,
@@ -105,6 +114,7 @@ class CompilerService:
         advisories_stream: str = STREAM_ADVISORIES,
         audit_stream: str = STREAM_AUDIT,
         allow_unguarded: bool = False,
+        pending: PendingCompiles | None = None,
     ) -> None:
         """Refuses to start unguarded, however it is constructed.
 
@@ -126,6 +136,9 @@ class CompilerService:
             require_guarded(self.compiler)
         self.advisories_stream = advisories_stream
         self.audit_stream = audit_stream
+        #: The proposals refused only for want of a second key. `recompile`
+        #: reads it; whoever holds the key is told what is in it.
+        self.pending = pending if pending is not None else PendingCompiles()
         self._owns_bus = bus is None
 
     @classmethod
@@ -178,7 +191,12 @@ class CompilerService:
         audit record says `PUBLISH_FAILED` and the `BusError` is re-raised:
         the log never claims an advisory a reader cannot find.
         """
-        result = self.compiler.compile(proposal, verdict, version=version)
+        # In a thread: `compile` is pure and synchronous, and the two things
+        # it does that cost real time - resolving the geometry to road edges
+        # for the critical-access rule, and signing - scale with the area and
+        # would otherwise hold the loop a replay is pacing itself against.
+        result = await asyncio.to_thread(self.compiler.compile, proposal, verdict, version=version)
+        self._remember_or_forget(result)
         stream_id: str | None = None
         decision = Decision.PUBLISHED if result.ok else Decision.REJECTED
         failure: BusError | None = None
@@ -201,3 +219,33 @@ class CompilerService:
         if failure is not None:
             raise failure
         return PublishOutcome(result=result, audit=audit, stream_id=stream_id)
+
+    def _remember_or_forget(self, result: CompileResult) -> None:
+        """Keep a proposal that needs a second key; drop one that no longer does.
+
+        The parsed models are taken off the result rather than the arguments,
+        so a proposal that arrived as a mapping is stored in the form the gate
+        actually judged, and a `recompile` cannot smuggle in a different one.
+        """
+        if result.ok:
+            self.pending.forget(result.proposal_id)
+            return
+        if result.needs_approval and result.proposal is not None and result.context is not None:
+            self.pending.remember(result.proposal, result.context.verdict)
+
+    async def recompile(self, proposal_id: str, *, version: int = 1) -> PublishOutcome | None:
+        """Put a proposal waiting on a second key back through the gate.
+
+        None if nothing is waiting under that id. Otherwise a full second trip
+        through `publish`: every rule runs again, a new audit record is
+        written, and an approval that is for another proposal, has expired or
+        was never issued is refused exactly as it was the first time. This is
+        the only thing that makes `POST /approvals/{proposal_id}` worth
+        anything after the fact, because a compile happens the instant a
+        proposal is made and proposal ids are not predictable.
+        """
+        entry = self.pending.get(proposal_id)
+        if entry is None:
+            return None
+        self.pending.recompiled += 1
+        return await self.publish(entry.proposal, entry.verdict, version=version)

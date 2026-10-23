@@ -41,9 +41,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from headsup.agents.compiler.approvals import ApprovalStore
+from headsup.agents.compiler.approvals import ApprovalStore, PendingCompiles
 from headsup.agents.compiler.compiler import Compiler, CompilerError
-from headsup.agents.compiler.service import CompilerService
+from headsup.agents.compiler.service import CompilerService, PublishOutcome
 from headsup.agents.fusion import Fusion
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
@@ -170,6 +170,22 @@ class _Run:
             self.errors.append(problem)
 
 
+def _load_city(city: str) -> Any:
+    """Read a city's world and warm the routing stack, in one worker thread.
+
+    `load_world` caches, so every later caller in this process gets this one
+    for free. The import is here rather than at module scope for the reason
+    `headsup.world` is always imported late: it drags in osmnx, networkx,
+    igraph, pyproj and scipy, and a process that only reads the bus has no use
+    for any of them. Importing it on the event loop is what this function
+    exists to avoid - scipy alone is over a second.
+    """
+    world = load_world(city)
+    import scipy.sparse.linalg  # noqa: F401 - warmed here, used by routing later
+
+    return world
+
+
 class ScenarioRunner:
     """The one scenario a server may have running, and how it is reset."""
 
@@ -181,6 +197,7 @@ class ScenarioRunner:
         registry: OperatorRegistry,
         *,
         approvals: ApprovalStore | None = None,
+        pending: PendingCompiles | None = None,
         namespace: str = "",
     ) -> None:
         self.bus = bus
@@ -188,6 +205,10 @@ class ScenarioRunner:
         self.index = index
         self.registry = registry
         self.approvals = approvals
+        #: The proposals this server's gate refused only for want of a second
+        #: key. Owned here rather than inside the run, because whoever holds
+        #: the key talks to the API, not to the compiler.
+        self.pending = pending if pending is not None else PendingCompiles()
         self.namespace = namespace
         self._run: _Run | None = None
         self._state = ScenarioState.IDLE
@@ -285,7 +306,14 @@ class ScenarioRunner:
         )
         try:
             cfg.validate()
-            world = load_world(card.city)
+            # In a thread, with the routing stack warmed in the same place.
+            # Reading the city graph is a graphml XML parse of several seconds
+            # and the first route pulls scipy in behind it; both used to run
+            # here on the event loop, where they stalled the viewer socket and
+            # timed out whatever Redis read the tailer had in flight. A start
+            # request is allowed to take seconds. It is not allowed to stop
+            # the loop for them.
+            world = await asyncio.to_thread(_load_city, card.city)
         except (ValueError, WorldError) as exc:
             raise ScenarioError(str(exc)) from exc
 
@@ -295,17 +323,18 @@ class ScenarioRunner:
         await self.bus.delete_streams(ALL_STREAMS)
         self.index.clear()
         self.hub.reset()
+        self.pending.clear()
         self.registry.set_city(card.city)
 
         start = datetime.now(UTC).replace(microsecond=0)
-        hazards, net = self._ground_truth(card, cfg, world, start)
+        hazards, net = await asyncio.to_thread(self._ground_truth, card, cfg, world, start)
 
         client = LlmClient.from_env(bus=self.bus) if options.llm else None
         compiler_bus = Bus(
             url_for(Role.COMPILER), namespace=self.namespace, writer=PROTECTED_WRITER
         )
         try:
-            service = self._compiler_service(card, compiler_bus)
+            service = await asyncio.to_thread(self._compiler_service, card, compiler_bus)
         except (CompilerError, LlmError, WorldError) as exc:
             await compiler_bus.close()
             if client is not None:
@@ -378,7 +407,7 @@ class ScenarioRunner:
             approvals=self.approvals,
             issuer=f"headsup/{card.city}",
         )
-        return CompilerService(bus, compiler)
+        return CompilerService(bus, compiler, pending=self.pending)
 
     def _agents(self, run: _Run) -> list[SentinelWorker | FusionWorker | ProposerWorker]:
         """The scenario's sentinel, fusion and the proposer, as workers.
@@ -490,6 +519,20 @@ class ScenarioRunner:
             frame["type"] = FRAME_GHOST_TELEMETRY
         self.hub.publish(frame)
 
+    # --- the second key -----------------------------------------------------
+
+    async def recompile(self, proposal_id: str) -> PublishOutcome | None:
+        """Put a proposal back through the gate, now that a token exists.
+
+        None when nothing is running or nothing is waiting under that id. The
+        gate decides; this only hands it back the pair it refused, and the new
+        audit record says what it decided the second time.
+        """
+        run = self._run
+        if run is None:
+            return None
+        return await run.service.recompile(proposal_id)
+
     # --- stopping -----------------------------------------------------------
 
     async def stop(self) -> dict[str, Any]:
@@ -515,6 +558,7 @@ class ScenarioRunner:
 
             self._state = ScenarioState.IDLE
             self.index.clear()
+            self.pending.clear()
             idle = self.status()
             self.hub.reset(idle)
             self.hub.publish(idle)

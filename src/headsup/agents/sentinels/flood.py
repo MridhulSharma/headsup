@@ -102,6 +102,11 @@ GAUGE_WEIGHT = 0.3
 MAX_CONFIDENCE = 0.95
 
 #: How close a gauge has to be to a flood polygon to be about the same water.
+#:
+#: A corroboration radius, and only that: it answers "does this gauge count as
+#: evidence for this warning?". It is not how far from the gauge the water is
+#: believed to be on the road - that is `fusion.FLOOD_REACH_RADIUS_M`, which is
+#: a different question and a different number.
 GAUGE_RADIUS_M = 2000.0
 
 #: Damage-threat values worth a confidence bump.
@@ -398,7 +403,15 @@ class FloodSentinel(Sentinel):
 
         detected_at = utcnow()
         evidence = [Evidence.from_event(alert.event)]
-        evidence.extend(Evidence.from_event(gauge.event) for gauge in gauges)
+        # The gauge citations carry the gauge's own point. Only the gauges in
+        # `_corroborating` are cited, and those are exactly the ones above
+        # their action stage within `GAUGE_RADIUS_M` of this polygon, so a
+        # FLOOD citation with a point on it is a corroborating gauge and
+        # fusion can narrow the hazard to the reach those gauges cover. This
+        # adds nothing to `geometry` below, which is still the product's own
+        # polygon: a warning with no gauge above stage cites no point and is
+        # published exactly as wide as the office drew it.
+        evidence.extend(Evidence.from_event(gauge.event, with_geometry=True) for gauge in gauges)
 
         return CandidateHazard(
             id=stable_id(

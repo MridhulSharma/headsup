@@ -17,8 +17,11 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from fixtures.ingest import POLYGON_ALERT, WARNING_RING, gauge_reading, nws_body
+from headsup.agents.compiler.geo import area_km2
+from headsup.agents.compiler.playbooks import default_playbooks
 from headsup.agents.fusion import (
     CAPPED_SEVERITY,
+    FLOOD_REACH_RADIUS_M,
     FUSION_RULES,
     MAX_CONFIDENCE,
     STALE_FLOOR,
@@ -30,7 +33,9 @@ from headsup.contracts import (
     CandidateHazard,
     CivicEvent,
     Evidence,
+    GeometryNarrowing,
     HazardClass,
+    Point,
     Polygon,
     Source,
 )
@@ -412,3 +417,287 @@ async def test_the_model_cannot_change_the_severity_or_the_geometry() -> None:
     assert hazard.severity == 2
     assert hazard.confidence == pytest.approx(0.4, abs=1e-4)
     assert hazard.geometry.coordinates == [WARNING_RING]
+
+
+# --- narrowing a flood hazard to its gauges' reach ----------------------------
+
+#: A warning polygon with room in it for a whole gauge reach. `WARNING_RING`
+#: is a thin sliver that Blanco Rd sits on the edge of, which is the right
+#: shape for testing grouping and the wrong one for testing a clip: the
+#: intersection there is a slice of the reach rather than the reach. About
+#: 12 km square, centred so a 1.5 km disk around Blanco Rd is well inside it.
+BEXAR_RING = [
+    [-98.58, 29.51],
+    [-98.46, 29.51],
+    [-98.46, 29.62],
+    [-98.58, 29.62],
+    [-98.58, 29.51],
+]
+
+#: A second gauge on the same creek, 4 km upstream: far enough that its reach
+#: does not overlap Blanco Rd's, and still inside `BEXAR_RING`.
+UPSTREAM = (-98.4900, 29.5900)
+
+
+def gauge_citation(name: str, *, point: tuple[float, float] = BLANCO_RD) -> Evidence:
+    """A USGS gauge citation carrying its own location.
+
+    The flood sentinel attaches a point to exactly the gauges that are above
+    their action stage and within reach of the polygon, so this is what a
+    corroborated flood candidate's gauge evidence looks like.
+    """
+    return Evidence(
+        event_id=f"ev_{name}",
+        source=Source.USGS,
+        kind="gauge_height",
+        observed_at=T0 + timedelta(minutes=145),
+        raw_ref=f"data/recordings/test/{name}.jsonl#0",
+        geometry=Point(coordinates=list(point)),
+    )
+
+
+def corroborated(
+    *,
+    name: str = "corroborated",
+    ring: list[list[float]] | None = None,
+    gauges: tuple[Evidence, ...] = (),
+) -> CandidateHazard:
+    """A flood warning candidate, with or without gauge citations under it."""
+    base = candidate(name=name, ring=ring or BEXAR_RING)
+    return base.model_copy(update={"evidence": [*base.evidence, *gauges]})
+
+
+#: pi * 1.5^2, the area of one gauge's reach when the polygon contains all of
+#: it, measured geodesically rather than in the metric frame it was buffered in.
+ONE_GAUGE_REACH_KM2 = 7.0447
+
+
+async def test_a_corroborated_flood_hazard_is_clipped_to_its_gauges_reach() -> None:
+    """The warning polygon, cut down to what a gauge above stage covers."""
+    fusion = Fusion()
+    hazard = await fusion.on_candidate(corroborated(gauges=(gauge_citation("blanco"),)))
+
+    published = Polygon(coordinates=[BEXAR_RING])
+    assert area_km2(hazard.geometry) == pytest.approx(ONE_GAUGE_REACH_KM2, abs=0.01)
+    assert area_km2(hazard.geometry) < area_km2(published)
+    # Inside the polygon the office drew, to the last vertex.
+    assert published.to_shapely().buffer(0).covers(hazard.geometry.to_shapely())
+
+    record = hazard.narrowing
+    assert record is not None
+    assert record.narrowed is True
+    assert record.reach_radius_m == FLOOD_REACH_RADIUS_M
+    assert record.corroborated_by == ["ev_blanco"]
+    assert record.original_geometry == published
+    assert record.original_area_km2 == pytest.approx(area_km2(published), abs=0.01)
+    assert record.area_km2 == pytest.approx(ONE_GAUGE_REACH_KM2, abs=0.01)
+    assert "narrowed from" in record.reason.lower()
+
+
+async def test_an_uncorroborated_flood_warning_keeps_its_whole_polygon() -> None:
+    """A3: a warning is active, no gauge is above stage, nothing is narrowed.
+
+    This is load-bearing. The attack is a live NWS warning with every gauge
+    under it reading normal, and the answer has to be the office's own polygon
+    going to the compiler to be refused on its area - not a polygon fusion
+    invented a reach for.
+    """
+    fusion = Fusion()
+    hazard = await fusion.on_candidate(corroborated(name="no_gauge"))
+
+    assert hazard.geometry == Polygon(coordinates=[BEXAR_RING])
+    record = hazard.narrowing
+    assert record is not None
+    assert record.narrowed is False
+    assert record.area_km2 == record.original_area_km2
+    assert record.corroborated_by == []
+    assert "area cap" in record.reason
+
+
+async def test_a_gauge_whose_reach_misses_the_polygon_leaves_it_whole() -> None:
+    """An empty intersection is discarded, with the reason on the record."""
+    fusion = Fusion()
+    hazard = await fusion.on_candidate(
+        corroborated(name="elsewhere", gauges=(gauge_citation("far", point=(-106.48, 31.77)),))
+    )
+
+    assert hazard.geometry == Polygon(coordinates=[BEXAR_RING])
+    record = hazard.narrowing
+    assert record is not None
+    assert record.narrowed is False
+    assert record.area_km2 == record.original_area_km2
+    # The citation is still named: an audit record has to show which
+    # observation was tried and came to nothing.
+    assert record.corroborated_by == ["ev_far"]
+    assert "empty" in record.reason
+
+
+async def test_the_clip_keeps_every_evidence_record() -> None:
+    """Narrowing changes the geometry and nothing else about the citations."""
+    candidate_in = corroborated(
+        gauges=(gauge_citation("blanco"), gauge_citation("wilderness", point=(-98.5250, 29.5700)))
+    )
+    hazard = await Fusion().on_candidate(candidate_in)
+
+    assert hazard.narrowing is not None and hazard.narrowing.narrowed is True
+    # Every citation, once each: the warning whose polygon was cut back as
+    # well as the gauges whose reach cut it.
+    assert len(hazard.evidence) == len(candidate_in.evidence)
+    assert {item.event_id for item in hazard.evidence} == {
+        item.event_id for item in candidate_in.evidence
+    }
+    assert {item.source for item in hazard.evidence} == {Source.NWS, Source.USGS}
+    assert hazard.narrowing.corroborated_by == ["ev_blanco", "ev_wilderness"]
+
+
+async def test_two_gauges_reach_further_than_one_and_never_past_the_polygon() -> None:
+    # One fusion each: two candidates on the same ring would group, and then
+    # both hazards would be measured over the same accumulated evidence.
+    one = await Fusion().on_candidate(corroborated(name="one", gauges=(gauge_citation("blanco"),)))
+    both = await Fusion().on_candidate(
+        corroborated(
+            name="both",
+            gauges=(gauge_citation("blanco"), gauge_citation("upstream", point=UPSTREAM)),
+        )
+    )
+    assert area_km2(both.geometry) == pytest.approx(2 * ONE_GAUGE_REACH_KM2, abs=0.05)
+    assert area_km2(both.geometry) > area_km2(one.geometry)
+    published = Polygon(coordinates=[BEXAR_RING]).to_shapely().buffer(0)
+    assert published.covers(both.geometry.to_shapely())
+    assert both.narrowing is not None
+    assert both.narrowing.area_km2 <= both.narrowing.original_area_km2
+
+
+async def test_the_reach_radius_is_configuration_not_a_constant() -> None:
+    """A smaller configured reach narrows further; nothing else changes."""
+    tight = Fusion(flood_reach_radius_m=500.0)
+    hazard = await tight.on_candidate(corroborated(gauges=(gauge_citation("blanco"),)))
+    assert hazard.narrowing is not None
+    assert hazard.narrowing.reach_radius_m == 500.0
+    # pi * 0.5^2 = 0.785 km2.
+    assert area_km2(hazard.geometry) == pytest.approx(0.7827, abs=0.01)
+
+
+async def test_a_class_with_no_reach_rule_is_not_narrowed_at_all() -> None:
+    """Only FLOOD has something wider to be cut down from."""
+    hazard = await Fusion().on_candidate(
+        candidate(name="dark_signals", hazard_class=HazardClass.SIGNAL_OUTAGE, severity=3)
+    )
+    assert hazard.narrowing is None
+    assert hazard.geometry == Polygon(coordinates=[WARNING_RING])
+
+
+async def test_a_narrowing_record_may_never_describe_a_widening() -> None:
+    """The contract refuses it, whatever produced it."""
+    with pytest.raises(ValueError, match="may never widen"):
+        GeometryNarrowing(
+            narrowed=True,
+            reason="a clip that grew the hazard",
+            original_geometry=Polygon(coordinates=[WARNING_RING]),
+            original_area_km2=10.0,
+            area_km2=11.0,
+            reach_radius_m=FLOOD_REACH_RADIUS_M,
+        )
+
+
+async def test_the_narrowing_reason_reaches_the_rationale_a_human_reads() -> None:
+    """Both paths: the model's paragraph and the rules-only one."""
+    gauges = (gauge_citation("blanco"),)
+    for fusion in (Fusion(llm=mock_llm()), Fusion()):
+        hazard = await fusion.on_candidate(corroborated(gauges=gauges))
+        assert hazard.rationale is not None
+        assert "geometry: narrowed from" in hazard.rationale.lower()
+
+
+# --- two reaches that cannot both be advised on -------------------------------
+
+#: `playbooks/flood.yaml` max_area_km2, read from the file the compiler reads.
+FLOOD_CAP_KM2 = default_playbooks().require(HazardClass.FLOOD).max_area_km2
+
+
+async def test_two_disjoint_reaches_over_the_cap_renew_the_one_in_force() -> None:
+    """A second crossing must not cost a fleet the advisory on the first.
+
+    Two 1.5 km reaches 4 km apart are 14.09 km2 together, over the 12 km2
+    flood cap, so emitting both would have the compiler refuse the renewal and
+    the advisory already covering Blanco Rd would lapse on its own window.
+    The hazard is renewed against the reach in force instead, and the one left
+    out is named.
+    """
+    fusion = Fusion()
+    first = await fusion.on_candidate(corroborated(name="one", gauges=(gauge_citation("blanco"),)))
+    assert first.narrowing is not None
+    assert first.narrowing.area_km2 == pytest.approx(ONE_GAUGE_REACH_KM2, abs=0.01)
+    assert first.narrowing.excluded == []
+
+    second = await fusion.on_candidate(
+        corroborated(name="two", gauges=(gauge_citation("upstream", point=UPSTREAM),))
+    )
+    record = second.narrowing
+    assert record is not None
+    # One reach, not two: a single polygon the compiler will pass.
+    assert second.geometry.type == "Polygon"
+    assert record.area_km2 == pytest.approx(ONE_GAUGE_REACH_KM2, abs=0.01)
+    assert record.area_km2 <= FLOOD_CAP_KM2
+    assert record.excluded == ["ev_upstream"]
+    assert record.corroborated_by == ["ev_blanco"]
+    assert "renewed against the reach the advisory in force already covers" in record.reason
+    assert "ev_upstream" in record.reason
+    # One hazard throughout, and the reach it renews is the one it held.
+    assert second.id == first.id
+    assert second.geometry.to_shapely().intersects(first.geometry.to_shapely())
+    # The excluded gauge is still evidence for the hazard; it just does not
+    # shape the area. Dropping the citation would lose why the hazard is
+    # believed at all.
+    assert "ev_upstream" in {item.event_id for item in second.evidence}
+
+
+async def test_disjoint_reaches_with_nothing_in_force_go_to_the_compiler() -> None:
+    """With no advisory to renew, fusion picks no favourite among reaches.
+
+    Both are emitted, over the cap, and the gate refuses - which is the right
+    answer: nothing is in force to protect, and choosing one crossing over
+    another on no evidence is not fusion's call to make.
+    """
+    hazard = await Fusion().on_candidate(
+        corroborated(
+            gauges=(gauge_citation("blanco"), gauge_citation("upstream", point=UPSTREAM)),
+        )
+    )
+    record = hazard.narrowing
+    assert record is not None
+    assert hazard.geometry.type == "MultiPolygon"
+    assert record.area_km2 == pytest.approx(2 * ONE_GAUGE_REACH_KM2, abs=0.05)
+    assert record.area_km2 > FLOOD_CAP_KM2
+    assert record.excluded == []
+
+
+async def test_disjoint_reaches_inside_the_cap_are_both_kept() -> None:
+    """Nothing is dropped while both reaches fit. Two 1 km reaches is 6.3 km2."""
+    fusion = Fusion(flood_reach_radius_m=1000.0)
+    await fusion.on_candidate(corroborated(name="one", gauges=(gauge_citation("blanco"),)))
+    second = await fusion.on_candidate(
+        corroborated(name="two", gauges=(gauge_citation("upstream", point=UPSTREAM),))
+    )
+    record = second.narrowing
+    assert record is not None
+    assert second.geometry.type == "MultiPolygon"
+    assert record.area_km2 <= FLOOD_CAP_KM2
+    assert record.excluded == []
+    assert record.corroborated_by == ["ev_blanco", "ev_upstream"]
+
+
+async def test_the_renewal_never_widens_and_never_raises_a_cap() -> None:
+    """Whatever it keeps is a subset of what the feeds published."""
+    fusion = Fusion()
+    await fusion.on_candidate(corroborated(name="one", gauges=(gauge_citation("blanco"),)))
+    second = await fusion.on_candidate(
+        corroborated(name="two", gauges=(gauge_citation("upstream", point=UPSTREAM),))
+    )
+    record = second.narrowing
+    assert record is not None
+    published = Polygon(coordinates=[BEXAR_RING]).to_shapely().buffer(0)
+    assert published.covers(second.geometry.to_shapely())
+    assert record.area_km2 <= record.original_area_km2
+    # The cap it read is the playbook's, unchanged.
+    assert default_playbooks().require(HazardClass.FLOOD).max_area_km2 == FLOOD_CAP_KM2
