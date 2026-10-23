@@ -5,6 +5,8 @@ import { initGeoFileImport } from '../ui/geoFileImport.js';
 import { initImageryBoxTool } from '../ui/imageryBoxTool.js';
 import { createRecentImageryPanel } from '../ui/recentImagery.js';
 import { initGevVoiceCommands } from '../voice/gevRealtime.js';
+import { cancelHeadsupFlight, flyToHeadsupView } from '../headsup/camera.js';
+import { startHeadsupConsole } from '../headsup/console.js';
 import { installViews, isEmbeddedInline } from './embed.js';
 import { installScopeMask, destroyScopeMask } from '../scopeMask.js';
 import {
@@ -15,7 +17,14 @@ import {
   releaseContinuousRender,
 } from '../renderGovernor.js';
 
-/** Attach scene tools, rendering listeners and the application debug handle. */
+/**
+ * Attach scene tools, rendering listeners and the application debug handle.
+ *
+ * `voiceAgent: false` skips the Realtime voice agent outright — not just its
+ * card, the whole subsystem — and `headsupMode` starts the Heads Up console
+ * over the chrome this phase has just finished building. Both are mode
+ * choices made by the entry; see src/headsup/mode.js.
+ */
 export function createApplicationTools({
   scene,
   controls,
@@ -23,6 +32,9 @@ export function createApplicationTools({
   loadingScreen,
   placeSearch,
   voice = {},
+  voiceAgent = true,
+  headsupMode = null,
+  headsupScenarios = null,
   startChrome,
   onSceneDirector,
   sceneDataPacks,
@@ -171,33 +183,74 @@ export function createApplicationTools({
   defer(() => {
     if (window.__godsEyeView === debug) delete window.__godsEyeView;
   });
-  const voiceCommands = initGevVoiceCommands({
-    ...voice,
-    floorServices: operations.surface.groundFloor,
-    annotationResolver: operations.annotationResolver,
-    searchNavigation: operations.searchAndFlyTo,
-    signal,
-    placeSearch,
-    viewer,
-    styleManager,
-    dataManager,
-    sceneDirector,
-    annotations,
-  });
-  defer(() => {
-    voiceCommands.stop({ removeUi: true });
-    if (window.__gevVoiceCommands === voiceCommands)
-      delete window.__gevVoiceCommands;
-  });
-  debug.voiceCommands = voiceCommands;
+  const voiceCommands = voiceAgent
+    ? initGevVoiceCommands({
+        ...voice,
+        floorServices: operations.surface.groundFloor,
+        annotationResolver: operations.annotationResolver,
+        searchNavigation: operations.searchAndFlyTo,
+        signal,
+        placeSearch,
+        viewer,
+        styleManager,
+        dataManager,
+        sceneDirector,
+        annotations,
+      })
+    : null;
+  if (voiceCommands) {
+    defer(() => {
+      voiceCommands.stop({ removeUi: true });
+      if (window.__gevVoiceCommands === voiceCommands)
+        delete window.__gevVoiceCommands;
+    });
+    debug.voiceCommands = voiceCommands;
+  }
   defer(
     installViews({
       shell: styleManager,
       viewer,
       dataManager,
-      run: (name, args) => voiceCommands.runner(name, args, { signal }),
+      // The action runner belongs to the voice subsystem. Without it a linked
+      // annotation or an embed view request has nothing to execute, and says
+      // so rather than failing silently.
+      run: voiceCommands
+        ? (name, args) => voiceCommands.runner(name, args, { signal })
+        : (name) => {
+            console.warn(
+              `[Views] ${name} needs the action runner, which this mode does not start`,
+            );
+            return Promise.resolve(null);
+          },
       signal,
     }),
   );
-  return { sceneDirector, annotations, voiceCommands };
+  let headsupConsole = null;
+  if (headsupMode?.headsUp) {
+    const headsupLayer = dataManager.layers.get('headsup')?.module;
+    if (!headsupLayer || !headsupScenarios) {
+      console.warn(
+        '[HeadsUp] Heads Up mode needs the headsup layer and a scenario client',
+      );
+    } else {
+      headsupConsole = startHeadsupConsole({
+        mode: headsupMode,
+        layer: headsupLayer,
+        setLayerEnabled: (enabled) =>
+          dataManager.setEnabled('headsup', enabled, {
+            origin: 'programmatic',
+          }),
+        hud: styleManager.hud,
+        flyTo: (view) => flyToHeadsupView(viewer, view),
+        scenarios: headsupScenarios,
+        signal,
+      });
+      defer(() => {
+        headsupConsole.destroy();
+        cancelHeadsupFlight(viewer);
+      });
+      debug.headsupConsole = headsupConsole;
+    }
+  }
+  return { sceneDirector, annotations, voiceCommands, headsupConsole };
 }

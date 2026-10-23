@@ -21,6 +21,7 @@ import { createWindSource } from '../layers/wind/source.js';
 import { createFirmsSource } from '../layers/firms/source.js';
 import { createMapillarySource } from '../layers/streetLevel/providers/mapillary/source.js';
 import {
+  HEADSUP_MOCK_VIEWER_ENDPOINT,
   HEADSUP_VIEWER_ENDPOINT,
   createHeadsupViewerSource,
 } from '../layers/headsup/source.js';
@@ -61,8 +62,13 @@ export function createStandaloneLayerSources(overrides = {}) {
       token: import.meta.env?.MAPILLARY_CLIENT_TOKEN || '',
     }),
     headsup: createHeadsupViewerSource({
+      // The real API first, the mock second; either override replaces one
+      // rung of that ladder without disturbing the other.
       endpoint:
         import.meta.env?.VITE_HEADSUP_VIEWER_URL || HEADSUP_VIEWER_ENDPOINT,
+      fallbackEndpoint:
+        import.meta.env?.VITE_HEADSUP_VIEWER_FALLBACK_URL ||
+        HEADSUP_MOCK_VIEWER_ENDPOINT,
     }),
   };
   for (const name of Object.keys(overrides)) {

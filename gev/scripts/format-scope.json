@@ -815,6 +815,7 @@
   "src/layers/cctv/videoPlayback.test.mjs",
   "src/ui/cctvVideo.test.mjs",
   "src/ui/styles/weather.css",
+  "src/ui/styles/headsup-mode.css",
   "src/layers/weather/index.js",
   "src/layers/weather/clock.js",
   "src/layers/weather/clock.test.mjs",
@@ -1071,5 +1072,14 @@
   "src/terrainHeightsBounds.test.mjs",
   "src/layers/headsup/records.test.mjs",
   "src/layers/headsup/expiry.test.mjs",
-  "src/layers/headsup/ownership.test.mjs"
+  "src/layers/headsup/ownership.test.mjs",
+  "src/layers/headsup/source.test.mjs",
+  "src/headsup/mode.test.mjs",
+  "src/headsup/scenarios.test.mjs",
+  "src/headsup/console.test.mjs",
+  "src/layers/headsup/events.test.mjs",
+  "src/testSupport/headsupConsoleDocument.mjs",
+  "scripts/qa-headsup-load.mjs",
+  "src/headsup/pipeline.test.mjs",
+  "src/headsup/layout.test.mjs"
 ]

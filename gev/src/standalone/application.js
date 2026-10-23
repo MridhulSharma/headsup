@@ -9,6 +9,9 @@ import { createStandaloneTools } from './tools.js';
 import { resolveLocale, applyDocumentLanguage } from '../i18n/locale.js';
 import { applyDocumentTranslations, setLocale } from '../i18n/index.js';
 import { createGoogleTokenSource } from '../maps/googleTokens.js';
+import { createHeadsupModeConfig, markHeadsupMode } from '../headsup/mode.js';
+import { createScenarioClient } from '../headsup/scenarios.js';
+import { startStandaloneChromeWithoutSettings } from './startupChrome.js';
 
 // The existing controls and layer catalog contain page-scoped state.
 let constructed = false;
@@ -22,6 +25,9 @@ export function createStandaloneApplication({
   sources = {},
   streetLevelProviders,
   allowQaRegistration = false,
+  search = globalThis.location?.search ?? '',
+  scenarioBaseUrl,
+  scenarioFallbackUrl,
 }) {
   if (constructed)
     throw new Error('The standalone application already owns this page');
@@ -34,6 +40,21 @@ export function createStandaloneApplication({
   setLocale(activeLocale);
   applyDocumentLanguage(document, activeLocale);
   applyDocumentTranslations(document);
+  // Which application this page is, decided before any UI is built so the
+  // stylesheet's one hook is in place for the first painted frame and no
+  // readout Heads Up mode hides is ever shown and then withdrawn.
+  const mode = createHeadsupModeConfig({
+    search,
+    scenarioBaseUrl,
+    ...(scenarioFallbackUrl === undefined ? {} : { scenarioFallbackUrl }),
+  });
+  markHeadsupMode(document, mode);
+  const headsupScenarios = mode.headsUp
+    ? createScenarioClient({
+        baseUrl: mode.scenarioBaseUrl,
+        fallbackUrl: mode.scenarioFallbackUrl,
+      })
+    : null;
   const loadingScreen = document.getElementById('loading-screen');
   const loaderStatus = loadingScreen.querySelector('.loader-status');
   let placeSearch;
@@ -82,8 +103,28 @@ export function createStandaloneApplication({
         catalog,
       }),
     createData: (context) =>
-      createStandaloneData({ ...context, allowQaRegistration, catalog }),
+      createStandaloneData({
+        ...context,
+        allowQaRegistration,
+        catalog,
+        omitLayers: mode.omitLayers,
+        mountLayerPanel: mode.upstreamLayerPanel,
+      }),
     createTools: (context) =>
-      createStandaloneTools({ ...context, loadingScreen, placeSearch, voice }),
+      createStandaloneTools({
+        ...context,
+        loadingScreen,
+        placeSearch,
+        voice,
+        voiceAgent: mode.voiceAgent,
+        headsupMode: mode,
+        headsupScenarios,
+        // The POWER UP surface offers provider keys. Heads Up mode has no
+        // provider to key, so the surface is never built rather than built
+        // and hidden.
+        ...(mode.providerSettings
+          ? {}
+          : { startChrome: startStandaloneChromeWithoutSettings }),
+      }),
   });
 }

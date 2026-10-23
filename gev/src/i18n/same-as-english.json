@@ -108,8 +108,11 @@
     "panel",
     "view band|GLOBAL",
     "voice|ERROR",
+    "{code} {name}",
+    "{name} ({city})",
     "{rate} msg/s",
     "{speed} kn",
+    "{speed}×",
     "{type}  SPD: {speed}  HDG: {heading}",
     "{value} KM",
     "{value} KM/H",
@@ -132,6 +135,9 @@
     "R&B",
     "REC",
     "VS",
-    "WHOT/BHOT"
+    "WHOT/BHOT",
+    "{code} {name}",
+    "{name} ({city})",
+    "{speed}×"
   ]
 }

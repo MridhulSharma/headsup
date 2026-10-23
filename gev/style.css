@@ -29,4 +29,9 @@
 @import './src/ui/styles/weather.css';
 @import './src/ui/styles/panel-surfaces.css';
 @import './src/ui/styles/segmented-control.css';
+/* Heads Up mode goes after every component sheet, so it can hide upstream
+   chrome without out-specifying it, and BEFORE cyber.css, which must stay
+   the last import (src/ui/cyberTheme.test.mjs pins that): a theme's colours
+   come last, while a mode's rules win on specificity rather than on order. */
+@import './src/ui/styles/headsup-mode.css';
 @import './src/ui/styles/cyber.css';

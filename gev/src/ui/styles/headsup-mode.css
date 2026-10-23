@@ -1,0 +1,1035 @@
+/* ═══════════════════════════════════════════════
+   HEADS UP MODE — `?mode=headsup`
+   Everything in this file hangs off `body.headsup-mode`, set by
+   src/headsup/mode.js. Nothing here applies in `?mode=full`, so upstream's
+   own appearance is byte-for-byte untouched and a `git subtree pull` stays a
+   merge of upstream's files.
+
+   Imported in gev/style.css after every component sheet and immediately
+   before cyber.css, which upstream pins as the last import: a theme's
+   colours come last, while a mode's rules win on specificity rather than on
+   order. Nothing above it is reordered.
+   ═══════════════════════════════════════════════ */
+
+/* ── What Heads Up mode takes off the screen ─────────────────────────────
+   The fork's reconnaissance readouts are not claims this console can make:
+   it has no classification, no mission, no satellite and no sensor. The HUD
+   FRAME stays — the corner brackets and their colour tokens are what makes
+   the counter strip read as one instrument — and only the readouts go.
+
+   The nodes STAY in the document, because hud.js keeps writing to #hud-gsd
+   and #hud-mgrs on its own timers and must not have to know this mode
+   exists. They are hidden with `display: none` rather than `visibility`
+   precisely so panelLayoutController.js measures them as zero: it keeps the
+   panel rails clear of whatever HUD chrome is on screen, and a readout
+   nobody can see must not go on reserving a lane. The four `.hud-corner`
+   wrappers and the `.hud-edge` containers it measures are left alone. */
+body.headsup-mode
+  :is(
+    #intel-hud .hud-classification,
+    #intel-hud .hud-system,
+    #intel-hud .hud-orbital,
+    #intel-hud .hud-summary-wrap,
+    #intel-hud .hud-top-bar-left,
+    #intel-hud .hud-top-bar-center,
+    #intel-hud #hud-mgrs,
+    #intel-hud #hud-gsd,
+    #intel-hud #hud-alt,
+    #intel-hud #hud-ais-vessel,
+    #intel-hud .hud-left-edge > *,
+    #intel-hud .hud-right-edge > *,
+    #intel-hud .hud-bottom-bar
+  ) {
+  display: none;
+}
+
+/* The tagline. The product name stays: this IS the fork, and saying so is
+   the honest thing on screen. */
+body.headsup-mode #title-bar .subtitle {
+  display: none;
+}
+
+/* Upstream's ACTIVE STYLE readout. The scenario readout is appended into the
+   same corner by src/headsup/console.js, so the container keeps its place in
+   the layout and only its own rows go. */
+body.headsup-mode #style-indicator > :not(.headsup-readout) {
+  display: none;
+}
+
+/* CONTACTS and SPACE MISSIONS are views over layers Heads Up mode never
+   registers, so the rail that hosts them would only offer dead controls. */
+body.headsup-mode :is(#global-context-panel, #military-awareness-panel) {
+  display: none;
+}
+
+/* The scene director's own editor. The panel is repurposed as the Test Scene
+   launcher, and the director itself still exists for scene playback. */
+body.headsup-mode
+  #scene-panel
+  .scene-panel-inner
+  > :not(.panel-header, .headsup-scene-launch) {
+  display: none;
+}
+
+/* The POWER UP chip and its dialog. Heads Up mode never calls initKeySetup,
+   so neither is ever un-hidden — but both are static markup expanded into
+   index.html at build time, and a surface that offers provider keys this
+   console has no provider for should be unreachable by construction, not by
+   nobody having revealed it yet. */
+body.headsup-mode :is(#key-setup-chip, #key-setup) {
+  display: none !important;
+}
+
+/* Google and Cesium attribution is required by the Google Maps Platform
+   terms and must be visible AT ALL TIMES. Stated here as well as in
+   foundation.css so that no Heads Up rule, and no later Heads Up surface,
+   can be the thing that covers it. */
+body.headsup-mode #cesium-credits {
+  display: block !important;
+  visibility: visible !important;
+  z-index: 240;
+}
+
+/* ── Shared Heads Up tokens ──────────────────────────────────────────── */
+/* The four geometry tokens are the layout CONTRACT, and
+   src/headsup/layout.test.mjs reads them out of this file: together with
+   upstream's `--right-rail-x` and `.hud-bottom-right`, they are what keeps
+   the centre of the 3D view clear at 1920x1080. Change one and that test
+   recomputes the reserved rectangles and says whether the centre survived.
+
+   `--headsup-rail-bottom` is the space kept below the rail. It has to clear
+   both the counter strip (which sits in upstream's bottom-right HUD corner,
+   180px up) and `#command-dock`, which upstream centres along the bottom. */
+body.headsup-mode {
+  --headsup-amber: #ffd166;
+  --headsup-live: #38f0c0;
+  --headsup-down: #ef476f;
+  --headsup-ghost: #ff5a52;
+  --headsup-surface: rgba(10, 12, 18, 0.82);
+  --headsup-border: rgba(255, 255, 255, 0.12);
+  --headsup-rail-width: 380px;
+  --headsup-rail-top: 140px;
+  --headsup-rail-bottom: 300px;
+  --headsup-strip-max-width: 560px;
+  --headsup-strip-max-height: 78px;
+}
+
+/* ── Left panel: the Heads Up layer cohorts ──────────────────────────── */
+.headsup-group {
+  margin: 10px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.headsup-fleet-group {
+  display: contents;
+}
+
+.headsup-cohort {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--btn-radius);
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.02);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.headsup-cohort:hover {
+  border-color: var(--glass-border-hover);
+}
+
+.headsup-cohort[aria-pressed='true'] {
+  color: var(--text-primary);
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.headsup-cohort-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--headsup-cohort-color, var(--text-dim));
+  /* An off cohort keeps its colour but loses its light, so the row still says
+     which colour it governs on the globe. */
+  opacity: 0.3;
+}
+
+.headsup-cohort[aria-pressed='true'] .headsup-cohort-swatch {
+  opacity: 1;
+  box-shadow: 0 0 8px var(--headsup-cohort-color, transparent);
+}
+
+.headsup-cohort-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.headsup-cohort-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+.headsup-cohort[aria-pressed='true'] .headsup-cohort-count {
+  color: var(--accent);
+}
+
+.headsup-empty {
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+/* ── Left panel: the legend ──────────────────────────────────────────── */
+.headsup-legend {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.headsup-legend-row[hidden] {
+  display: none;
+}
+
+.headsup-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.headsup-legend-swatch {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--headsup-legend-color, var(--text-dim));
+}
+
+/* The marks the globe draws, at the size they read at in a row of text. */
+.headsup-legend-glyph {
+  flex: 0 0 auto;
+  width: 10px;
+  font-size: 11px;
+  line-height: 1;
+  text-align: center;
+  color: var(--headsup-legend-color, var(--text-secondary));
+}
+
+.headsup-legend-label {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headsup-legend-count {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-dim);
+}
+
+/* ── Left panel: the Test Scene launcher ─────────────────────────────── */
+.headsup-scene-launch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.headsup-scene-btn {
+  padding: 10px 12px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--btn-radius);
+  background: rgba(0, 212, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.headsup-scene-btn:hover {
+  background: rgba(0, 212, 255, 0.16);
+}
+
+.headsup-scene-exit {
+  border-color: rgba(239, 71, 111, 0.35);
+  background: rgba(239, 71, 111, 0.1);
+}
+
+.headsup-scene-exit:hover {
+  background: rgba(239, 71, 111, 0.2);
+}
+
+.headsup-scene-status {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+/* ── Top right: scenario, sim clock, replay speed ─────────────────────── */
+.headsup-readout {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.headsup-readout-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.headsup-readout-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+.headsup-readout-value {
+  min-width: 96px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* ── Bottom right: the counter strip ─────────────────────────────────── */
+/* Height is capped rather than left to the content: the cap is what keeps
+   the strip below the protected centre of the view, and the sparkline is the
+   one cell that could otherwise grow it. */
+.headsup-counters {
+  display: flex;
+  gap: 14px;
+  align-items: flex-end;
+  justify-content: flex-end;
+  max-width: var(--headsup-strip-max-width);
+  max-height: var(--headsup-strip-max-height);
+  white-space: nowrap;
+}
+
+.headsup-counter {
+  display: grid;
+  gap: 1px;
+  justify-items: end;
+}
+
+.headsup-counter-value {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.headsup-counter-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  opacity: 0.65;
+}
+
+/* A live-against-ghost reading. The ghost side carries the ghost fleet's own
+   red, so the number on the strip and the dots on the globe are the same
+   claim; the separator is dimmed so the eye reads two values, not a date. */
+.headsup-counter-live {
+  color: var(--headsup-live);
+}
+
+.headsup-counter-split {
+  margin: 0 3px;
+  opacity: 0.4;
+}
+
+.headsup-counter-ghost {
+  color: var(--headsup-ghost);
+}
+
+/* ── The assist-queue sparkline ──────────────────────────────────────── */
+/* Two bars per column, not a stack: the cohorts are a comparison and a
+   stack would draw their sum, which is a number nobody is claiming. The
+   ghost bar is the wider, fainter envelope and the live bar its core, so
+   both are legible even where one is much larger. */
+.headsup-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 18px;
+  margin-top: 2px;
+}
+
+.headsup-spark-col {
+  position: relative;
+  width: 4px;
+  height: 100%;
+}
+
+.headsup-spark-ghost,
+.headsup-spark-live {
+  position: absolute;
+  bottom: 0;
+  height: var(--headsup-spark-height, 0%);
+  border-radius: 1px;
+}
+
+.headsup-spark-ghost {
+  left: 0;
+  width: 100%;
+  background: rgba(255, 90, 82, 0.38);
+}
+
+.headsup-spark-live {
+  left: 1px;
+  width: 2px;
+  background: var(--headsup-live);
+}
+
+.headsup-feed .headsup-counter-value {
+  color: var(--headsup-live);
+}
+
+.headsup-feed.is-down .headsup-counter-value {
+  color: var(--headsup-down);
+}
+
+/* ── The what-if banner ──────────────────────────────────────────────── */
+.headsup-banner {
+  position: fixed;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 18px;
+  border: 1px solid rgba(255, 209, 102, 0.4);
+  border-radius: 999px;
+  background: rgba(32, 24, 4, 0.86);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--headsup-amber);
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: calc(100vw - 48px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The scripted badge. Inside the banner, because it qualifies the same
+   claim: this replay's events were written, not observed. */
+.headsup-banner-badge {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 209, 102, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.14);
+  font-size: 9px;
+  letter-spacing: 1.2px;
+}
+
+.headsup-banner-badge[hidden] {
+  display: none;
+}
+
+/* ── The feed chip ───────────────────────────────────────────────────── */
+/* A synthetic feed is not an error and not a live city, so it is neither
+   green nor red: the amber this console already uses for provenance. */
+.headsup-feed.is-mock .headsup-counter-value {
+  color: var(--headsup-amber);
+}
+
+/* ── The agent pipeline rail ─────────────────────────────────────────── */
+/* Scrolls rather than grows: a card with a dispatch message in it is taller
+   than the rail, and the rail's reserved rectangle is what keeps the centre
+   of the view clear. See the geometry tokens above. */
+.headsup-rail {
+  position: fixed;
+  top: var(--headsup-rail-top);
+  right: var(--right-rail-x);
+  z-index: 110;
+  width: var(--headsup-rail-width);
+  max-height: calc(
+    100vh - var(--headsup-rail-top) - var(--headsup-rail-bottom)
+  );
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* So the dispatch card's split can stack if the rail is ever narrowed,
+     without that decision having to be made against the whole viewport. */
+  container-type: inline-size;
+  padding: 12px 14px;
+  border: 1px solid var(--headsup-border);
+  border-radius: var(--panel-radius);
+  background: var(--headsup-surface);
+  backdrop-filter: blur(12px);
+}
+
+.headsup-rail[hidden] {
+  display: none;
+}
+
+.headsup-rail-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.headsup-rail-title {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  color: var(--text-secondary);
+}
+
+/* The hazard this run of the pipeline is about: the id that ties every row
+   on the rail to a shape on the globe. */
+.headsup-rail-link {
+  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+}
+
+.headsup-rail-stages {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.headsup-rail-group {
+  margin: 12px 0 5px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.headsup-rail-stage {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--btn-radius);
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-align: left;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.headsup-rail-stage:hover {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.headsup-rail-stage[aria-expanded='true'] {
+  border-color: var(--accent-dim);
+  background: rgba(0, 212, 255, 0.08);
+}
+
+/* A stage that has not reported keeps its name and nothing else: an unlit
+   row is a step that has not happened, not a step that failed. */
+.headsup-rail-stage[data-lit='true'] {
+  color: var(--text-primary);
+}
+
+.headsup-rail-stage-name {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.headsup-rail-stage-value {
+  flex: 0 0 auto;
+  max-width: 48%;
+  overflow: hidden;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.headsup-rail-marker {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--text-dim);
+  border-radius: 50%;
+}
+
+/* The four tones. `wait` is a pipeline stopped for a person and `alert` one
+   that produced a refusal: different states, different colours, because the
+   first is the only one somebody can act on. */
+.headsup-rail-stage[data-tone='ok'] .headsup-rail-marker {
+  border-color: var(--headsup-live);
+  background: var(--headsup-live);
+  box-shadow: 0 0 7px var(--headsup-live);
+}
+
+.headsup-rail-stage[data-tone='wait'] .headsup-rail-marker {
+  border-color: var(--headsup-amber);
+  background: var(--headsup-amber);
+  box-shadow: 0 0 7px var(--headsup-amber);
+}
+
+.headsup-rail-stage[data-tone='alert'] .headsup-rail-marker {
+  border-color: var(--headsup-down);
+  background: var(--headsup-down);
+  box-shadow: 0 0 7px var(--headsup-down);
+}
+
+.headsup-rail-stage[data-tone='wait'] .headsup-rail-stage-value {
+  color: var(--headsup-amber);
+}
+
+.headsup-rail-stage[data-tone='alert'] .headsup-rail-stage-value {
+  color: var(--headsup-down);
+}
+
+.headsup-rail-empty {
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+
+.headsup-rail-empty[hidden] {
+  display: none;
+}
+
+/* ── One stage's card ────────────────────────────────────────────────── */
+.headsup-rail-card {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--headsup-border);
+}
+
+.headsup-rail-card[hidden] {
+  display: none;
+}
+
+.headsup-rail-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.headsup-rail-card-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.headsup-rail-card-close {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: transparent;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.headsup-rail-card-close:hover {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
+}
+
+.headsup-card-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 3px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+}
+
+.headsup-card-key {
+  flex: 0 0 38%;
+  color: var(--text-dim);
+}
+
+.headsup-card-value {
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+.headsup-card-group {
+  margin: 10px 0 4px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+.headsup-card-list {
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.headsup-card-item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.3px;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.headsup-card-item[data-tone='alert'] {
+  color: var(--headsup-down);
+}
+
+.headsup-card-item[data-tone='wait'] {
+  color: var(--headsup-amber);
+}
+
+.headsup-card-item[data-tone='ok'] .headsup-card-glyph {
+  color: var(--headsup-live);
+}
+
+.headsup-card-item[data-tone='alert'] .headsup-card-glyph {
+  color: var(--headsup-down);
+}
+
+.headsup-card-glyph {
+  flex: 0 0 auto;
+  width: 9px;
+}
+
+.headsup-card-outcome {
+  margin-left: auto;
+  flex: 0 0 auto;
+  opacity: 0.7;
+}
+
+/* A feed name, so a chip on the card and a chip on the Feeds row read as the
+   same thing. */
+.headsup-card-chip {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.headsup-card-text {
+  margin: 6px 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── A dispatch message beside what was read out of it ───────────────── */
+/* Side by side at the rail's width, and stacked only if the rail is ever
+   narrowed: the whole point of this card is that the two are comparable at
+   a glance, so the split is the default and the stack is the fallback. */
+.headsup-card-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+@container (max-width: 320px) {
+  .headsup-card-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.headsup-card-raw {
+  max-height: 150px;
+  margin: 0;
+  overflow: auto;
+  padding: 7px 8px;
+  border: 1px solid var(--headsup-border);
+  border-left: 2px solid var(--headsup-amber);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--text-secondary);
+}
+
+.headsup-card-fields {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.headsup-card-fields dt {
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.headsup-card-fields dd {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+  color: var(--text-primary);
+}
+
+/* ── The second key ──────────────────────────────────────────────────── */
+.headsup-card-approve {
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid rgba(255, 209, 102, 0.42);
+  border-radius: var(--btn-radius);
+  background: rgba(255, 209, 102, 0.08);
+}
+
+.headsup-card-approve .headsup-card-text {
+  margin-top: 0;
+  color: var(--headsup-amber);
+}
+
+.headsup-card-approve-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--headsup-amber);
+  border-radius: var(--btn-radius);
+  background: rgba(255, 209, 102, 0.16);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.headsup-card-approve-btn:hover:not(:disabled) {
+  background: rgba(255, 209, 102, 0.28);
+}
+
+.headsup-card-approve-btn:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.headsup-card-status {
+  margin: 7px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+/* ── The scenario picker ─────────────────────────────────────────────── */
+.headsup-picker {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(4, 6, 10, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.headsup-picker[hidden] {
+  display: none;
+}
+
+.headsup-picker-dialog {
+  width: min(560px, 100%);
+  max-height: min(70vh, 640px);
+  overflow: auto;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--headsup-border);
+  border-radius: var(--panel-radius);
+  background: var(--menu-bg);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.headsup-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.headsup-picker-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1.8px;
+  color: var(--text-primary);
+}
+
+.headsup-picker-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--glass-border);
+  border-radius: 50%;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.headsup-picker-close:hover {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
+}
+
+.headsup-picker-list {
+  display: grid;
+  gap: 10px;
+}
+
+.headsup-picker-card {
+  display: grid;
+  gap: 6px;
+  padding: 13px 15px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--btn-radius);
+  background: rgba(255, 255, 255, 0.02);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.headsup-picker-card:hover {
+  border-color: var(--accent-dim);
+  background: rgba(0, 212, 255, 0.06);
+}
+
+.headsup-picker-card[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.headsup-picker-card-name {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.headsup-picker-card-code {
+  padding: 2px 7px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 6px;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  color: var(--accent);
+}
+
+.headsup-picker-card-whatif {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.headsup-picker-status {
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.6;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+}
+
+/* ── Narrow viewports ───────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .headsup-rail {
+    display: none;
+  }
+
+  .headsup-counters {
+    gap: 10px;
+  }
+
+  .headsup-counter-value {
+    font-size: 13px;
+  }
+}

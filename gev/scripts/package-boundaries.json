@@ -778,6 +778,7 @@
   "ui-styles": {
     "exports": ["./ui/styles"],
     "modules": [
+      "src/ui/styles/headsup-mode.css",
       "src/ui/styles.js",
       "style.css",
       "src/ui/styles/foundation.css",
@@ -1675,6 +1676,11 @@
       "./standalone/catalog"
     ],
     "modules": [
+      "src/headsup/mode.js",
+      "src/headsup/scenarios.js",
+      "src/headsup/camera.js",
+      "src/headsup/console.js",
+      "src/headsup/pipeline.js",
       "src/ui/placeNames.js",
       "src/cyberSonarScene.js",
       "src/cyberSonar.js",
