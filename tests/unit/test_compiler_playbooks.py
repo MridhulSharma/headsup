@@ -7,6 +7,8 @@ too, which is the point.
 
 from __future__ import annotations
 
+import pathlib
+
 import pytest
 
 from headsup.agents.compiler import (
@@ -162,3 +164,57 @@ def test_an_unknown_class_is_asked_for_and_not_invented(books: PlaybookSet) -> N
     assert empty.get(HazardClass.FLOOD) is None
     with pytest.raises(PlaybookError, match="no playbook for FLOOD"):
         empty.require(HazardClass.FLOOD)
+
+
+def _read(document: dict) -> Playbook:
+    """One playbook document through the real loader, from a temporary file."""
+    import tempfile
+
+    import yaml
+
+    with tempfile.TemporaryDirectory() as directory:
+        path = pathlib.Path(directory) / f"{str(document['class']).lower()}.yaml"
+        path.write_text(yaml.safe_dump(document), encoding="utf-8")
+        return PlaybookSet.load(path.parent).require(HazardClass(document["class"]))
+
+
+# --- the keep-clear corridor caps -------------------------------------------
+
+
+def test_only_the_emergency_scene_playbook_draws_a_corridor(books: PlaybookSet) -> None:
+    """A class that names no `keep_clear` block gets no computed area.
+
+    The caps live in the playbook because the corridor is the one advisory
+    area the proposer computes rather than copies, and a cap with a default in
+    code is a cap that can be widened without editing a file here.
+    """
+    caps = books.require(HazardClass.EMERGENCY_SCENE).keep_clear
+    assert caps is not None
+    assert (caps.corridor_width_m, caps.no_stop_radius_m, caps.max_route_m) == (30.0, 120.0, 3000.0)
+    for hazard_class in HazardClass:
+        if hazard_class is not HazardClass.EMERGENCY_SCENE:
+            assert books.require(hazard_class).keep_clear is None
+
+
+def test_corridor_caps_for_a_class_that_may_not_keep_anything_clear_are_refused() -> None:
+    """Caps that could never apply are a mistake, not a harmless extra key."""
+    document = {
+        **MINIMAL,
+        "keep_clear": {"corridor_width_m": 30, "no_stop_radius_m": 120, "max_route_m": 3000},
+    }
+    with pytest.raises(PlaybookError, match="does not allow KEEP_CLEAR"):
+        _read(document)
+
+
+def test_a_corridor_wider_than_a_street_is_refused() -> None:
+    document = {
+        **MINIMAL,
+        "allowed_actions": ["NO_ENTRY", "KEEP_CLEAR"],
+        "keep_clear": {"corridor_width_m": 500, "no_stop_radius_m": 120, "max_route_m": 3000},
+    }
+    with pytest.raises(PlaybookError):
+        _read(document)
+
+
+def test_a_playbook_with_no_corridor_block_still_loads() -> None:
+    assert _read(MINIMAL).keep_clear is None

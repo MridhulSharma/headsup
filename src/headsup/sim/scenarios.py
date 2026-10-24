@@ -17,11 +17,19 @@ intersections where the feed only ever reported 9, and no advisory built from
 that feed could have covered them. And a scenario's geometry now lives beside
 the recording it came from, which is where a reader looks for it.
 
-Both areas are sized to stay inside their playbook's cap, because a hazard the
+**S3's area is in `scenarios/s3_incident.yaml` for the same reason**, and it is
+the one the incident sentinel draws: a 60 m disc around the junction at 6th and
+Guadalupe, which is where the scripted scene is reported. The scene itself is
+what a vehicle stalls on; the advisory a run produces is a keep-clear corridor
+*to* it, which is a different shape and deliberately so - see
+`agents.proposer`.
+
+Every area is sized to stay inside its playbook's cap, because a hazard the
 compiler could never legally advise on would make the comparison meaningless:
 
 * S1 flood corridor: 1.05 km2 against `playbooks/flood.yaml` max_area_km2 12.0
 * S2 signal cluster: 0.20 km2 against `playbooks/signal_outage.yaml` max 6.0
+* S3 scene disc: 0.01 km2 against `playbooks/emergency_scene.yaml` max 1.0
 
 Each area is also a genuine bottleneck, which is what makes a baseline run
 fail visibly. Measured over 900 seeded trips with uniform origins: 47% of S1
@@ -106,8 +114,26 @@ def s2_blackout_regions(*, valid_from: datetime, valid_until: datetime) -> tuple
     )
 
 
+def s3_incident_regions(*, valid_from: datetime, valid_until: datetime) -> tuple[HazardRegion, ...]:
+    """S3 ground truth: the junction the scripted scene blocks.
+
+    `scenarios/s3_incident.yaml` holds the area, because the generator that
+    wrote the scene is what knows where it is, and the descriptor's own offsets
+    place it 20 to 75 minutes into the run - the scene is not there before the
+    board reports it. The window is the caller's for the rest: ground truth is
+    in force for the run, not for the recording's October timestamps.
+    """
+    return load_regions(
+        SCENARIOS_DIR / "s3_incident.yaml", valid_from=valid_from, valid_until=valid_until
+    )
+
+
 #: City each scenario's hazards belong to, for tests and for `hu sim`.
-SCENARIO_CITY: dict[str, str] = {"s1_flood": "san_antonio", "s2_blackout": "austin"}
+SCENARIO_CITY: dict[str, str] = {
+    "s1_flood": "san_antonio",
+    "s2_blackout": "austin",
+    "s3_incident": "austin",
+}
 
 
 def scenario_regions(name: str, *, valid_from: datetime, valid_until: datetime):
@@ -116,4 +142,6 @@ def scenario_regions(name: str, *, valid_from: datetime, valid_until: datetime):
         return s1_flood_regions(valid_from=valid_from, valid_until=valid_until)
     if name == "s2_blackout":
         return s2_blackout_regions(valid_from=valid_from, valid_until=valid_until)
+    if name == "s3_incident":
+        return s3_incident_regions(valid_from=valid_from, valid_until=valid_until)
     raise ValueError(f"no ground truth for scenario {name!r}; known: {sorted(SCENARIO_CITY)}")

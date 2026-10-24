@@ -15,6 +15,19 @@ action_rules:
   KEEP_CLEAR: emergency_scene.keep_clear.v1
   NO_ENTRY: emergency_scene.no_entry.v1
   SPEED_CAP: emergency_scene.speed_cap.v1
+# A KEEP_CLEAR here is not the scene: it is the way in to it. The corridor is
+# the shortest route from the nearest fire or EMS station to the scene, 30 m
+# wide - one carriageway and its parking lanes, not the buildings behind them -
+# plus 120 m around the scene itself where nothing may stop, pick up or idle.
+# 3 km is the longest route worth drawing: every fire station in the built
+# Austin bbox is inside a kilometre of downtown, so a route longer than this
+# means the graph could not reach the nearest one and the corridor would be
+# about a station that is not responding.
+keep_clear:
+  corridor_width_m: 30
+  no_stop_radius_m: 120
+  max_route_m: 3000
+
 max_area_km2: 1.0
 max_lifetime_minutes: 120
 two_key_area_km2: 0.5

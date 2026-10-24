@@ -1,0 +1,9 @@
+{
+  "incident_type": "MEDICAL",
+  "severity": 4,
+  "location_text": "W 6TH ST / GUADALUPE ST",
+  "responding_units": [
+    "AFD E1",
+    "ATCEMS M6"
+  ]
+}

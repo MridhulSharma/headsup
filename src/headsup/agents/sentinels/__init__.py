@@ -13,10 +13,12 @@ a `Hazard`, and only the compiler publishes. Two of them exist today:
 flood,signal` is how both are started. That verb lives in `agents.cli` rather
 than here, because it now builds fusion and the proposer too.
 
-Feed text reaches a model in exactly one place - the flood sentinel's
-`volume` call that fills `FloodFields` - and it reaches it as a `data_block`
-inside a user turn. There is no instruction slot in this package for a feed
-to write into, and `tests/unit/test_sentinel_flood.py` holds that.
+Feed text reaches a model in exactly two places - the flood sentinel's
+`volume` call that fills `FloodFields`, and the incident sentinel's that fills
+`IncidentFields` - and in both it reaches it as a `data_block` inside a user
+turn. There is no instruction slot in this package for a feed to write into,
+and `tests/unit/test_sentinel_flood.py` and `test_sentinel_incident.py` hold
+that.
 """
 
 from __future__ import annotations
@@ -37,6 +39,15 @@ from headsup.agents.sentinels.flood import (
     FloodFields,
     FloodSentinel,
 )
+from headsup.agents.sentinels.incident import (
+    SCENE_RADIUS_M,
+    SCENE_SEVERITY,
+    TYPE_SEVERITY,
+    IncidentFields,
+    IncidentSentinel,
+    IncidentType,
+    rules_fields,
+)
 from headsup.agents.sentinels.signals import (
     EPS_M,
     MIN_SIGNALS,
@@ -55,8 +66,14 @@ __all__ = [
     "MIN_SIGNALS",
     "PAD_M",
     "PURPOSE",
+    "SCENE_RADIUS_M",
+    "SCENE_SEVERITY",
+    "TYPE_SEVERITY",
     "FloodFields",
     "FloodSentinel",
+    "IncidentFields",
+    "IncidentSentinel",
+    "IncidentType",
     "Sentinel",
     "SentinelWorker",
     "SignalOutageSentinel",
@@ -65,5 +82,6 @@ __all__ = [
     "distance_m",
     "noisy_or",
     "pad_m",
+    "rules_fields",
     "stable_id",
 ]

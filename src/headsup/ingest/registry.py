@@ -8,17 +8,19 @@ HTTP client, no site list, no city.
 from __future__ import annotations
 
 from headsup.contracts import Source
+from headsup.ingest.austin_incidents import AustinIncidentsAdapter
 from headsup.ingest.austin_signals import AustinSignalsAdapter
 from headsup.ingest.base import Adapter, IngestError
 from headsup.ingest.nws import NwsAdapter
 from headsup.ingest.usgs import UsgsAdapter
 
-#: Every feed with an adapter today. WZDx and Austin incidents join this table
-#: as their adapters land.
+#: Every feed with an adapter today. WZDx joins this table as its adapter
+#: lands.
 ADAPTERS: dict[Source, type[Adapter]] = {
     Source.NWS: NwsAdapter,
     Source.USGS: UsgsAdapter,
     Source.AUSTIN_SIGNALS: AustinSignalsAdapter,
+    Source.AUSTIN_INCIDENTS: AustinIncidentsAdapter,
 }
 
 

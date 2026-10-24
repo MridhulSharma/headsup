@@ -37,6 +37,28 @@ class PlaybookError(RuntimeError):
     """A playbook file is missing, unreadable, or does not match the contract."""
 
 
+class KeepClearCaps(HeadsUpModel):
+    """How wide, how far and how large a keep-clear corridor may be drawn.
+
+    A `KEEP_CLEAR` for an emergency scene is not the area a feed drew: it is
+    the approach responders are coming up, which has to be computed from the
+    road graph (`headsup.world.responders`). These are the three numbers that
+    computation is allowed to use, and they live here for the reason every
+    other cap does - widening one means editing a file in `playbooks/` and
+    committing it. A class whose file names no `keep_clear` block gets no
+    corridor, and its `KEEP_CLEAR` covers the hazard's own area.
+    """
+
+    #: Width of the corridor on the ground, centred on the route.
+    corridor_width_m: float = Field(gt=0.0, le=200.0)
+    #: How far around the scene nothing may stop, pick up or idle.
+    no_stop_radius_m: float = Field(gt=0.0, le=1000.0)
+    #: The longest route worth drawing a corridor along. A station further
+    #: than this is not the one responding, and a corridor across half the
+    #: city is not a corridor.
+    max_route_m: float = Field(gt=0.0, le=20_000.0)
+
+
 class Playbook(HeadsUpModel):
     """The caps and the allowed actions for one hazard class."""
 
@@ -53,6 +75,8 @@ class Playbook(HeadsUpModel):
     two_key_severity: Severity = 4
     #: Per-action `policy_rule` ids; the class-level `policy_rule` is the default.
     action_rules: dict[ActionType, Identifier] = Field(default_factory=dict)
+    #: Caps for a computed keep-clear corridor, for a class that may have one.
+    keep_clear: KeepClearCaps | None = None
 
     @model_validator(mode="after")
     def _caps_are_consistent(self) -> Playbook:
@@ -63,6 +87,8 @@ class Playbook(HeadsUpModel):
                 f"two_key_area_km2 {self.two_key_area_km2} is above "
                 f"max_area_km2 {self.max_area_km2}, so the two-key rule could never fire"
             )
+        if self.keep_clear is not None and not self.allows(ActionType.KEEP_CLEAR):
+            raise ValueError("keep_clear caps are set for a class that does not allow KEEP_CLEAR")
         unknown = [
             action.value for action in self.action_rules if action not in set(self.allowed_actions)
         ]

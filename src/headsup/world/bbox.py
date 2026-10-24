@@ -21,7 +21,9 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 
+from shapely.affinity import scale as affine_scale
 from shapely.geometry import Polygon as ShapelyPolygon
+from shapely.geometry import base as shapely_base
 
 #: Metres per degree of latitude on the WGS84 ellipsoid, near enough to size a
 #: bbox with. Exact measurement is `headsup.agents.compiler.geo.area_km2`.
@@ -114,3 +116,25 @@ def box(city: str) -> BBox:
     except KeyError:
         known = ", ".join(sorted(BOXES))
         raise ValueError(f"no bbox for city {city!r}; known cities: {known}") from None
+
+
+def buffer_m(geometry: shapely_base.BaseGeometry, metres: float) -> shapely_base.BaseGeometry:
+    """Grow a geometry by a fixed number of metres on the ground.
+
+    One buffer radius in degrees cannot be right in both axes at once - at
+    30 degrees north a degree of longitude is about 0.87 of a degree of
+    latitude - so the shape is scaled into a local metric frame, buffered
+    there and scaled back.
+
+    `agents.sentinels.base.pad_m` and `sim.masks.corridor_polygon` do the same
+    thing for their own layers. This copy exists because the world layer
+    cannot import either of them: `agents.sentinels.base` imports the
+    constants above, so reaching back into it from here is an import cycle.
+    """
+    if geometry.is_empty or metres <= 0:
+        return geometry
+    cos_lat = max(math.cos(math.radians(float(geometry.centroid.y))), 1e-6)
+    sx = M_PER_DEG_LON_EQUATOR * cos_lat
+    sy = M_PER_DEG_LAT
+    metric = affine_scale(geometry, xfact=sx, yfact=sy, origin=(0.0, 0.0))
+    return affine_scale(metric.buffer(metres), xfact=1 / sx, yfact=1 / sy, origin=(0.0, 0.0))

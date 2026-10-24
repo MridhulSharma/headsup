@@ -1,0 +1,5 @@
+{
+  "action": "KEEP_CLEAR",
+  "reason": "The scene itself is already impassable, so closing more road adds nothing a fleet can use; what the responders need is the approach from the station left clear and nobody picking up or idling beside the scene, which is what KEEP_CLEAR asks for.",
+  "confidence": 0.78
+}

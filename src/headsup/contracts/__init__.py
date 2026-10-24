@@ -66,6 +66,7 @@ from headsup.contracts.fleet import (
     VehicleState,
 )
 from headsup.contracts.geometry import (
+    COORD_DIGITS,
     GEOMETRY_TYPES,
     LAT_MAX,
     LAT_MIN,
@@ -80,6 +81,8 @@ from headsup.contracts.geometry import (
     Point,
     Polygon,
     Position,
+    area_geometry,
+    rings_of,
 )
 from headsup.contracts.schemas import (
     COMPONENT_MODELS,
@@ -100,6 +103,7 @@ from headsup.contracts.schemas import (
 __all__ = [
     "AUTHORITATIVE_SOURCES",
     "COMPONENT_MODELS",
+    "COORD_DIGITS",
     "EXPORTED_MODELS",
     "GEOMETRY_SCHEMA_NAME",
     "GEOMETRY_TYPES",
@@ -162,12 +166,14 @@ __all__ = [
     "VehicleState",
     "VehicleStatus",
     "Verdict",
+    "area_geometry",
     "check",
     "export",
     "geometry_schema",
     "iter_schemas",
     "model_schema",
     "new_id",
+    "rings_of",
     "schema_filenames",
     "schema_name",
     "utcnow",

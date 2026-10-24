@@ -43,10 +43,10 @@ from typing import Annotated, Any
 
 import orjson
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, WebSocket, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from starlette.websockets import WebSocketDisconnect
-from fastapi.middleware.cors import CORSMiddleware
 
 from headsup import __version__
 from headsup.agents.compiler.approvals import (

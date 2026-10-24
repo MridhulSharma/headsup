@@ -51,7 +51,7 @@ def test_the_launcher_lists_every_scenario_while_idle(client: TestClient) -> Non
     assert body["state"] == "idle"
     assert body["running"] is None
     ids = [row["id"] for row in body["scenarios"]]
-    assert ids == ["s1_flood", "s2_blackout"]
+    assert ids == ["s1_flood", "s2_blackout", "s3_incident"]
     row = body["scenarios"][0]
     assert set(row) >= {"id", "title", "what_if", "city", "scripted", "start_view"}
 

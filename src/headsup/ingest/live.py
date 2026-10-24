@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 from headsup.bus import Bus
 from headsup.contracts import CivicEvent, Source
+from headsup.ingest.austin_incidents import AustinIncidentsAdapter
 from headsup.ingest.austin_signals import AustinSignalsAdapter
 from headsup.ingest.base import Adapter, Clock, IngestError, SystemClock
 from headsup.ingest.cities import City
@@ -28,6 +29,7 @@ from headsup.ingest.usgs import UsgsAdapter
 NWS_INTERVAL = 60.0
 USGS_INTERVAL = 300.0
 SIGNALS_INTERVAL = 300.0
+INCIDENTS_INTERVAL = 300.0
 
 
 @dataclass(slots=True)
@@ -44,8 +46,8 @@ class FeedRun:
 def city_adapters(city: City, **kwargs: object) -> list[tuple[Adapter, float]]:
     """The feeds Heads Up polls for one city, with their intervals.
 
-    A city only gets the signal feed if it publishes one, so San Antonio polls
-    two feeds and Austin three.
+    A city only gets the signal and incident feeds if it publishes them, so
+    San Antonio polls two feeds and Austin four.
     """
     feeds: list[tuple[Adapter, float]] = [
         (NwsAdapter(area=city.nws_area, **kwargs), NWS_INTERVAL),  # type: ignore[arg-type]
@@ -56,6 +58,13 @@ def city_adapters(city: City, **kwargs: object) -> list[tuple[Adapter, float]]:
             (
                 AustinSignalsAdapter(dataset=city.signal_dataset, **kwargs),  # type: ignore[arg-type]
                 SIGNALS_INTERVAL,
+            )
+        )
+    if city.incident_dataset:
+        feeds.append(
+            (
+                AustinIncidentsAdapter(dataset=city.incident_dataset, **kwargs),  # type: ignore[arg-type]
+                INCIDENTS_INTERVAL,
             )
         )
     return feeds
