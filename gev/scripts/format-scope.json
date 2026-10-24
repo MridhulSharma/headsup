@@ -1081,5 +1081,7 @@
   "src/testSupport/headsupConsoleDocument.mjs",
   "scripts/qa-headsup-load.mjs",
   "src/headsup/pipeline.test.mjs",
-  "src/headsup/layout.test.mjs"
+  "src/headsup/layout.test.mjs",
+  "src/headsup/advisory.js",
+  "src/headsup/advisory.test.mjs"
 ]

@@ -278,6 +278,14 @@ export function normalizeAdvisoryFeature(feature) {
   const anchors = anchorPoints(geometry);
   if (!anchors.length) return null;
 
+  // The evidence rows themselves, not only how many there are. The advisory
+  // card names the public feeds an advisory rests on, and reading them off a
+  // neighbouring fusion frame instead would be the console inferring
+  // provenance rather than reporting what the advisory carried. A damaged
+  // row rejects the advisory, the same way it does for a fused hazard.
+  const evidence = evidenceRows(properties.evidence);
+  if (!evidence) return null;
+
   return {
     id,
     version: Number.isInteger(properties.version) ? properties.version : 1,
@@ -291,9 +299,8 @@ export function normalizeAdvisoryFeature(feature) {
     action: action.type,
     validFrom,
     validUntil,
-    evidenceCount: Array.isArray(properties.evidence)
-      ? properties.evidence.length
-      : 0,
+    evidence,
+    evidenceCount: evidence.length,
     policyRule: identifier(properties.policy_rule),
     issuer: typeof properties.issuer === 'string' ? properties.issuer : null,
     // Whether the advisory ARRIVED carrying a signature. This layer never

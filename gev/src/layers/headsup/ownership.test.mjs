@@ -394,7 +394,15 @@ test('an advisory outlives a reconnect, a vehicle position does not', () => {
           action: { type: 'NO_ENTRY' },
           valid_from: '2026-10-21T18:00:00Z',
           valid_until: '2026-10-21T20:00:00Z',
-          evidence: [{ event_id: 'nws-1' }],
+          evidence: [
+            {
+              event_id: 'nws-1',
+              source: 'nws',
+              kind: 'nws.flood_warning',
+              observed_at: '2026-10-21T17:55:00Z',
+              raw_ref: 'nws/alerts/nws-1',
+            },
+          ],
           policy_rule: 'flood.no_entry',
           issuer: 'headsup/compiler',
         },

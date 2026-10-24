@@ -49,10 +49,11 @@ body.headsup-mode #title-bar .subtitle {
   display: none;
 }
 
-/* Upstream's ACTIVE STYLE readout. The scenario readout is appended into the
-   same corner by src/headsup/console.js, so the container keeps its place in
-   the layout and only its own rows go. */
-body.headsup-mode #style-indicator > :not(.headsup-readout) {
+/* Upstream's ACTIVE STYLE readout. The scenario readout it used to host moved
+   into the dock's first block, so the whole indicator goes — the node stays in
+   the document, because upstream's own code keeps writing to
+   `#active-style-name` and must not have to know this mode exists. */
+body.headsup-mode #style-indicator {
   display: none;
 }
 
@@ -62,12 +63,23 @@ body.headsup-mode :is(#global-context-panel, #military-awareness-panel) {
   display: none;
 }
 
-/* The scene director's own editor. The panel is repurposed as the Test Scene
-   launcher, and the director itself still exists for scene playback. */
+/* The scene director's own editor, and the Test Scene launcher this panel
+   hosted until the dock took it over. The whole panel goes rather than
+   standing open with one header in it: two launch buttons for one job is a
+   worse answer than one. The director itself still exists for scene playback.
+   */
+body.headsup-mode #scene-panel {
+  display: none;
+}
+
+/* DISPLAY controls for the two subsystems this mode does not start
+   (`omitSubsystems` in src/headsup/mode.js). DETECT reads the air/sea/space
+   layers Heads Up mode never registers, and Scope is the circular mask the
+   rectangular viewport replaced. A control for something that is not running
+   can only mislead, so the group goes — the markup is upstream's and is
+   untouched. */
 body.headsup-mode
-  #scene-panel
-  .scene-panel-inner
-  > :not(.panel-header, .headsup-scene-launch) {
+  :is(.pp-toggle-group:has(> #detection-toggle), .pp-toggle-group:has(> #scope-toggle)) {
   display: none;
 }
 
@@ -91,15 +103,16 @@ body.headsup-mode #cesium-credits {
 }
 
 /* ── Shared Heads Up tokens ──────────────────────────────────────────── */
-/* The four geometry tokens are the layout CONTRACT, and
-   src/headsup/layout.test.mjs reads them out of this file: together with
-   upstream's `--right-rail-x` and `.hud-bottom-right`, they are what keeps
-   the centre of the 3D view clear at 1920x1080. Change one and that test
-   recomputes the reserved rectangles and says whether the centre survived.
+/* The geometry tokens are the layout CONTRACT, and
+   src/headsup/layout.test.mjs reads them out of this file: it computes the
+   viewport rectangle and the dock column from them at 1920x1080 and asserts
+   that they tile the window exactly, that nothing this mode adds reaches into
+   the viewport, and that the dock's four blocks fit its height. Change one and
+   that test recomputes the rectangles and says whether the layout survived.
 
-   `--headsup-rail-bottom` is the space kept below the rail. It has to clear
-   both the counter strip (which sits in upstream's bottom-right HUD corner,
-   180px up) and `#command-dock`, which upstream centres along the bottom. */
+   `--headsup-viewport-width` and `--headsup-dock-width` MUST sum to 100vw.
+   That is what makes "no horizontal scroll" a property of the stylesheet
+   rather than a thing somebody checks in a browser. */
 body.headsup-mode {
   --headsup-amber: #ffd166;
   --headsup-live: #38f0c0;
@@ -107,11 +120,126 @@ body.headsup-mode {
   --headsup-ghost: #ff5a52;
   --headsup-surface: rgba(10, 12, 18, 0.82);
   --headsup-border: rgba(255, 255, 255, 0.12);
-  --headsup-rail-width: 380px;
-  --headsup-rail-top: 140px;
-  --headsup-rail-bottom: 300px;
-  --headsup-strip-max-width: 560px;
-  --headsup-strip-max-height: 78px;
+  /* The rectangle the globe draws into, and the column of blocks beside it. */
+  --headsup-viewport-width: 55vw;
+  --headsup-dock-width: 45vw;
+  --headsup-dock-gap: 10px;
+  --headsup-dock-padding: 14px;
+  /* The three content-sized blocks' caps. The rail takes whatever is left,
+     which is why it is the one that scrolls. */
+  --headsup-scenes-max-height: 300px;
+  --headsup-advisory-max-height: 250px;
+  --headsup-strip-max-height: 112px;
+  --headsup-rail-min-height: 180px;
+}
+
+/* ── The rectangular viewport ────────────────────────────────────────────
+   The globe fills the left 55% at full height. Three surfaces have to agree
+   on that rectangle, or the picture and the chrome drawn over it would be
+   measured against different boxes:
+
+   - `#cesiumContainer` is the scene itself. Cesium sizes its canvas from this
+     element, so narrowing it narrows the drawing buffer — which is the whole
+     point: a rectangle 55% wide rasterizes fewer pixels than a full-window
+     one, and the Heads Up fleet is paid for per pixel.
+   - `#world-overlay-root` hosts the label canvas, which is sized from the
+     scene canvas (`ensureCanvasSize` in src/overlays/worldOverlay.js). It is
+     a SIBLING of the container, so it is held to the same box here instead of
+     spanning a window its canvas no longer covers.
+   - `#intel-hud` is the frame. Its corners and edges are absolute inside it,
+     so moving its right edge in moves the whole frame onto the rectangle —
+     which is why the brackets still read: they were never circular, only
+     window-sized.
+
+   The circular scope lens is NOT hidden here. It is a canvas the application
+   does not install in this mode at all (`scopeMask` in src/headsup/mode.js),
+   because a mask that fades everything outside an inscribed circle would
+   black out the corners of the very rectangle this section defines. */
+body.headsup-mode :is(#cesiumContainer, #world-overlay-root) {
+  width: var(--headsup-viewport-width);
+}
+
+body.headsup-mode #intel-hud {
+  right: var(--headsup-dock-width);
+}
+
+/* Upstream centres both of these on the WINDOW. Centred on the viewport
+   rectangle instead, so neither straddles the dock's edge. */
+body.headsup-mode #command-dock {
+  left: calc(var(--headsup-viewport-width) / 2);
+  width: min(calc(var(--headsup-viewport-width) - 56px), 1000px);
+}
+
+body.headsup-mode .headsup-banner {
+  left: calc(var(--headsup-viewport-width) / 2);
+  max-width: calc(var(--headsup-viewport-width) - 48px);
+}
+
+/* Upstream's right-rail lane, which is now the dock's column. Panels that
+   lane hosts (the Bhote Koshi event panel, the recent-imagery readout) move
+   to the inside edge of the viewport rather than under the dock. */
+body.headsup-mode {
+  --right-rail-x: calc(var(--headsup-dock-width) + 24px);
+}
+
+/* ── The dock: the right 45% ─────────────────────────────────────────────
+   Four blocks, top to bottom: scenario control, the agent rail, the active
+   advisory, the counter strip. A grid rather than a stack of fixed panels,
+   because the one thing that varies is how much the rail has to say: its row
+   takes the slack and scrolls, and the other three are sized by their own
+   content under the caps above. The column itself never scrolls — a wall
+   display nobody is sitting at cannot be scrolled. */
+.headsup-dock {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 110;
+  display: grid;
+  grid-template-rows: auto minmax(var(--headsup-rail-min-height), 1fr) auto auto;
+  gap: var(--headsup-dock-gap);
+  width: var(--headsup-dock-width);
+  padding: var(--headsup-dock-padding);
+  overflow: hidden;
+  border-left: 1px solid var(--headsup-border);
+  background: var(--headsup-surface);
+  backdrop-filter: blur(12px);
+}
+
+.headsup-block {
+  min-height: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--headsup-border);
+  border-radius: var(--panel-radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.headsup-block-title {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.headsup-scenes {
+  display: flex;
+  max-height: var(--headsup-scenes-max-height);
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+}
+
+.headsup-advisory {
+  max-height: var(--headsup-advisory-max-height);
+  overflow-y: auto;
+}
+
+.headsup-strip {
+  max-height: var(--headsup-strip-max-height);
+  overflow: hidden;
 }
 
 /* ── Left panel: the Heads Up layer cohorts ──────────────────────────── */
@@ -253,41 +381,83 @@ body.headsup-mode {
   color: var(--text-dim);
 }
 
-/* ── Left panel: the Test Scene launcher ─────────────────────────────── */
-.headsup-scene-launch {
+/* ── Block 1: the test scenes, as buttons ────────────────────────────── */
+/* Each entry launches its replay on one press. The dialog this replaced made
+   a person open a three-item list before they could read it. */
+.headsup-scene-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .headsup-scene-btn {
-  padding: 10px 12px;
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
   border: 1px solid var(--accent-dim);
   border-radius: var(--btn-radius);
   background: rgba(0, 212, 255, 0.08);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 1.2px;
-  color: var(--text-primary);
+  text-align: left;
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    border-color var(--transition-fast);
 }
 
 .headsup-scene-btn:hover {
   background: rgba(0, 212, 255, 0.16);
 }
 
-.headsup-scene-exit {
-  border-color: rgba(239, 71, 111, 0.35);
-  background: rgba(239, 71, 111, 0.1);
+/* The replay that is running, on the button that started it. */
+.headsup-scene-btn[aria-pressed='true'] {
+  border-color: var(--headsup-live);
+  background: rgba(56, 240, 192, 0.12);
 }
 
-.headsup-scene-exit:hover {
-  background: rgba(239, 71, 111, 0.2);
+.headsup-scene-btn[aria-busy='true'] {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.headsup-scene-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.headsup-scene-code {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  color: var(--accent);
+}
+
+.headsup-scene-whatif {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.headsup-scene-retry {
+  justify-items: start;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-primary);
 }
 
 .headsup-scene-status {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.5;
@@ -295,18 +465,22 @@ body.headsup-mode {
   color: var(--text-secondary);
 }
 
-/* ── Top right: scenario, sim clock, replay speed ─────────────────────── */
+.headsup-scene-status:empty {
+  display: none;
+}
+
+/* ── Block 1: sim clock, replay speed, scripted badge, Exit ──────────── */
+/* Left-aligned label/value pairs: in a column they read as a list, where the
+   right-aligned readout they replaced was reading against the window edge. */
 .headsup-readout {
   display: grid;
-  gap: 2px;
-  text-align: right;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin-top: 2px;
 }
 
 .headsup-readout-row {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  align-items: baseline;
+  display: contents;
 }
 
 .headsup-readout-label {
@@ -317,7 +491,6 @@ body.headsup-mode {
 }
 
 .headsup-readout-value {
-  min-width: 96px;
   font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
@@ -326,24 +499,73 @@ body.headsup-mode {
   color: var(--text-primary);
 }
 
+.headsup-scene-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+/* The scripted badge, beside the clock it qualifies: this replay's events
+   were written, not observed. */
+.headsup-scripted-badge {
+  padding: 2px 8px;
+  border: 1px solid rgba(255, 209, 102, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 209, 102, 0.14);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--headsup-amber);
+}
+
+.headsup-scripted-badge[hidden] {
+  display: none;
+}
+
+.headsup-scene-exit {
+  margin-left: auto;
+  padding: 7px 14px;
+  border: 1px solid rgba(239, 71, 111, 0.35);
+  border-radius: var(--btn-radius);
+  background: rgba(239, 71, 111, 0.1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.headsup-scene-exit:hover {
+  background: rgba(239, 71, 111, 0.2);
+}
+
+.headsup-scene-exit[hidden] {
+  display: none;
+}
+
 /* ── Bottom right: the counter strip ─────────────────────────────────── */
-/* Height is capped rather than left to the content: the cap is what keeps
-   the strip below the protected centre of the view, and the sparkline is the
-   one cell that could otherwise grow it. */
+/* Block 4 of the dock, and the cells read left to right the way the column
+   above them does. Height is still capped by the block (see the geometry
+   tokens): the sparkline is the one cell that could otherwise grow, and the
+   cap is what keeps all four blocks inside 1080. */
 .headsup-counters {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: flex-end;
-  justify-content: flex-end;
-  max-width: var(--headsup-strip-max-width);
-  max-height: var(--headsup-strip-max-height);
+  justify-content: flex-start;
+  flex-wrap: nowrap;
   white-space: nowrap;
 }
 
 .headsup-counter {
   display: grid;
   gap: 1px;
-  justify-items: end;
+  justify-items: start;
 }
 
 .headsup-counter-value {
@@ -446,24 +668,15 @@ body.headsup-mode {
   color: var(--headsup-amber);
   pointer-events: none;
   white-space: nowrap;
-  max-width: calc(100vw - 48px);
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* The scripted badge. Inside the banner, because it qualifies the same
-   claim: this replay's events were written, not observed. */
-.headsup-banner-badge {
-  flex: 0 0 auto;
-  padding: 2px 8px;
-  border: 1px solid rgba(255, 209, 102, 0.55);
-  border-radius: 999px;
-  background: rgba(255, 209, 102, 0.14);
-  font-size: 9px;
-  letter-spacing: 1.2px;
-}
+/* The banner says what the whole replay IS. Where its events came from is a
+   different claim, so the scripted badge sits in the dock's scenario block
+   beside the clock it qualifies. */
 
-.headsup-banner-badge[hidden] {
+.headsup-banner[hidden] {
   display: none;
 }
 
@@ -475,28 +688,17 @@ body.headsup-mode {
 }
 
 /* ── The agent pipeline rail ─────────────────────────────────────────── */
-/* Scrolls rather than grows: a card with a dispatch message in it is taller
-   than the rail, and the rail's reserved rectangle is what keeps the centre
-   of the view clear. See the geometry tokens above. */
+/* Block 2 of the dock, and the only block that can grow: a card with a
+   dispatch message in it is taller than the room any fixed height would give
+   it. The grid hands this row the column's slack and the rail scrolls inside
+   it, so the three content-sized blocks around it keep their place however
+   much the pipeline has to say. */
 .headsup-rail {
-  position: fixed;
-  top: var(--headsup-rail-top);
-  right: var(--right-rail-x);
-  z-index: 110;
-  width: var(--headsup-rail-width);
-  max-height: calc(
-    100vh - var(--headsup-rail-top) - var(--headsup-rail-bottom)
-  );
   overflow-y: auto;
   overscroll-behavior: contain;
-  /* So the dispatch card's split can stack if the rail is ever narrowed,
-     without that decision having to be made against the whole viewport. */
+  /* So the dispatch card's split can stack when the dock is narrow, without
+     that decision having to be made against the whole viewport. */
   container-type: inline-size;
-  padding: 12px 14px;
-  border: 1px solid var(--headsup-border);
-  border-radius: var(--panel-radius);
-  background: var(--headsup-surface);
-  backdrop-filter: blur(12px);
 }
 
 .headsup-rail[hidden] {
@@ -894,137 +1096,133 @@ body.headsup-mode {
   color: var(--text-secondary);
 }
 
-/* ── The scenario picker ─────────────────────────────────────────────── */
-.headsup-picker {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(4, 6, 10, 0.72);
-  backdrop-filter: blur(6px);
-}
-
-.headsup-picker[hidden] {
-  display: none;
-}
-
-.headsup-picker-dialog {
-  width: min(560px, 100%);
-  max-height: min(70vh, 640px);
-  overflow: auto;
-  padding: 18px 20px 20px;
-  border: 1px solid var(--headsup-border);
-  border-radius: var(--panel-radius);
-  background: var(--menu-bg);
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-}
-
-.headsup-picker-header {
+/* ── Block 3: the active advisory ────────────────────────────────────── */
+/* Always on screen, including when nothing is in force. The action is the
+   line set largest, because it is the one thing the advisory ASKS FOR: a
+   hazard class describes the world, an action changes what a fleet does. */
+.headsup-advisory-header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.headsup-picker-title {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 1.8px;
-  color: var(--text-primary);
-}
-
-.headsup-picker-close {
-  width: 28px;
-  height: 28px;
-  border: 1px solid var(--glass-border);
-  border-radius: 50%;
-  background: transparent;
-  font-size: 16px;
-  line-height: 1;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.headsup-picker-close:hover {
-  border-color: var(--glass-border-hover);
-  color: var(--text-primary);
-}
-
-.headsup-picker-list {
-  display: grid;
   gap: 10px;
 }
 
-.headsup-picker-card {
-  display: grid;
-  gap: 6px;
-  padding: 13px 15px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--btn-radius);
-  background: rgba(255, 255, 255, 0.02);
-  text-align: left;
-  cursor: pointer;
-  transition:
-    border-color var(--transition-fast),
-    background var(--transition-fast);
+.headsup-advisory-header .headsup-block-title {
+  margin-bottom: 6px;
 }
 
-.headsup-picker-card:hover {
-  border-color: var(--accent-dim);
-  background: rgba(0, 212, 255, 0.06);
-}
-
-.headsup-picker-card[aria-busy='true'] {
-  opacity: 0.6;
-  cursor: progress;
-}
-
-.headsup-picker-card-name {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
+.headsup-advisory-id {
+  overflow: hidden;
   font-family: var(--font-mono);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 9px;
   letter-spacing: 0.6px;
-  color: var(--text-primary);
-}
-
-.headsup-picker-card-code {
-  padding: 2px 7px;
-  border: 1px solid var(--accent-dim);
-  border-radius: 6px;
-  font-size: 10px;
-  letter-spacing: 1.2px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--accent);
 }
 
-.headsup-picker-card-whatif {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--text-secondary);
+.headsup-advisory-action {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  line-height: 1.2;
+  color: var(--text-primary);
 }
 
-.headsup-picker-status {
-  margin-top: 12px;
+/* A refusal to enter is a different instruction from a speed limit, and the
+   colour is keyed on the ACTION rather than on the hazard's severity: what a
+   fleet has to do is the thing this line carries. */
+.headsup-advisory-action[data-action='NO_ENTRY'],
+.headsup-advisory-action[data-action='PAUSE_SERVICE'] {
+  color: var(--headsup-down);
+}
+
+.headsup-advisory-action[data-action='SPEED_CAP'],
+.headsup-advisory-action[data-action='ALL_WAY_STOP'],
+.headsup-advisory-action[data-action='DENSITY_CAP'],
+.headsup-advisory-action[data-action='KEEP_CLEAR'] {
+  color: var(--headsup-amber);
+}
+
+.headsup-advisory-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.headsup-advisory-grid[hidden],
+.headsup-advisory-action[hidden],
+.headsup-advisory-empty[hidden] {
+  display: none;
+}
+
+.headsup-advisory-grid dt {
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+}
+
+.headsup-advisory-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* The signature is three-valued and the third value is the honest default:
+   amber for a signature nobody checked, green only for a check that RAN and
+   passed, red for one that failed. Silence is never a yes. */
+.headsup-advisory-signature[data-signature='verified'] {
+  color: var(--headsup-live);
+}
+
+.headsup-advisory-signature[data-signature='failed'] {
+  color: var(--headsup-down);
+}
+
+.headsup-advisory-signature[data-signature='unverified'],
+.headsup-advisory-signature[data-signature='absent'] {
+  color: var(--headsup-amber);
+}
+
+.headsup-advisory-empty {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.6;
   letter-spacing: 0.4px;
-  color: var(--text-secondary);
+  color: var(--text-dim);
 }
 
 /* ── Narrow viewports ───────────────────────────────────────────────── */
-@media (max-width: 900px) {
-  .headsup-rail {
+/* The split is a claim about a wide screen: a 45% column of a 1000px window
+   is 450px of chrome over a 550px picture. Below 1280px the dock goes and the
+   globe takes the window back, rather than the two of them sharing a space
+   neither can use. Every geometry rule above is restated here in reverse, so
+   the viewport, the frame and the two centred surfaces agree again. */
+@media (max-width: 1280px) {
+  .headsup-dock {
     display: none;
   }
 
+  body.headsup-mode {
+    --headsup-viewport-width: 100vw;
+    --headsup-dock-width: 0vw;
+    --right-rail-x: 52px;
+  }
+
+  body.headsup-mode #command-dock {
+    left: 50%;
+    width: min(94vw, 1240px);
+  }
+}
+
+@media (max-width: 900px) {
   .headsup-counters {
     gap: 10px;
   }

@@ -47,7 +47,24 @@ const advisory = (overrides = {}, propertyOverrides = {}) => ({
     action: { type: 'NO_ENTRY' },
     valid_from: '2026-10-21T18:00:00Z',
     valid_until: '2026-10-21T20:00:00Z',
-    evidence: [{ event_id: 'nws-1' }, { event_id: 'usgs-1' }],
+    // Contract-shaped evidence: the schema requires a source on every row,
+    // and the advisory card names the feeds an advisory rests on from these.
+    evidence: [
+      {
+        event_id: 'nws-1',
+        source: 'nws',
+        kind: 'nws.flood_warning',
+        observed_at: '2026-10-21T17:55:00Z',
+        raw_ref: 'nws/alerts/nws-1',
+      },
+      {
+        event_id: 'usgs-1',
+        source: 'usgs',
+        kind: 'usgs.gauge',
+        observed_at: '2026-10-21T17:58:00Z',
+        raw_ref: 'usgs/gauge/08158000',
+      },
+    ],
     policy_rule: 'flood.no_entry',
     issuer: 'headsup/compiler',
     signature: 'c2lnbmF0dXJl',
@@ -172,6 +189,12 @@ test('a polygon advisory normalizes to drawable rings and a window', () => {
   assert.equal(row.validFrom, Date.parse('2026-10-21T18:00:00Z'));
   assert.equal(row.validUntil, Date.parse('2026-10-21T20:00:00Z'));
   assert.equal(row.evidenceCount, 2);
+  // The rows themselves, not only how many: the advisory card names the
+  // feeds, and reading them off a neighbouring frame would be inference.
+  assert.deepEqual(
+    row.evidence.map((cite) => cite.source),
+    ['nws', 'usgs'],
+  );
   assert.equal(row.policyRule, 'flood.no_entry');
   assert.equal(row.signed, true);
 });

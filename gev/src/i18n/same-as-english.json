@@ -122,7 +122,12 @@
     "▲ {frp} MW",
     "NWS",
     "USGS",
-    "WZDx"
+    "WZDx",
+    "{value} km²",
+    "{value} m²",
+    "{value} km",
+    "{value} m",
+    "{remaining} ({clock}Z)"
   ],
   "ru": [
     "AIS: --",
@@ -144,6 +149,7 @@
     "{speed}×",
     "NWS",
     "USGS",
-    "WZDx"
+    "WZDx",
+    "{remaining} ({clock}Z)"
   ]
 }

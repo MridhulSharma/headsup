@@ -59,6 +59,31 @@ export const HEADSUP_OMITTED_LAYERS = Object.freeze([
   'military-awareness',
 ]);
 
+/**
+ * Optional subsystems Heads Up mode never initializes.
+ *
+ * The same reasoning as the layer list above, one level up: not starting a
+ * subsystem is the whole of "do not run it" — no init, no per-frame listener,
+ * no canvas. Each id is read by the one phase that would otherwise start it,
+ * and the module itself is left exactly as upstream ships it.
+ *
+ * - `detection` and `tracked-readout` are the fork's reconnaissance readouts
+ *   over the air/sea/space layers Heads Up mode does not register. With those
+ *   layers gone they have nothing to detect or track, so they announced
+ *   themselves (`[Detection] Initialized`, `Mode: DENSE`,
+ *   `[TrackedReadout] Initialized`) and then watched an empty set.
+ * - `scope-mask` is the circular lens. Heads Up mode draws the globe into a
+ *   RECTANGULAR viewport, so a mask that fades everything outside an
+ *   inscribed circle would crop the very corners the rectangle exists to
+ *   show. The module stays installed in `?mode=full`, where the DISPLAY
+ *   controls still own it.
+ */
+export const HEADSUP_OMITTED_SUBSYSTEMS = Object.freeze([
+  'detection',
+  'tracked-readout',
+  'scope-mask',
+]);
+
 /** The layer Heads Up mode switches on for itself at startup. */
 export const HEADSUP_LAYER_ID = 'headsup';
 
@@ -125,6 +150,14 @@ export function createHeadsupModeConfig({
     enableLayers: Object.freeze(headsUp ? [HEADSUP_LAYER_ID] : []),
     /** Upstream's own layer rows own `#data-toggles` only in full mode. */
     upstreamLayerPanel: !headsUp,
+    /** Subsystem ids this mode does not start; see the list above. */
+    omitSubsystems: Object.freeze(headsUp ? [...HEADSUP_OMITTED_SUBSYSTEMS] : []),
+    /** The reconnaissance detection overlay over the layers we omit. */
+    detection: !headsUp,
+    /** The tracked-entity readout, which detection feeds. */
+    trackedReadout: !headsUp,
+    /** The circular scope lens, replaced here by a rectangular viewport. */
+    scopeMask: !headsUp,
     /** The Realtime voice agent: a paid session nobody asked for here. */
     voiceAgent: !headsUp,
     /** The POWER UP key-setup surface. */

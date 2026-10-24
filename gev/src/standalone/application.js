@@ -101,6 +101,8 @@ export function createStandaloneApplication({
         loaderStatus,
         placeSearch,
         catalog,
+        // Detection and the tracked readout are not started in Heads Up mode.
+        headsupMode: mode,
       }),
     createData: (context) =>
       createStandaloneData({

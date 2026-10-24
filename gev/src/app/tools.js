@@ -124,8 +124,16 @@ export function createApplicationTools({
   installRenderGovernor(viewer);
 
   // Install the explicit scope mask used by the DISPLAY controls.
-  installScopeMask(viewer);
-  defer(() => destroyScopeMask());
+  //
+  // Heads Up mode asks the config instead of installing it: the console draws
+  // the globe into a RECTANGULAR viewport, and a mask that fades everything
+  // outside the inscribed circle would black out the corners of the very
+  // rectangle. Not installing it is the whole of "off" — no canvas, no resize
+  // observer, no per-frame height sample. `?mode=full` is untouched.
+  if (headsupMode?.scopeMask !== false) {
+    installScopeMask(viewer);
+    defer(() => destroyScopeMask());
+  }
 
   // The follow camera recomputes the tracked target's dead-reckon position
   // every frame — tracking anything is a per-frame animation. (perf wave 2)

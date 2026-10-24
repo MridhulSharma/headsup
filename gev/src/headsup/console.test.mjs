@@ -71,6 +71,7 @@ function fakeLayer({
 /** A scenario API that answers from memory and records every call. */
 function fakeScenarios({
   listing = [SCENARIO],
+  failList = null,
   failStart = null,
   failApprove = null,
 } = {}) {
@@ -81,6 +82,7 @@ function fakeScenarios({
       baseUrl: 'http://localhost:8765',
       list: async () => {
         calls.push('list');
+        if (failList) throw failList;
         return listing;
       },
       start: async (id) => {
@@ -122,6 +124,8 @@ function mount(options = {}) {
   });
   return {
     ...fixture,
+    // Everything this console says now lives in one dock beside the globe.
+    dock: fixture.document.getElementById('headsup-dock'),
     console: console_,
     layer,
     scenarios,
@@ -131,11 +135,10 @@ function mount(options = {}) {
   };
 }
 
-test('the console retitles two panels and adds its own surfaces', (t) => {
+test('the console retitles one panel and builds the dock beside the globe', (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
   assert.equal(page.dataTitle.textContent, 'HEADS UP LAYERS');
-  assert.equal(page.sceneTitle.textContent, 'TEST SCENE');
   // The four Heads Up cohorts, in the order the build step names them.
   assert.deepEqual(
     page.dataToggles
@@ -143,11 +146,29 @@ test('the console retitles two panels and adds its own surfaces', (t) => {
       .map((row) => row.dataset.cohort),
     ['hazards', 'corridors', 'ghost'],
   );
-  assert.ok(page.sceneInner.querySelector('.headsup-scene-launch'));
-  assert.ok(page.styleIndicator.querySelector('.headsup-readout'));
-  assert.ok(page.hudContent.querySelector('.headsup-counters'));
+  // The dock's four blocks, in the order they are read top to bottom.
+  assert.deepEqual(
+    page.dock.children.map((block) => block.className),
+    [
+      'headsup-block headsup-scenes',
+      'headsup-rail headsup-block',
+      'headsup-block headsup-advisory',
+      'headsup-block headsup-strip',
+    ],
+  );
+  assert.ok(page.dock.querySelector('.headsup-scene-list'));
+  assert.ok(page.dock.querySelector('.headsup-readout'));
+  assert.ok(page.dock.querySelector('.headsup-counters'));
   assert.ok(page.document.getElementById('headsup-pipeline-rail'));
+  assert.ok(page.document.getElementById('headsup-advisory'));
   assert.ok(page.document.getElementById('headsup-banner'));
+  // The three surfaces that hosted these before the dock existed are left
+  // exactly as upstream built them, not emptied or rebuilt: the stylesheet
+  // hides them, which is what keeps a subtree pull a merge.
+  assert.equal(page.styleIndicator.querySelector('.headsup-readout'), null);
+  assert.equal(page.hudContent.children.length, 0);
+  assert.equal(page.sceneTitle.textContent, 'SCENES');
+  assert.equal(page.sceneInner.querySelector('.headsup-scene-list'), null);
 });
 
 test('upstream nodes other modules still write to are left in place', (t) => {
@@ -255,12 +276,12 @@ test('the readout and the counter strip report the feed, not their own guess', (
   const page = mount({ layer });
   t.after(() => page.console.destroy());
   layer.publish();
-  const readout = page.styleIndicator
+  const readout = page.dock
     .querySelectorAll('.headsup-readout-value')
     .map((node) => node.textContent);
   assert.deepEqual(readout, ['S1 Flash flood', '18:50:00Z', '60×']);
   const cell = (key) =>
-    page.hudContent
+    page.dock
       .querySelectorAll('.headsup-counter')
       .find((node) => node.dataset.counter === key);
   const pair = (key) => [
@@ -281,7 +302,7 @@ test('the readout and the counter strip report the feed, not their own guess', (
     '8.5s',
   );
   assert.equal(
-    page.hudContent.querySelector('.headsup-feed .headsup-counter-value')
+    page.dock.querySelector('.headsup-feed .headsup-counter-value')
       .textContent,
     'LIVE',
   );
@@ -296,7 +317,7 @@ test('a tally the feed has not reported shows as unknown, not as zero', (t) => {
   t.after(() => page.console.destroy());
   layer.publish();
   const cell = (key) =>
-    page.hudContent
+    page.dock
       .querySelectorAll('.headsup-counter')
       .find((node) => node.dataset.counter === key);
   assert.deepEqual(
@@ -318,12 +339,12 @@ test('an idle feed reads as idle, with no replay speed claimed', (t) => {
   const page = mount({ layer });
   t.after(() => page.console.destroy());
   layer.publish();
-  const readout = page.styleIndicator
+  const readout = page.dock
     .querySelectorAll('.headsup-readout-value')
     .map((node) => node.textContent);
   assert.deepEqual(readout, ['IDLE', '—', '—']);
   assert.equal(
-    page.hudContent.querySelector('.headsup-feed .headsup-counter-value')
+    page.dock.querySelector('.headsup-feed .headsup-counter-value')
       .textContent,
     'DOWN',
   );
@@ -341,7 +362,7 @@ test('the feed chip says which feed answered, not merely that one did', (t) => {
     });
     const page = mount({ layer });
     layer.publish();
-    const chip = page.hudContent.querySelector('.headsup-feed');
+    const chip = page.dock.querySelector('.headsup-feed');
     assert.equal(
       chip.querySelector('.headsup-counter-value').textContent,
       expected,
@@ -436,7 +457,7 @@ test('the scripted badge follows the feed`s own flag', (t) => {
   const layer = fakeLayer({ feed });
   const page = mount({ layer });
   t.after(() => page.console.destroy());
-  const badge = () => page.body.querySelector('.headsup-banner-badge');
+  const badge = () => page.dock.querySelector('.headsup-scripted-badge');
   layer.publish();
   assert.equal(
     badge().hidden,
@@ -453,35 +474,207 @@ test('the scripted badge follows the feed`s own flag', (t) => {
   assert.equal(badge().hidden, true);
 });
 
-test('the picker lists every scenario with its what-if line', async (t) => {
+// ── The advisory card ────────────────────────────────────────────────────
+
+/** One live advisory, as the layer's snapshot carries it. */
+const liveAdvisory = (overrides = {}) => ({
+  id: 'adv-flood-1',
+  version: 2,
+  geometryType: 'Polygon',
+  polygons: [
+    [
+      [
+        [-97.75, 30.26],
+        [-97.73958, 30.26],
+        [-97.73958, 30.26904],
+        [-97.75, 30.26904],
+        [-97.75, 30.26],
+      ],
+    ],
+  ],
+  lines: [],
+  hazardClass: 'FLOOD',
+  severity: 4,
+  confidence: 0.8,
+  action: 'NO_ENTRY',
+  validFrom: Date.now() - 10_000,
+  validUntil: Date.now() + 90_000,
+  evidence: [
+    { source: 'nws', kind: 'nws.flood_warning' },
+    { source: 'usgs', kind: 'usgs.gauge' },
+  ],
+  evidenceCount: 2,
+  policyRule: 'flood.no_entry',
+  issuer: 'headsup/compiler',
+  signed: true,
+  ...overrides,
+});
+
+test('the advisory card is on screen with its empty state before anything is in force', (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
-  await Promise.resolve();
-  await Promise.resolve();
-  const picker = page.document.getElementById('headsup-scene-picker');
-  assert.equal(picker.hidden, false);
-  const cards = picker.querySelectorAll('.headsup-picker-card');
-  assert.equal(cards.length, 1);
+  const card = page.document.getElementById('headsup-advisory');
+  assert.equal(card.dataset.state, 'empty');
   assert.equal(
-    cards[0].querySelector('.headsup-picker-card-code').textContent,
-    'S1',
+    card.querySelector('.headsup-advisory-empty').textContent,
+    'No advisory in force.',
   );
+  // The fields are not drawn as dashes: "nothing in force" is a reading, and
+  // a grid of em dashes would read as an advisory nobody filled in.
+  assert.equal(card.querySelector('.headsup-advisory-grid').hidden, true);
+  assert.equal(card.querySelector('.headsup-advisory-action').hidden, true);
+});
+
+test('the advisory card reports the action, the hazard, the extent and the window', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: {
+      scenario: null,
+      advisories: [liveAdvisory()],
+      pipeline: {
+        acks: [],
+        compiles: [
+          {
+            proposalId: 'prop-1',
+            advisoryId: 'adv-flood-1',
+            status: 'SIGNED',
+            signed: true,
+            signatureVerified: true,
+            reasons: [],
+          },
+        ],
+      },
+    },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const card = page.document.getElementById('headsup-advisory');
+  assert.equal(card.dataset.state, 'live');
+  // The action is the thing the advisory asks for, so it is its own line.
+  const action = card.querySelector('.headsup-advisory-action');
+  assert.equal(action.textContent, 'NO_ENTRY');
+  assert.equal(action.dataset.action, 'NO_ENTRY');
+  assert.equal(card.querySelector('.headsup-advisory-id').textContent, 'adv-flood-1');
+  const values = card
+    .querySelectorAll('.headsup-advisory-grid dd')
+    .map((node) => node.textContent);
+  assert.equal(values[0], 'FLOOD');
+  assert.equal(values[1], '4 of 5');
+  // About a square kilometre, in the unit it reads at.
+  assert.match(values[2], /^1\.0[01] km²$/);
+  assert.match(values[3], /^1m 3\ds \(\d\d:\d\d:\d\dZ\)$/);
+  // The feeds it rests on, named — not a count, which would answer "how
+  // much evidence" rather than "whose".
+  assert.equal(values[4], 'NWS, USGS');
+  assert.equal(values[5], 'verified');
   assert.equal(
-    cards[0].querySelector('.headsup-picker-card-whatif').textContent,
+    card.querySelector('.headsup-advisory-signature').dataset.signature,
+    'verified',
+  );
+});
+
+test('the card never upgrades an unreported signature into a yes', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: {
+      scenario: null,
+      advisories: [liveAdvisory()],
+      pipeline: { acks: [], compiles: [] },
+    },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const signature = page.document
+    .getElementById('headsup-advisory')
+    .querySelector('.headsup-advisory-signature');
+  // The advisory arrived carrying a signature; nothing has checked it, and
+  // this console does not hold the issuer's key.
+  assert.equal(signature.textContent, 'present, unverified');
+  assert.equal(signature.dataset.signature, 'unverified');
+});
+
+test('a corridor advisory reports its length, and a second live one is counted', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: {
+      scenario: null,
+      advisories: [
+        liveAdvisory(),
+        liveAdvisory({
+          id: 'adv-keep-clear-6',
+          geometryType: 'LineString',
+          action: 'KEEP_CLEAR',
+          hazardClass: 'EMERGENCY_SCENE',
+          polygons: [],
+          lines: [
+            [
+              [-97.74, 30.2665],
+              [-97.7365, 30.2665],
+            ],
+          ],
+          validFrom: Date.now() - 1_000,
+        }),
+      ],
+      pipeline: { acks: [], compiles: [] },
+    },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const card = page.document.getElementById('headsup-advisory');
+  // The newest live window, and the card says how many are in force so one
+  // card is not read as the claim that there is one.
+  assert.equal(
+    card.querySelector('.headsup-advisory-id').textContent,
+    'adv-keep-clear-6 · 2 in force',
+  );
+  const extent = card.querySelectorAll('.headsup-advisory-grid dd')[2];
+  // Metres, because that is the unit a third of a kilometre reads at.
+  assert.match(extent.textContent, /^33\d m corridor$/);
+});
+
+test('the dock lists every test scene with its what-if line', async (t) => {
+  const page = mount();
+  t.after(() => page.console.destroy());
+  // Asked for at startup: the buttons ARE the surface, so nothing is opened.
+  await Promise.resolve();
+  await Promise.resolve();
+  const buttons = page.dock.querySelectorAll('.headsup-scene-btn');
+  assert.equal(buttons.length, 1);
+  assert.equal(buttons[0].dataset.scenario, 's1_flood');
+  assert.equal(buttons[0].querySelector('.headsup-scene-code').textContent, 'S1');
+  assert.equal(
+    buttons[0].querySelector('.headsup-scene-whatif').textContent,
     SCENARIO.whatIf,
   );
   assert.deepEqual(page.scenarios.calls, ['list']);
 });
 
-test('choosing a scenario starts it, flies there, banners it and opens the rail', async (t) => {
+test('a listing the API cannot answer says why and offers a retry', async (t) => {
+  const scenarios = fakeScenarios({ failList: new Error('offline') });
+  const page = mount({ scenarios });
+  t.after(() => page.console.destroy());
+  for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+  assert.match(
+    page.dock.querySelector('.headsup-scene-status').textContent,
+    /failed/,
+  );
+  // One retry affordance, and it asks the same question again.
+  const retry = page.dock.querySelector('.headsup-scene-retry');
+  assert.equal(retry.textContent, 'RETRY');
+  retry.click();
+  for (let turn = 0; turn < 4; turn++) await Promise.resolve();
+  assert.deepEqual(page.scenarios.calls, ['list', 'list']);
+});
+
+test('one press starts a scene, flies there, banners it and opens the rail', async (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
   await Promise.resolve();
   await Promise.resolve();
-  const picker = page.document.getElementById('headsup-scene-picker');
-  picker.querySelector('.headsup-picker-card').click();
+  page.dock.querySelector('.headsup-scene-btn').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
   assert.deepEqual(page.scenarios.calls, ['list', 'start:s1_flood']);
   assert.deepEqual(page.flights, [SCENARIO.startView]);
@@ -495,7 +688,16 @@ test('choosing a scenario starts it, flies there, banners it and opens the rail'
     page.document.getElementById('headsup-pipeline-rail').hidden,
     false,
   );
-  assert.equal(picker.hidden, true);
+  // The button that started it says so, and Exit appears beside the clock.
+  assert.equal(
+    page.dock.querySelector('.headsup-scene-btn').getAttribute('aria-pressed'),
+    'true',
+  );
+  assert.equal(page.dock.querySelector('.headsup-scene-exit').hidden, false);
+  assert.equal(
+    page.dock.querySelector('.headsup-scene-status').textContent,
+    'Flash flood (San Antonio)',
+  );
 });
 
 test('the rail opens naming its six stages, none of them lit', async (t) => {
@@ -521,37 +723,31 @@ test('the rail opens naming its six stages, none of them lit', async (t) => {
   assert.equal(page.document.getElementById('headsup-rail-card').hidden, true);
 });
 
-test('a start that fails leaves the picker open and says why', async (t) => {
+test('a start that fails says why and claims no replay', async (t) => {
   const scenarios = fakeScenarios({ failStart: new Error('boom') });
   const page = mount({ scenarios });
   t.after(() => page.console.destroy());
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
   await Promise.resolve();
   await Promise.resolve();
-  const picker = page.document.getElementById('headsup-scene-picker');
-  picker.querySelector('.headsup-picker-card').click();
+  page.dock.querySelector('.headsup-scene-btn').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
-  assert.equal(picker.hidden, false);
   assert.match(
-    picker.querySelector('.headsup-picker-status').textContent,
+    page.dock.querySelector('.headsup-scene-status').textContent,
     /failed/,
   );
   assert.deepEqual(page.flights, []);
   assert.equal(page.document.getElementById('headsup-banner').hidden, true);
+  assert.equal(page.dock.querySelector('.headsup-scene-exit').hidden, true);
 });
 
 test('Exit stops the replay, clears what it drew and flies home', async (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
   await Promise.resolve();
   await Promise.resolve();
-  page.document
-    .getElementById('headsup-scene-picker')
-    .querySelector('.headsup-picker-card')
-    .click();
+  page.dock.querySelector('.headsup-scene-btn').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
-  page.sceneInner.querySelector('.headsup-scene-exit').click();
+  page.dock.querySelector('.headsup-scene-exit').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
   assert.deepEqual(page.scenarios.calls, ['list', 'start:s1_flood', 'stop']);
   assert.equal(page.layer.calls.cleared, 1);
@@ -561,24 +757,16 @@ test('Exit stops the replay, clears what it drew and flies home', async (t) => {
     page.document.getElementById('headsup-pipeline-rail').hidden,
     true,
   );
+  assert.equal(page.dock.querySelector('.headsup-scene-exit').hidden, true);
 });
 
-test('Escape closes the picker first, then ends the replay', async (t) => {
+test('Escape ends the replay once there is no card open to close', async (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
   await Promise.resolve();
   await Promise.resolve();
-  const picker = page.document.getElementById('headsup-scene-picker');
-  picker.querySelector('.headsup-picker-card').click();
+  page.dock.querySelector('.headsup-scene-btn').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
-  // Reopen it: the first Escape must take the dialog, not the replay.
-  page.sceneInner.querySelector('.headsup-scene-btn').click();
-  await Promise.resolve();
-  await Promise.resolve();
-  page.document.dispatch('keydown', { key: 'Escape' });
-  assert.equal(picker.hidden, true);
-  assert.deepEqual(page.scenarios.calls, ['list', 'start:s1_flood', 'list']);
   page.document.dispatch('keydown', { key: 'Escape' });
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
   assert.equal(page.scenarios.calls.at(-1), 'stop');
@@ -593,17 +781,17 @@ test('an Escape with nothing open is left for upstream`s own handlers', (t) => {
   assert.equal(other.defaultPrevented, false);
 });
 
-test('teardown takes back every node it added and both panel titles', (t) => {
+test('teardown takes back every node it added and the panel title', (t) => {
   const page = mount();
   page.console.destroy();
   assert.equal(page.dataTitle.textContent, 'DATA LAYERS');
+  // The scene panel was never retitled: the dock owns scenario control now,
+  // and the stylesheet hides upstream's panel whole.
   assert.equal(page.sceneTitle.textContent, 'SCENES');
   assert.equal(page.document.getElementById('headsup-banner'), null);
+  assert.equal(page.document.getElementById('headsup-dock'), null);
   assert.equal(page.document.getElementById('headsup-pipeline-rail'), null);
-  assert.equal(page.document.getElementById('headsup-scene-picker'), null);
-  assert.equal(page.styleIndicator.querySelector('.headsup-readout'), null);
-  assert.equal(page.hudContent.querySelector('.headsup-counters'), null);
-  assert.equal(page.sceneInner.querySelector('.headsup-scene-launch'), null);
+  assert.equal(page.document.getElementById('headsup-advisory'), null);
   // Idempotent: the application defers it, and an abort can also reach it.
   page.console.destroy();
   t.diagnostic('teardown is idempotent');
@@ -893,7 +1081,9 @@ test('a held two-key advisory offers an Approve button that posts the proposal',
   // produced — the button only says what it is for.
   button.click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
-  assert.deepEqual(page.scenarios.calls, ['approve:prop-1']);
+  // The listing is the call the console makes at startup, before anybody
+  // has pressed anything.
+  assert.deepEqual(page.scenarios.calls, ['list', 'approve:prop-1']);
   // The console does not redraw itself as published: what re-enables the
   // pipeline is the compiler's next frame, not this call returning.
   assert.match(cardText(page), /Waiting for the compiler/);
@@ -1003,7 +1193,7 @@ test('ending a replay takes the rail`s open card with it', async (t) => {
   layer.publish();
   railStage(page, 'fusion').click();
   assert.equal(page.document.getElementById('headsup-rail-card').hidden, false);
-  page.sceneInner.querySelector('.headsup-scene-exit').click();
+  page.dock.querySelector('.headsup-scene-exit').click();
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
   // The rail is hidden on the landing, and nothing of the last run is left
   // open inside it.
@@ -1024,11 +1214,12 @@ test('Escape closes an open card before it ends the replay', async (t) => {
   railStage(page, 'fusion').click();
   page.document.dispatch('keydown', { key: 'Escape' });
   assert.equal(page.document.getElementById('headsup-rail-card').hidden, true);
-  assert.deepEqual(page.scenarios.calls, []);
+  // Nothing but the startup listing: the first Escape took the card.
+  assert.deepEqual(page.scenarios.calls, ['list']);
   // The next one reaches the replay.
   page.document.dispatch('keydown', { key: 'Escape' });
   for (let turn = 0; turn < 6; turn++) await Promise.resolve();
-  assert.deepEqual(page.scenarios.calls, ['stop']);
+  assert.deepEqual(page.scenarios.calls, ['list', 'stop']);
 });
 
 test('a snapshot whose pipeline is not the shape this build knows is a quiet rail', (t) => {
@@ -1044,7 +1235,7 @@ test('a snapshot whose pipeline is not the shape this build knows is a quiet rai
   layer.publish();
   assert.equal(railStage(page, 'fusion').dataset.lit, 'false');
   assert.equal(
-    page.hudContent.querySelector('.headsup-feed .headsup-counter-value')
+    page.dock.querySelector('.headsup-feed .headsup-counter-value')
       .textContent,
     'LIVE',
   );
