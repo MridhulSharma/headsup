@@ -54,6 +54,7 @@ from typing import Protocol, runtime_checkable
 from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import Point as ShapelyPoint
 
+from headsup.agents.injection import InjectionGuard
 from headsup.agents.sentinels.base import Sentinel, noisy_or, pad_m, stable_id
 from headsup.contracts import (
     CandidateHazard,
@@ -314,8 +315,14 @@ class IncidentSentinel(Sentinel):
     sources = (Source.AUSTIN_INCIDENTS,)
     window = REPORT_WINDOW
 
-    def __init__(self, *, llm: LlmClient | None = None, geocoder: Geocoder | None = None) -> None:
-        super().__init__()
+    def __init__(
+        self,
+        *,
+        llm: LlmClient | None = None,
+        geocoder: Geocoder | None = None,
+        guard: InjectionGuard | None = None,
+    ) -> None:
+        super().__init__(guard=guard)
         self.llm = llm
         self.geocoder = geocoder
         self._reports: dict[str, _Report] = {}
@@ -329,6 +336,10 @@ class IncidentSentinel(Sentinel):
         self.llm_failures = 0
         #: Records that could not be placed, on the feed's word or the graph's.
         self.unplaced = 0
+
+    def free_text(self, event: CivicEvent) -> str:
+        """The record's words: the same text the volume call would be given."""
+        return _text_of(event) if event.source is Source.AUSTIN_INCIDENTS else ""
 
     async def read(self, event: CivicEvent) -> list[CandidateHazard]:
         if event.source is not Source.AUSTIN_INCIDENTS:

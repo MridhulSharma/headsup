@@ -36,6 +36,7 @@ from headsup.agents.compiler.compiler import CompilerError
 from headsup.agents.compiler.service import CompilerService
 from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
+from headsup.agents.injection import InjectionGuard
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
 from headsup.agents.sentinels.flood import FloodSentinel
@@ -123,7 +124,9 @@ def _build(name: str, bus: Bus, llm: LlmClient | None, service: CompilerService 
     proposes closures the compiler would have to check for itself.
     """
     if name == "flood":
-        return SentinelWorker(FloodSentinel(llm=llm), bus, on_candidate=_print_candidate)
+        return SentinelWorker(
+            FloodSentinel(llm=llm, guard=InjectionGuard(bus)), bus, on_candidate=_print_candidate
+        )
     if name == "signal":
         return SentinelWorker(SignalOutageSentinel(), bus, on_candidate=_print_candidate)
     if name == "fusion":
