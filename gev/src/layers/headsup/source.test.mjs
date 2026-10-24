@@ -115,7 +115,11 @@ const PIPELINE_FRAMES = Object.freeze([
   { type: 'hazard', hazard: { id: 'haz-1', class: 'FLOOD', severity: 5 } },
   {
     type: 'proposal',
-    proposal: { id: 'prop-1', hazard_id: 'haz-1', action: { type: 'NO_ENTRY' } },
+    proposal: {
+      id: 'prop-1',
+      hazard_id: 'haz-1',
+      action: { type: 'NO_ENTRY' },
+    },
   },
   {
     type: 'verdict',

@@ -192,11 +192,7 @@ test('the rail stops above upstream`s command dock, which it spans', () => {
   // under the rail's lane horizontally and the two can only be kept apart
   // vertically. That is what `--headsup-rail-bottom` reserves.
   const rail = railRect();
-  const dockBottom = pixels(
-    css('command-dock.css'),
-    'bottom',
-    '#command-dock',
-  );
+  const dockBottom = pixels(css('command-dock.css'), 'bottom', '#command-dock');
   const dockTop = VIEWPORT_HEIGHT - dockBottom - COMMAND_DOCK_HEIGHT;
   assert.ok(
     rail.bottom <= dockTop,

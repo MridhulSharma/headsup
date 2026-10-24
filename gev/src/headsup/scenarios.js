@@ -96,7 +96,10 @@ function startView(value) {
 export function normalizeScenario(row) {
   if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
   const id = identifier(row.id);
-  const name = text(row.name, MAX_NAME_CHARS);
+  // The API names this field `title` and a hand-written fixture names it
+  // `name`. Both are the same one line of display text, so read either.
+  const name =
+    text(row.name, MAX_NAME_CHARS) ?? text(row.title, MAX_NAME_CHARS);
   if (!id || !name) return null;
   const code =
     typeof row.code === 'string' && CODE_GRAMMAR.test(row.code.trim())
@@ -104,7 +107,8 @@ export function normalizeScenario(row) {
       : null;
   const view = startView(row.start_view);
   if (!view) return null;
-  const speed = Number(row.speed);
+  // `default_speed` is the API's name for it; `speed` is the fixture's.
+  const speed = Number(row.speed ?? row.default_speed);
   return Object.freeze({
     id,
     code,

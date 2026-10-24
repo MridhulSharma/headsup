@@ -149,7 +149,8 @@ export function feedChips(pipeline) {
   walk(pipeline?.candidates);
   walk(pipeline?.hazards);
   return [...chips.values()].sort(
-    (a, b) => (a.firstAt ?? 0) - (b.firstAt ?? 0) || a.source.localeCompare(b.source),
+    (a, b) =>
+      (a.firstAt ?? 0) - (b.firstAt ?? 0) || a.source.localeCompare(b.source),
   );
 }
 
@@ -339,7 +340,8 @@ export function buildPipelineView({ snapshot = null, stats = {} } = {}) {
   const counters = pipeline?.counters ?? null;
   return Object.freeze({
     hazardId,
-    hazardClass: latestHazard?.hazardClass ?? latestCandidate?.hazardClass ?? null,
+    hazardClass:
+      latestHazard?.hazardClass ?? latestCandidate?.hazardClass ?? null,
     advisoryId,
     stages: Object.freeze(stages),
     operators: Object.freeze(operators),

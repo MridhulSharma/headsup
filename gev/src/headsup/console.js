@@ -841,8 +841,11 @@ export function startHeadsupConsole({
         const item = element('li', 'headsup-card-item', list);
         const name = element('span', 'headsup-card-chip', item);
         name.textContent = feedName(chip.source);
-        const count = element('span', null, item);
-        count.textContent = t('{count} events', { count: chip.events });
+        // The count on its own, in a column, the way the legend rows read:
+        // a number beside a name needs no sentence around it, and one less
+        // sentence is one less plural rule to get wrong in five languages.
+        const count = element('span', 'headsup-card-outcome', item);
+        count.textContent = String(chip.events);
       }
       return;
     }
@@ -913,8 +916,14 @@ export function startHeadsupConsole({
           const name = element('span', null, item);
           // A rule id is contract text, shown as the playbook spells it.
           name.textContent = check.rule;
+          // The word as well as the tick, because the tick is aria-hidden and
+          // the colour is the only other thing carrying this. Built into a
+          // variable rather than written inline: `materialSymbolsSubset`
+          // reads lower-case literals assigned straight to `textContent` as
+          // icon-font glyph names, and these two are words.
+          const outcomeText = check.passed ? t('passed') : t('failed');
           const outcome = element('span', 'headsup-card-outcome', item);
-          outcome.textContent = check.passed ? t('passed') : t('failed');
+          outcome.textContent = outcomeText;
         }
       }
       if (latest.reasons.length) {
@@ -1090,11 +1099,7 @@ export function startHeadsupConsole({
     for (const scenario of rows) {
       const scenarioCard = element('button', 'headsup-picker-card', pickerList);
       scenarioCard.type = 'button';
-      const heading = element(
-        'span',
-        'headsup-picker-card-name',
-        scenarioCard,
-      );
+      const heading = element('span', 'headsup-picker-card-name', scenarioCard);
       // Feed text, one node each: a code badge, the name, the city.
       if (scenario.code) {
         const code = element('span', 'headsup-picker-card-code', heading);
@@ -1112,8 +1117,10 @@ export function startHeadsupConsole({
         );
         whatIf.textContent = scenario.whatIf;
       }
-      on(scenarioCard, 'click', () =>
-        void beginScenario(scenario, scenarioCard),
+      on(
+        scenarioCard,
+        'click',
+        () => void beginScenario(scenario, scenarioCard),
       );
     }
     pickerList.querySelector('button')?.focus();
