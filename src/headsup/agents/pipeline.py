@@ -15,7 +15,9 @@ The pipeline the two of them complete:
 
     candidates --FusionWorker--> hazards --ProposerWorker--> proposals
                                                                  |
-                                            stub_verdict + CompilerService
+                                               Critic.review --> verdicts
+                                                                 |
+                                                        CompilerService
                                                                  v
                                                             advisories
 
@@ -23,8 +25,22 @@ The pipeline the two of them complete:
 pair to the compiler, so the proposal is on the bus whatever the gate decides
 and a rejection can be read against what was asked for. One hazard may yield
 several proposals -- see `Proposer.propose_all` -- and each goes through that
-same sequence in turn. The critic between them is `agents.critic.stub_verdict`
-until D3.2.
+same sequence in turn.
+
+The critic between them is `agents.critic.Critic`, reviewing one proposal at a
+time on a context of its own: it is given the proposal and its evidence and
+never the proposer's rationale, so its APPROVE, REVISE or ESCALATE is an
+independent read rather than an agreement. It is deliberately not a bus worker
+of its own. A worker on `proposals` would be a second consumer group on a
+stream the compiler is already reacting to, and the compile would have to wait
+on a verdict arriving back over Redis; here the review happens inline, between
+the publish and the compile, so a proposal, its verdict and its audit record
+are written in that order and one judgment call is spent per proposal.
+
+A review that raises falls back to `Critic.review_offline`, the deterministic
+rules path, rather than to an approval: the gate still gets a verdict from a
+critic that measured the proposal, and the pipeline never publishes because
+the reviewer broke.
 
 The compiler service is injected and optional. With one, this is S1 end to end;
 without one the pipeline stops at `proposals`, which is what lets a process
@@ -39,7 +55,7 @@ import logging
 from types import TracebackType
 from typing import Protocol
 
-from headsup.agents.critic import stub_verdict
+from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
 from headsup.agents.proposer import Proposer
 from headsup.agents.sentinels.worker import BLOCK_MS, WorkerReport
@@ -52,7 +68,7 @@ from headsup.bus import (
     BusError,
     BusMessage,
 )
-from headsup.contracts import CandidateHazard, Hazard, ProposedAdvisory
+from headsup.contracts import CandidateHazard, CriticVerdict, Hazard, ProposedAdvisory
 
 log = logging.getLogger(__name__)
 
@@ -194,12 +210,18 @@ class ProposerWorker(_Worker):
         group: str | None = None,
         proposals_stream: str = STREAM_PROPOSALS,
         verdicts_stream: str = STREAM_VERDICTS,
+        critic: Critic | None = None,
         compiler: Publisher | None = None,
         on_proposal: OnProposal | None = None,
     ) -> None:
         self.name = proposer.name
         super().__init__(bus, consumer=consumer, group=group)
         self.proposer = proposer
+        #: The independent second read. Built here if the caller did not pass
+        #: one, with whatever client the proposer has: a pipeline wired with a
+        #: model has a critic that can use it, and one without has a critic on
+        #: its rules path, which is the same arrangement every other agent has.
+        self.critic = critic if critic is not None else Critic(llm=proposer.llm)
         self.proposals_stream = proposals_stream
         self.verdicts_stream = verdicts_stream
         self.compiler = compiler
@@ -247,14 +269,36 @@ class ProposerWorker(_Worker):
             await self._compile(proposal)
         await self._ack(message)
 
+    async def _review(self, proposal: ProposedAdvisory) -> CriticVerdict:
+        """The critic's verdict on one proposal, never raising.
+
+        A critic that blows up - a model backend misbehaving, a geometry it
+        cannot measure - must not take the proposal with it, and must not be
+        read as an approval either. The deterministic rules path answers
+        instead, which is a real review with the same `reviewed_by` on it.
+        """
+        try:
+            return await self.critic.review(proposal)
+        except Exception as exc:
+            self.report.note(f"{proposal.id}: critic failed: {exc}")
+            log.warning("%s: critic failed on %s: %s", self.name, proposal.id, exc, exc_info=True)
+            return self.critic.review_offline(proposal)
+
     async def _compile(self, proposal: ProposedAdvisory) -> None:
-        """Hand one proposal and the stub verdict to the compiler, if there is one.
+        """Review one proposal and hand the pair to the compiler, if there is one.
 
         The verdict goes on the `verdicts` stream before the compiler sees it,
         for the same reason the proposal does: the gate acted on it, so a
         reader of the streams can see what it acted on. It is written only
         here, where a verdict is actually used -- a pipeline with no compiler
-        attached reaches no verdict and publishes none.
+        attached reaches no verdict, spends no judgment call reviewing a
+        proposal nothing will gate, and publishes none.
+
+        An ESCALATE is not a failure here. `two_key_reason` turns it into the
+        same `two_key_approved` refusal a severity 4 advisory gets, so the
+        proposal lands in `CompilerService.pending` and waits for a person,
+        which is what `GET /approvals` lists and `POST /approvals/{id}`
+        answers.
 
         A rejection is the gate working and is already in the `audit` stream,
         so it is logged rather than counted as a skipped message. A `BusError`
@@ -264,7 +308,7 @@ class ProposerWorker(_Worker):
         if self.compiler is None:
             return
         self.compiled += 1
-        verdict = stub_verdict(proposal)
+        verdict = await self._review(proposal)
         try:
             await self.bus.publish(verdict, stream=self.verdicts_stream)
             outcome = await self.compiler.publish(proposal, verdict)

@@ -44,6 +44,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from headsup.agents.compiler.approvals import ApprovalStore, PendingCompiles
 from headsup.agents.compiler.compiler import Compiler, CompilerError
 from headsup.agents.compiler.service import CompilerService, PublishOutcome
+from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
@@ -445,6 +446,11 @@ class ScenarioRunner:
         pipeline answer the critical-access question off one road graph, and it
         takes the run's scene router, so a keep-clear corridor is routed over
         that same graph.
+
+        The critic takes the gate's playbooks and nothing else of it: it is
+        reviewing a proposal against the same caps the gate will measure it
+        against, and it has no POI checker because critical access is the
+        gate's rule and not a second opinion the critic is entitled to.
         """
         return [
             SentinelWorker(run.sentinel, self.bus),
@@ -452,6 +458,7 @@ class ScenarioRunner:
             ProposerWorker(
                 Proposer(llm=run.client, poi=run.service.compiler.poi, scene=run.scene),
                 self.bus,
+                critic=Critic(llm=run.client, playbooks=run.service.compiler.playbooks),
                 compiler=run.service,
             ),
         ]

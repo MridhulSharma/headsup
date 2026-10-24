@@ -7,8 +7,12 @@ The pipeline, in the order a signal travels it:
 | sentinels | `agents.sentinels` | `events.*` | `candidates` |
 | fusion | `agents.fusion` | `candidates` | `hazards` |
 | proposer | `agents.proposer` | `hazards` | `proposals` |
-| critic | `agents.critic` | a proposal | a verdict (a stub until D3.2) |
+| critic | `agents.critic` | a proposal + its evidence | a verdict |
 | compiler | `agents.compiler` | proposal + verdict | `advisories` |
+
+The critic is not a bus worker: `ProposerWorker` reviews each proposal it
+publishes before handing the pair to the compiler, so one judgment call is
+spent per proposal and none on a raw event.
 
 `agents.pipeline` holds the two bus workers for the middle stages, and
 `hu agents --only fusion,proposer` is how they are started. Fusion and the
@@ -19,7 +23,16 @@ Only `agents.compiler` may write to the `advisories` stream.
 
 from __future__ import annotations
 
-from headsup.agents.critic import STUB_NAME, STUB_REASON, stub_verdict
+from headsup.agents.critic import (
+    CRITIC_NAME,
+    CRITIC_RULES,
+    MIN_FRACTION,
+    Critic,
+    CriticAnswer,
+    Finding,
+    narrow_geometry,
+    review_rules,
+)
 from headsup.agents.fusion import (
     CAPPED_SEVERITY,
     EVIDENCE_SEVERITY,
@@ -43,15 +56,19 @@ from headsup.agents.proposer import (
 __all__ = [
     "BLOCKING_SEVERITY",
     "CAPPED_SEVERITY",
+    "CRITIC_NAME",
+    "CRITIC_RULES",
     "EVIDENCE_SEVERITY",
     "FUSION_RULES",
     "MAX_CONFIDENCE",
+    "MIN_FRACTION",
     "OVERLAP_PAD_M",
     "PREFERENCE",
     "PROPOSER_RULES",
     "STALE_FLOOR",
-    "STUB_NAME",
-    "STUB_REASON",
+    "Critic",
+    "CriticAnswer",
+    "Finding",
     "Fusion",
     "FusionRationale",
     "FusionWorker",
@@ -59,6 +76,7 @@ __all__ = [
     "Proposer",
     "ProposerWorker",
     "Publisher",
+    "narrow_geometry",
     "playbook_block",
-    "stub_verdict",
+    "review_rules",
 ]

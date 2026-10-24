@@ -17,7 +17,7 @@ makes `hu agents --once` a usable end-to-end drain of whatever a replay left on
 the streams.
 
 **`--compile` is opt-in.** The proposer hands each proposal and the
-pass-through critic stub to `CompilerService`, which refuses to start without
+critic's verdict to `CompilerService`, which refuses to start without
 `HU_CITY` and a world built for it - it is the only writer of `advisories` and
 will not publish closures it cannot check for hospital access. Without the flag
 the pipeline stops at `proposals`, which is what lets the agents run on a box
@@ -34,6 +34,7 @@ from rich.table import Table
 
 from headsup.agents.compiler.compiler import CompilerError
 from headsup.agents.compiler.service import CompilerService
+from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
@@ -129,7 +130,11 @@ def _build(name: str, bus: Bus, llm: LlmClient | None, service: CompilerService 
         return FusionWorker(Fusion(llm=llm), bus, on_hazard=_print_hazard)
     poi = service.compiler.poi if service is not None else None
     return ProposerWorker(
-        Proposer(llm=llm, poi=poi), bus, compiler=service, on_proposal=_print_proposal
+        Proposer(llm=llm, poi=poi),
+        bus,
+        critic=Critic(llm=llm),
+        compiler=service,
+        on_proposal=_print_proposal,
     )
 
 
@@ -146,7 +151,7 @@ def agents(
     compile_: bool = typer.Option(
         False,
         "--compile/--no-compile",
-        help="Hand each proposal and the critic stub to the compiler. Needs HU_CITY and a world.",
+        help="Review each proposal and hand the pair to the compiler. Needs HU_CITY and a world.",
     ),
 ) -> None:
     """Run the event-driven agents: feeds in, candidates, hazards, proposals out."""
