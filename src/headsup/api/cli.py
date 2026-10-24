@@ -39,6 +39,16 @@ is not authoritative, so a single-source scene is capped at 2 as well, and a
 KEEP_CLEAR corridor of about 0.1 km2 is far under
 `playbooks/emergency_scene.yaml` two-key area of 0.5 km2.
 
+**The ghost fleet runs beside the live one.** Same seed, same roads, the
+advice ignored: it is the baseline the demo's claim is measured against. Both
+fleets are stepped by one tick loop in one `SimRunner`, so they cannot drift
+apart, and the ghost's telemetry reaches the viewer as `ghost_telemetry`
+frames beside the live `telemetry` ones. The `counters` frame carries both
+sets side by side, with a `headline` of the four figures the panel shows:
+hazard entries, assist queue depth, blocked corridor minutes and completed
+rides. `--no-ghost` runs the advised fleet alone, which is cheaper per tick
+and shows nothing to compare it to.
+
 Nothing here reads the streams or publishes to them. It builds the app, hands
 it to uvicorn, and prints the two URLs a person needs.
 """
@@ -78,8 +88,8 @@ def _resolve(name: str, catalog: ScenarioCatalog) -> str:
     return catalog.card(scenario_id).id
 
 
-def _options(speed: float, vehicles: int, seed: int, llm: bool) -> StartOptions:
-    return StartOptions(speed=speed or None, vehicles=vehicles, seed=seed, llm=llm)
+def _options(speed: float, vehicles: int, seed: int, llm: bool, ghost: bool) -> StartOptions:
+    return StartOptions(speed=speed or None, vehicles=vehicles, seed=seed, llm=llm, ghost=ghost)
 
 
 def _serve(
@@ -104,6 +114,7 @@ def _serve(
         f"viewer ws://{host}:{port}/viewer  llm={mode_from_env().value}"
         + (f"  namespace={namespace}" if namespace else "")
         + (f"  scenario={scenario}" if scenario else "")
+        + (f"  fleets={'live+ghost' if options.ghost else 'live'}" if scenario else "")
     )
     if second_key:
         console.print(
@@ -128,6 +139,11 @@ def serve(
     seed: int = typer.Option(42, "--seed", help="Run seed; the same seed replays exactly."),
     namespace: str = typer.Option("", "--namespace", help="Prefix every stream name."),
     llm: bool = typer.Option(True, "--llm/--no-llm", help="Let the agents ask a model."),
+    ghost: bool = typer.Option(
+        True,
+        "--ghost/--no-ghost",
+        help="Run the unadvised baseline fleet beside the advised one, on the same seed.",
+    ),
     log_level: str = typer.Option("warning", "--log-level", help="uvicorn log level."),
 ) -> None:
     """Run the API and the agents on one port, for the viewer to drive."""
@@ -136,7 +152,7 @@ def serve(
     try:
         if scenario:
             chosen = _resolve(scenario, ScenarioCatalog())
-        options = _options(speed, vehicles, seed, llm)
+        options = _options(speed, vehicles, seed, llm, ghost)
     except (CatalogError, ValueError) as exc:
         err.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc
@@ -160,6 +176,11 @@ def demo(
     vehicles: int = typer.Option(300, "--vehicles", help="Vehicles across all fleets."),
     seed: int = typer.Option(42, "--seed", help="Run seed; the same seed replays exactly."),
     llm: bool = typer.Option(True, "--llm/--no-llm", help="Let the agents ask a model."),
+    ghost: bool = typer.Option(
+        True,
+        "--ghost/--no-ghost",
+        help="Run the unadvised baseline fleet beside the advised one, on the same seed.",
+    ),
     approve: bool = typer.Option(
         True,
         "--approve/--no-approve",
@@ -171,7 +192,7 @@ def demo(
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     try:
         chosen = _resolve(scenario, ScenarioCatalog())
-        options = _options(speed, vehicles, seed, llm)
+        options = _options(speed, vehicles, seed, llm, ghost)
     except (CatalogError, ValueError) as exc:
         err.print(f"[red]{exc}[/red]")
         raise typer.Exit(2) from exc

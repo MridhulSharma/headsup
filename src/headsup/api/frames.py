@@ -41,6 +41,7 @@ from headsup.contracts import (
     Hazard,
     ProposedAdvisory,
 )
+from headsup.sim import counters
 
 #: Frame types the viewer socket sends. `telemetry` and `advisory` are the two
 #: `viz/mock_stream.py` established; the rest are new in this step.
@@ -286,12 +287,51 @@ def assist_frame(assist: AssistRequest) -> dict[str, Any]:
     }
 
 
+#: The four figures the demo's side-by-side panel reads, and the counter key
+#: each one is taken from. Blocked corridor minutes is the exception and is
+#: not in this map: it is summed from `blocked_minutes`, which carries the
+#: vehicle-seconds undivided, rather than from the floor-divided integer in
+#: the snapshot.
+HEADLINE_KEYS: dict[str, str] = {
+    "hazard_entries": counters.key(counters.HAZARD_ENTRIES),
+    "assist_queue_depth": counters.key(counters.ASSIST_OPEN),
+    "rides_completed": counters.key(counters.RIDES_COMPLETED),
+}
+
+#: The headline figure derived from `blocked_minutes` instead.
+HEADLINE_BLOCKED = "blocked_corridor_minutes"
+
+
+def headline(snapshot: dict[str, int], blocked: dict[str, float]) -> dict[str, float]:
+    """One fleet set's four demo figures, named as the panel names them.
+
+    The full snapshot stays in the frame beside this; the headline exists so
+    the viewer reads the comparison off four agreed names rather than off
+    counter keys it would have to know the spelling of.
+    """
+    out: dict[str, float] = {
+        name: float(snapshot.get(key, 0)) for name, key in HEADLINE_KEYS.items()
+    }
+    out[HEADLINE_BLOCKED] = round(sum(blocked.values()), 2)
+    return out
+
+
 def counters_frame(
     by_mode: dict[str, dict[str, int]], blocked_minutes: dict[str, dict[str, float]]
 ) -> dict[str, Any]:
-    """The live and ghost counter sets side by side: the comparison, as numbers."""
+    """The live and ghost counter sets side by side: the comparison, as numbers.
+
+    `headline` is the same two sets reduced to the four figures the demo
+    panel shows -- hazard entries, assist queue depth, blocked corridor
+    minutes, completed rides -- one entry per mode, so `headline["live"]` and
+    `headline["ghost"]` are the two columns.
+    """
     return {
         "type": FRAME_COUNTERS,
         "counters": by_mode,
         "blocked_minutes": blocked_minutes,
+        "headline": {
+            mode: headline(snapshot, blocked_minutes.get(mode, {}))
+            for mode, snapshot in by_mode.items()
+        },
     }
