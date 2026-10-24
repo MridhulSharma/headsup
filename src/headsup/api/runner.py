@@ -174,6 +174,11 @@ class StartOptions(BaseModel):
     zones: int = Field(default=48, ge=2, le=512)
     #: Let the agents that ask a model ask it. Off means the rules-only path.
     llm: bool = True
+    #: Run the unadvised baseline fleet beside the advised one. On by default:
+    #: the demo's whole claim is a comparison, and a run without the ghost has
+    #: nothing to compare against. Off halves the tick cost for a run that is
+    #: only exercising the pipeline.
+    ghost: bool = True
 
 
 @dataclass(slots=True)
@@ -397,7 +402,7 @@ class ScenarioRunner:
             sim=SimRunner(
                 world,
                 cfg,
-                modes=(SimMode.LIVE, SimMode.GHOST),
+                modes=modes_for_run(options),
                 bus=self.bus,
                 hazards=hazards,
                 start=start,
@@ -618,6 +623,17 @@ class ScenarioRunner:
             self.hub.publish(idle)
             log.info("scenario %s stopped", run.card.id)
             return idle
+
+
+def modes_for_run(options: StartOptions) -> tuple[SimMode, ...]:
+    """The fleet sets one run steps, live first.
+
+    Both modes go into the one `SimRunner` rather than two, which is what
+    keeps them on a single clock: the same tick loop steps the advised fleet
+    and the baseline, so the counters the viewer puts side by side are read
+    off the same simulated instant.
+    """
+    return (SimMode.LIVE, SimMode.GHOST) if options.ghost else (SimMode.LIVE,)
 
 
 def _hazard_class(card: ScenarioCard) -> HazardClass:
