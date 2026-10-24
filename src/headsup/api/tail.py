@@ -15,6 +15,11 @@ advisory with this server's verification result attached, marked rather than
 withheld, because a viewer that silently omitted an unverifiable advisory would
 be hiding exactly the failure worth seeing. An operator gets only what verifies
 (`OperatorSession.offer`), because an operator is being asked to act.
+
+Assist requests go out twice over too: to the viewer as a frame, and to the
+triage desk through `on_assist`, which clusters them into decision cards. The
+desk is the API's, not a run's, so the tailer hands it every request it reads
+and the routes answer off whatever it holds.
 """
 
 from __future__ import annotations
@@ -95,6 +100,7 @@ class StreamTailer:
         index: RailIndex,
         *,
         on_advisory: Callable[[Advisory], None] | None = None,
+        on_assist: Callable[[AssistRequest], None] | None = None,
         group: str = GROUP,
         consumer: str = CONSUMER,
         block_ms: int = BLOCK_MS,
@@ -103,6 +109,7 @@ class StreamTailer:
         self.hub = hub
         self.index = index
         self.on_advisory = on_advisory
+        self.on_assist = on_assist
         self.group = group
         self.consumer = consumer
         self.block_ms = block_ms
@@ -161,6 +168,8 @@ class StreamTailer:
         if isinstance(parsed, Ack):
             return ack_frame(parsed, self.index)
         if isinstance(parsed, AssistRequest):
+            if self.on_assist is not None:
+                self.on_assist(parsed)
             return assist_frame(parsed)
         return None  # pragma: no cover - TAILED has no other types
 

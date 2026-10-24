@@ -53,6 +53,7 @@ from headsup.agents.sentinels.flood import FloodSentinel
 from headsup.agents.sentinels.incident import IncidentSentinel
 from headsup.agents.sentinels.signals import SignalOutageSentinel
 from headsup.agents.sentinels.worker import SentinelWorker
+from headsup.agents.triage import TriageDesk
 from headsup.api.catalog import ScenarioCard
 from headsup.api.frames import FRAME_GHOST_TELEMETRY, RailIndex, counters_frame
 from headsup.api.hub import ViewerHub
@@ -232,6 +233,7 @@ class ScenarioRunner:
         *,
         approvals: ApprovalStore | None = None,
         pending: PendingCompiles | None = None,
+        triage: TriageDesk | None = None,
         namespace: str = "",
     ) -> None:
         self.bus = bus
@@ -243,6 +245,10 @@ class ScenarioRunner:
         #: key. Owned here rather than inside the run, because whoever holds
         #: the key talks to the API, not to the compiler.
         self.pending = pending if pending is not None else PendingCompiles()
+        #: The assist queue's decision cards. Owned by the API for the same
+        #: reason `pending` is: the person answering them talks to the API,
+        #: and the cards outlive the run that produced the requests.
+        self.triage = triage if triage is not None else TriageDesk()
         self.namespace = namespace
         self._run: _Run | None = None
         self._state = ScenarioState.IDLE
@@ -358,6 +364,7 @@ class ScenarioRunner:
         self.index.clear()
         self.hub.reset()
         self.pending.clear()
+        self.triage.reset()
         self.registry.set_city(card.city)
 
         start = datetime.now(UTC).replace(microsecond=0)
@@ -375,6 +382,11 @@ class ScenarioRunner:
                 await client.aclose()
             raise ScenarioError(str(exc)) from exc
 
+        # The desk writes its card prose with the run's own client, so a run
+        # started with `llm=false` summarises on its rules path like every
+        # other agent in variant V1. Handed over only once the run is certain
+        # to exist: the failure above closes this client.
+        self.triage.llm = client
         sentinel = build_sentinel(hazard_class, client=client, world=world)
         return _Run(
             card=card,
@@ -597,6 +609,10 @@ class ScenarioRunner:
             self._state = ScenarioState.IDLE
             self.index.clear()
             self.pending.clear()
+            # The client the desk was writing prose with has just been
+            # closed, so it must not be left holding it.
+            self.triage.llm = None
+            self.triage.reset()
             idle = self.status()
             self.hub.reset(idle)
             self.hub.publish(idle)

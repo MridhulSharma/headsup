@@ -12,7 +12,10 @@ The pipeline, in the order a signal travels it:
 
 The critic is not a bus worker: `ProposerWorker` reviews each proposal it
 publishes before handing the pair to the compiler, so one judgment call is
-spent per proposal and none on a raw event.
+spent per proposal and none on a raw event. Neither is `agents.triage`, which
+sits on the other side of the fleet: it reads the `assist` stream the vehicles
+write to and collapses a surge of requests into one decision card per
+scenario, for a person to answer over HTTP.
 
 `agents.pipeline` holds the two bus workers for the middle stages, and
 `hu agents --only fusion,proposer` is how they are started. Fusion and the
@@ -52,8 +55,26 @@ from headsup.agents.proposer import (
     Proposer,
     playbook_block,
 )
+from headsup.agents.triage import (
+    ACTION_BY_REASON,
+    RESOLUTION,
+    TRIAGE_NAME,
+    TRIAGE_RULES,
+    WINDOW,
+    AlreadyDecided,
+    Cluster,
+    ClusterSummary,
+    DecisionOutcome,
+    ScenarioAction,
+    ScenarioKey,
+    TriageDecision,
+    TriageDesk,
+    key_of,
+    rules_summary,
+)
 
 __all__ = [
+    "ACTION_BY_REASON",
     "BLOCKING_SEVERITY",
     "CAPPED_SEVERITY",
     "CRITIC_NAME",
@@ -65,9 +86,17 @@ __all__ = [
     "OVERLAP_PAD_M",
     "PREFERENCE",
     "PROPOSER_RULES",
+    "RESOLUTION",
     "STALE_FLOOR",
+    "TRIAGE_NAME",
+    "TRIAGE_RULES",
+    "WINDOW",
+    "AlreadyDecided",
+    "Cluster",
+    "ClusterSummary",
     "Critic",
     "CriticAnswer",
+    "DecisionOutcome",
     "Finding",
     "Fusion",
     "FusionRationale",
@@ -76,7 +105,13 @@ __all__ = [
     "Proposer",
     "ProposerWorker",
     "Publisher",
+    "ScenarioAction",
+    "ScenarioKey",
+    "TriageDecision",
+    "TriageDesk",
+    "key_of",
     "narrow_geometry",
     "playbook_block",
     "review_rules",
+    "rules_summary",
 ]
