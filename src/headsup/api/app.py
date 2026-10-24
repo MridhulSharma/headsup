@@ -93,6 +93,7 @@ from headsup.api.tail import StreamTailer
 from headsup.bus import STREAM_ACKS, STREAM_ADVISORIES, Bus, BusError
 from headsup.bus.acl import PROTECTED_WRITER, Role, url_for
 from headsup.contracts import Ack, Advisory, utcnow
+from headsup.ingest.freshness import STALE_FACTOR
 
 log = logging.getLogger(__name__)
 
@@ -366,13 +367,25 @@ def create_app(state: ApiState | None = None) -> FastAPI:
 
     @app.get("/healthz")
     async def healthz() -> JSONResponse:
-        """Whether the server can see Redis, and what it is doing."""
+        """Whether the server can see Redis, what it is doing, and which feeds went quiet.
+
+        `feeds` is the staleness breaker, one row per feed this run has heard
+        from: its poll interval, how long since it last said anything, and
+        whether that is past `ingest.freshness.STALE_FACTOR` intervals. The
+        age is **feed** seconds, so a 60x replay reports the age the live run
+        would have had at that point rather than a sixtieth of it.
+
+        `stale_feeds` is the same verdict as a flat list, because the one
+        thing an operator needs off this endpoint at a glance is whether
+        anything has stopped reporting.
+        """
         bus = api.require_bus()
         try:
             alive = await bus.ping()
         except Exception as exc:  # a dead Redis is a 503, not a traceback
             return _json({"ok": False, "redis": str(exc)}, code=status.HTTP_503_SERVICE_UNAVAILABLE)
         runner = api.require_runner()
+        feeds = runner.feed_health.status()
         return _json(
             {
                 "ok": bool(alive),
@@ -381,6 +394,9 @@ def create_app(state: ApiState | None = None) -> FastAPI:
                 "state": runner.state.value,
                 "viewers": api.hub.viewers,
                 "frames_published": api.hub.published,
+                "stale_factor": STALE_FACTOR,
+                "feeds": [row.to_wire() for row in feeds],
+                "stale_feeds": [row.source.value for row in feeds if row.stale],
             }
         )
 

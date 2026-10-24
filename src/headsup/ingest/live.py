@@ -18,18 +18,28 @@ from headsup.ingest.austin_incidents import AustinIncidentsAdapter
 from headsup.ingest.austin_signals import AustinSignalsAdapter
 from headsup.ingest.base import Adapter, Clock, IngestError, SystemClock
 from headsup.ingest.cities import City
+from headsup.ingest.freshness import (
+    INCIDENTS_INTERVAL,
+    NWS_INTERVAL,
+    SIGNALS_INTERVAL,
+    USGS_INTERVAL,
+)
 from headsup.ingest.nws import NwsAdapter
 from headsup.ingest.recorder import Recorder
 from headsup.ingest.usgs import UsgsAdapter
 
-#: Seconds between polls. NWS reissues alerts within a minute; USGS gauges
-#: report every 15 minutes, so polling faster than this only wastes requests.
-#: Austin refreshes the signal status table every five minutes - the interval
-#: is the feed's own `processed_datetime` cadence, not a guess.
-NWS_INTERVAL = 60.0
-USGS_INTERVAL = 300.0
-SIGNALS_INTERVAL = 300.0
-INCIDENTS_INTERVAL = 300.0
+#: Seconds between polls live on `ingest.freshness` with the staleness
+#: breaker that measures against them, so a cadence change cannot leave the
+#: breaker tripping on the old one.
+__all__ = [
+    "INCIDENTS_INTERVAL",
+    "NWS_INTERVAL",
+    "SIGNALS_INTERVAL",
+    "USGS_INTERVAL",
+    "FeedRun",
+    "LiveIngest",
+    "city_adapters",
+]
 
 
 @dataclass(slots=True)

@@ -80,7 +80,7 @@ from headsup.contracts import HazardClass
 # cycle. It is imported here because a variant is a configuration of this
 # runner and not a second pipeline.
 from headsup.eval.variants import DEFAULT_SPEC, VariantSpec
-from headsup.ingest import IngestError, Recording, Replayer, check_speed
+from headsup.ingest import FeedHealth, IngestError, Recording, Replayer, check_speed
 from headsup.llm import LlmClient, LlmError
 from headsup.sim.config import SimConfig, SimMode
 from headsup.sim.ground_truth import EmptyHazardField, HazardField, ScriptedHazardField
@@ -303,6 +303,10 @@ class ScenarioRunner:
         #: every server but the harness's.
         self.audit_run_id = audit_run_id
         self.audit_dir = audit_dir
+        #: When each feed last said something, on the feed's own clock. Filled
+        #: by `_replay` and reported by `GET /healthz`, so a feed that has
+        #: stopped is visible rather than inferred from a quiet map.
+        self.feed_health = FeedHealth()
         self._run: _Run | None = None
         self._state = ScenarioState.IDLE
         self._lock = asyncio.Lock()
@@ -364,6 +368,10 @@ class ScenarioRunner:
                     "POST /scenarios/stop before starting another"
                 )
             self._state = ScenarioState.STARTING
+            # Last run's feed times would otherwise be this run's baseline,
+            # and a recording that starts earlier than the last one ended
+            # would open with every breaker tripped.
+            self.feed_health.reset()
             try:
                 run = await self._build(card, options)
             except Exception:
@@ -648,9 +656,15 @@ class ScenarioRunner:
             await auditor.run()
 
     async def _replay(self, run: _Run) -> None:
-        """Feed the recording onto `events.*` with its recorded spacing."""
+        """Feed the recording onto `events.*` with its recorded spacing.
+
+        Every emission also stamps `feed_health`, on the recording's own clock
+        rather than the wall clock: at 60x the two are a factor of sixty apart,
+        and the staleness breaker has to trip where the live run would trip it.
+        """
         count = 0
-        async for _emission in run.replayer.run():
+        async for emission in run.replayer.run():
+            self.feed_health.seen(emission.source, emission.feed_time)
             count += 1
         run.replay_complete = True
         log.info("scenario %s: replay finished, %d events", run.card.id, count)
@@ -759,6 +773,7 @@ class ScenarioRunner:
             self._state = ScenarioState.IDLE
             self.index.clear()
             self.pending.clear()
+            self.feed_health.reset()
             # The client the desk was writing prose with has just been
             # closed, so it must not be left holding it.
             self.triage.llm = None
