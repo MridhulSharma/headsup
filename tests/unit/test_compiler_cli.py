@@ -126,10 +126,18 @@ def test_compile_warns_that_the_development_key_is_not_authentication(tmp_path: 
     assert "published development key" in flat(result.output)
 
 
-def test_compile_says_it_used_the_pass_through_critic_stub(tmp_path: Path) -> None:
-    """The fixture carries no verdict, and the output must not hide that."""
+def test_compile_says_which_critic_reviewed_a_verdict_less_proposal(tmp_path: Path) -> None:
+    """The fixture carries no verdict, and the output must not hide that.
+
+    What it used to say was that a pass-through stub had approved it. Now the
+    critic's deterministic rules path reviews it, and the line names both the
+    path and what it answered - a reader of the output can tell an APPROVE
+    something measured from an APPROVE nothing looked at.
+    """
     result = compile_fixture(PROPOSAL, tmp_path / "a.json")
-    assert "pass-through critic stub" in flat(result.output)
+    output = flat(result.output)
+    assert "deterministic rules path" in output
+    assert "APPROVE" in output
 
 
 def test_compile_writes_json_to_stdout_when_quiet() -> None:
@@ -190,7 +198,8 @@ def test_compile_accepts_a_file_holding_a_proposal_and_a_verdict(tmp_path: Path)
     result = compile_fixture(bundle, tmp_path / "a.json")
     assert result.exit_code == 1
     assert "escalated" in result.output
-    assert "pass-through critic stub" not in flat(result.output)
+    # A verdict in the file is the verdict used; nothing re-reviews it.
+    assert "deterministic rules path" not in flat(result.output)
 
 
 def test_compile_honours_a_playbook_directory(tmp_path: Path) -> None:

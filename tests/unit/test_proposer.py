@@ -15,10 +15,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from fixtures.compiler import box, clock, hospital, poi_checker
+from fixtures.compiler import approve, box, clock, hospital, poi_checker
 from headsup.agents.compiler import Compiler, PlaybookSet, RuleCode, default_playbooks
 from headsup.agents.compiler.poi import BLOCKING_ACTIONS
-from headsup.agents.critic import stub_verdict
 from headsup.agents.proposer import (
     PROPOSER_RULES,
     PURPOSE,
@@ -133,7 +132,7 @@ async def test_the_proposal_the_proposer_makes_is_one_the_compiler_accepts() -> 
     proposal = await proposer.propose(hazard(severity=3))
     assert proposal is not None
 
-    result = Compiler(clock=clock(utcnow())).compile(proposal, stub_verdict(proposal))
+    result = Compiler(clock=clock(utcnow())).compile(proposal, approve(proposal))
     assert result.ok, result.reasons
 
 
@@ -159,7 +158,7 @@ async def test_an_action_the_playbook_forbids_never_reaches_the_compiler() -> No
     assert "Rules path" in proposal.rationale
 
     compiler = Compiler(clock=clock(utcnow()))
-    allowed = compiler.compile(proposal, stub_verdict(proposal))
+    allowed = compiler.compile(proposal, approve(proposal))
     assert allowed.ok, allowed.reasons
 
     # The same action, built by hand, is what the compiler would have refused.
@@ -175,7 +174,7 @@ async def test_an_action_the_playbook_forbids_never_reaches_the_compiler() -> No
         policy_rule="flood.v1",
         proposed_by="proposer",
     )
-    refused = compiler.compile(forbidden, stub_verdict(forbidden))
+    refused = compiler.compile(forbidden, approve(forbidden))
     assert not refused.ok
     assert RuleCode.ACTION_ALLOWED in refused.codes
 
@@ -444,7 +443,7 @@ async def test_the_compiler_gates_a_computed_area_like_any_other() -> None:
     assert proposal is not None
 
     compiler = Compiler(poi=poi_checker(), clock=clock())
-    record = compiler.compile(proposal, stub_verdict(proposal))
+    record = compiler.compile(proposal, approve(proposal))
     assert record.ok is False
     assert RuleCode.AREA_UNDER_CAP in record.codes
 

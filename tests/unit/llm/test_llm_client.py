@@ -105,9 +105,15 @@ async def test_the_proposer_fixture_still_matches_its_contract(client) -> None:
 
 
 async def test_a_missing_fixture_names_the_file_it_wanted(client) -> None:
+    """A call site with no committed answer is an error, not an empty object.
+
+    `no_such_call_site` is a name no agent uses and no fixture file exists
+    for. It has to stay that way: this used to be `critic_verdict`, which
+    stopped being a missing fixture the moment the critic was built.
+    """
     with pytest.raises(LlmError, match=r"has no reply for purpose"):
         await client.complete(
-            purpose="critic_verdict",
+            purpose="no_such_call_site",
             tier=Tier.VOLUME,
             schema=FloodFields,
             messages="anything",

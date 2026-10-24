@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,7 +32,12 @@ from rich.console import Console
 from rich.table import Table
 
 from headsup.agents.compiler.approvals import InMemoryApprovals
-from headsup.agents.compiler.compiler import ENV_CITY, Compiler, CompilerError
+from headsup.agents.compiler.compiler import (
+    ENV_CITY,
+    UNKNOWN_PROPOSAL,
+    Compiler,
+    CompilerError,
+)
 from headsup.agents.compiler.playbooks import PlaybookError, PlaybookSet, default_playbooks
 from headsup.agents.compiler.poi import NullPoiChecker, PoiChecker
 from headsup.agents.compiler.rules import Check
@@ -43,9 +49,15 @@ from headsup.agents.compiler.signing import (
     is_dev_key,
     verify,
 )
-from headsup.agents.critic import STUB_REASON, stub_verdict
+from headsup.agents.critic import CRITIC_NAME, Critic
 from headsup.bus import BusError
-from headsup.contracts import Advisory, utcnow
+from headsup.contracts import (
+    Advisory,
+    CriticVerdict,
+    ProposedAdvisory,
+    Verdict,
+    utcnow,
+)
 
 console = Console()
 err = Console(stderr=True)
@@ -53,10 +65,51 @@ err = Console(stderr=True)
 #: Read from stdin instead of a file.
 STDIN = "-"
 
-#: What `hu compile` assumes when the file carries no critic verdict. The stub
-#: itself lives in `agents.critic`, because D2.5's `ProposerWorker` hands the
-#: compiler exactly this verdict and there should be one definition of it until
-#: D3.2 replaces it with the real critic.
+#: `Identifier` as a compiled pattern, for checking a raw payload's id before
+#: it is copied onto a verdict that has to validate.
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9._:\-]+$")
+
+#: What `hu compile` does when the file carries no critic verdict: run the
+#: critic's deterministic rules path over the proposal, the same one the
+#: pipeline falls back to. It needs no model, no network and no clock, so a
+#: `hu compile` of a proposal file still behaves itself offline - and unlike
+#: the pass-through stub it replaces, the verdict it produces is one something
+#: actually reviewed, which can be a REVISE or an ESCALATE.
+OFFLINE_CRITIC = "no verdict in the file: reviewed on the critic's deterministic rules path"
+
+
+def _offline_verdict(compiler: Compiler, raw_proposal: Any) -> CriticVerdict:
+    """Review a verdict-less proposal on the critic's rules path.
+
+    A proposal the contract will not parse gets an ESCALATE rather than a
+    review: there is nothing to measure, and the compiler is about to reject
+    it on `schema_valid` anyway - but it still has to be handed a verdict, and
+    a well-formed APPROVE over a malformed proposal is the one thing that must
+    not be in the audit record.
+    """
+    try:
+        parsed = ProposedAdvisory.model_validate(raw_proposal)
+    except ValidationError as exc:
+        return CriticVerdict(
+            proposal_id=_raw_proposal_id(raw_proposal),
+            verdict=Verdict.ESCALATE,
+            reasons=[f"the proposal does not parse, so nothing reviewed it: {_first_error(exc)}"],
+            reviewed_by=CRITIC_NAME,
+        )
+    return Critic(playbooks=compiler.playbooks).review_offline(parsed)
+
+
+def _raw_proposal_id(raw_proposal: Any) -> str:
+    """An id to file the verdict under, even for a payload that has none.
+
+    `UNKNOWN_PROPOSAL` whenever the id is missing or is not an `Identifier`,
+    because the verdict itself has to validate: a payload whose id is free
+    text would otherwise take the verdict down with it.
+    """
+    candidate = raw_proposal.get("id") if isinstance(raw_proposal, dict) else None
+    if not isinstance(candidate, str):
+        return UNKNOWN_PROPOSAL
+    return candidate if _IDENTIFIER_RE.fullmatch(candidate) else UNKNOWN_PROPOSAL
 
 
 def _first_error(exc: ValidationError) -> str:
@@ -232,9 +285,9 @@ def compile_proposal(
         err.print(f"[red]{exc}[/red]")
         raise typer.Exit(1) from exc
 
-    verdict = raw_verdict if raw_verdict is not None else stub_verdict(str(proposal_id or ""))
+    verdict = raw_verdict if raw_verdict is not None else _offline_verdict(compiler, raw_proposal)
     if raw_verdict is None and not quiet:
-        err.print(f"[dim]no verdict in {file}: using the {STUB_REASON}[/dim]")
+        err.print(f"[dim]{OFFLINE_CRITIC}: {verdict.verdict.value}[/dim]")
 
     if publish:
         result, stream_id = asyncio.run(_publish(compiler, raw_proposal, verdict))

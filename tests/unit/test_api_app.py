@@ -24,7 +24,12 @@ CREDENTIAL = "test-credential"
 
 
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def state() -> ApiState:
+    return ApiState(namespace="test_api_app", credential=CREDENTIAL)
+
+
+@pytest.fixture
+def client(monkeypatch: pytest.MonkeyPatch, state: ApiState) -> Iterator[TestClient]:
     """The app with a known credential and a Redis that is deliberately absent.
 
     Pointed at a closed port rather than at the dev Redis: a unit test must
@@ -32,7 +37,6 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     the integration tests measure.
     """
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6399/0")
-    state = ApiState(namespace="test_api_app", credential=CREDENTIAL)
     with TestClient(create_app(state)) as instance:
         yield instance
 
@@ -129,6 +133,42 @@ def test_an_approval_is_returned_once_and_listed_by_fingerprint(client: TestClie
 
 def test_an_approval_needs_to_say_who_approved(client: TestClient) -> None:
     assert client.post("/approvals/prop_flood_1", json={}).status_code == 422
+
+
+def test_the_pending_list_is_what_the_gate_is_actually_waiting_on(
+    client: TestClient, state: ApiState
+) -> None:
+    """What whoever holds the second key works from.
+
+    `awaiting_approval` is the proposals the gate refused with
+    `two_key_approved` as their only failed rule - a severity 4 advisory, or
+    one the critic escalated. Put one in the store the way `CompilerService`
+    would and read it back, so the list the viewer's approve button is built
+    on is pinned to the fields it shows.
+    """
+    from fixtures.compiler import proposal
+    from headsup.agents.critic import CRITIC_NAME
+    from headsup.contracts import CriticVerdict, Verdict
+
+    asked = proposal(severity=4, area_km2=0.05, proposal_id="prop_flood_severe")
+    state.pending.remember(
+        asked,
+        CriticVerdict(
+            proposal_id=asked.id,
+            verdict=Verdict.ESCALATE,
+            reasons=["the citations do not explain an advisory this broad"],
+            reviewed_by=CRITIC_NAME,
+        ),
+    )
+
+    waiting = client.get("/approvals").json()["awaiting_approval"]
+
+    assert [row["proposal_id"] for row in waiting] == ["prop_flood_severe"]
+    row = waiting[0]
+    assert row["severity"] == 4
+    assert row["hazard_class"] == "FLOOD"
+    assert row["action"] == "NO_ENTRY"
+    assert row["area_km2"] > 0.0
 
 
 # --- the sockets' front doors ---------------------------------------------
