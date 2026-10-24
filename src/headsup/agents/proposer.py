@@ -222,12 +222,15 @@ def playbook_block(playbook: Playbook) -> str:
     )
 
 
-def _params_for(action: ActionType, severity: int) -> dict[str, ParamValue]:
+def params_for(action: ActionType, severity: int) -> dict[str, ParamValue]:
     """The parameters an action type cannot work without, by severity.
 
     `REQUIRED_PARAMS` in the contracts is the list this has to satisfy; an
     action built without them fails its own validator, here rather than in the
     compiler.
+
+    Public because `agents.orchestrator` builds the same actions: variant V2
+    replaces this agent's judgment, not the playbook's parameter table.
     """
     if action is ActionType.SPEED_CAP:
         return {"speed_mph": SPEED_CAP_MPH[severity]}
@@ -406,7 +409,7 @@ class Proposer:
     ) -> ProposedAdvisory:
         """One action as a proposal. Counted here, where one is actually made."""
         drawn = corridor if corridor is not None and action_type is ActionType.KEEP_CLEAR else None
-        params = _params_for(action_type, hazard.severity)
+        params = params_for(action_type, hazard.severity)
         why = reason
         if drawn is not None:
             # The width and the radius the area was drawn with travel with the

@@ -27,6 +27,15 @@ instant, and both are launched in the same event loop iteration.
 the flood sentinel and a signal scenario the signal sentinel, from the
 descriptor's `hazard_class`. Fusion and the proposer run for every scenario:
 they are not per-feed.
+
+**Which agents run at all is the variant's business.** `VariantSpec` is the
+ablation's five configurations as flags on this one runner: whether an
+`LlmClient` is built, whether the mesh or the single orchestrator is brought
+up, whether a critic reviews, and which fleet sets are stepped. The default is
+V4, which is what `hu serve` and `hu demo` have always run, so the demo path is
+the full system and the eval adds no second implementation of it. `hu eval`
+also passes `audit_run_id`, and then one `Auditor` runs beside the agents and
+seals every entry of that run into its own hash-chained log.
 """
 
 from __future__ import annotations
@@ -41,11 +50,13 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from headsup.agents.auditor import Auditor
 from headsup.agents.compiler.approvals import ApprovalStore, PendingCompiles
 from headsup.agents.compiler.compiler import Compiler, CompilerError
 from headsup.agents.compiler.service import CompilerService, PublishOutcome
 from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
+from headsup.agents.orchestrator import Orchestrator, OrchestratorWorker
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
 from headsup.agents.sentinels.base import Sentinel
@@ -58,9 +69,16 @@ from headsup.api.catalog import ScenarioCard
 from headsup.api.frames import FRAME_GHOST_TELEMETRY, RailIndex, counters_frame
 from headsup.api.hub import ViewerHub
 from headsup.api.operators import OperatorRegistry
+from headsup.audit import AuditLog
 from headsup.bus import ALL_STREAMS, Bus
 from headsup.bus.acl import PROTECTED_WRITER, Role, url_for
 from headsup.contracts import HazardClass
+
+# The variants live with the harness that sweeps them, and `eval.variants`
+# imports nothing from the API, so this is a leaf dependency rather than a
+# cycle. It is imported here because a variant is a configuration of this
+# runner and not a second pipeline.
+from headsup.eval.variants import DEFAULT_SPEC, VariantSpec
 from headsup.ingest import IngestError, Recording, Replayer, check_speed
 from headsup.llm import LlmClient, LlmError
 from headsup.sim.config import SimConfig, SimMode
@@ -195,11 +213,21 @@ class _Run:
     service: CompilerService
     compiler_bus: Bus
     client: LlmClient | None
-    sentinel: Sentinel
+    #: None for a variant that reads the feeds with something other than a
+    #: sentinel (V2), or does not read them at all (V0).
+    sentinel: Sentinel | None
     #: Where responders come from, for a KEEP_CLEAR corridor. The proposer's,
     #: built on the same world the POI checker answers off.
     scene: SceneRouter
+    #: The city. Kept because V2's orchestrator places an unlocated record by
+    #: intersection lookup against the graph the fleets drive on.
+    world: Any
+    #: The run's own hash-chained log, when `hu eval` asked for one.
+    audit: AuditLog | None = None
+    auditor: Auditor | None = None
     tasks: list[asyncio.Task[Any]] = field(default_factory=list)
+    #: The agent workers this variant brought up. Empty for V0.
+    workers: list[Any] = field(default_factory=list)
     replay_complete: bool = False
     fleets_complete: bool = False
     errors: list[str] = field(default_factory=list)
@@ -240,6 +268,9 @@ class ScenarioRunner:
         pending: PendingCompiles | None = None,
         triage: TriageDesk | None = None,
         namespace: str = "",
+        spec: VariantSpec = DEFAULT_SPEC,
+        audit_run_id: str | None = None,
+        audit_dir: str | None = None,
     ) -> None:
         self.bus = bus
         self.hub = hub
@@ -255,6 +286,14 @@ class ScenarioRunner:
         #: and the cards outlive the run that produced the requests.
         self.triage = triage if triage is not None else TriageDesk()
         self.namespace = namespace
+        #: Which of the ablation's configurations this server runs. V4 unless
+        #: `hu eval` says otherwise.
+        self.spec = spec
+        #: The run id every entry of this run is sealed under, and where the
+        #: chain is written. None for a server that keeps no chain, which is
+        #: every server but the harness's.
+        self.audit_run_id = audit_run_id
+        self.audit_dir = audit_dir
         self._run: _Run | None = None
         self._state = ScenarioState.IDLE
         self._lock = asyncio.Lock()
@@ -293,7 +332,9 @@ class ScenarioRunner:
             "fleets": run.cfg.fleets,
             "seed": run.cfg.seed,
             "modes": [mode.value for mode in run.sim.simulations],
-            "sentinel": run.sentinel.name,
+            "variant": self.spec.variant.value,
+            "sentinel": run.sentinel.name if run.sentinel is not None else None,
+            "agents": [worker.report.sentinel for worker in run.workers],
             "llm_mode": run.client.mode.value if run.client is not None else "off",
             "replay_complete": run.replay_complete,
             "fleets_complete": run.fleets_complete,
@@ -375,7 +416,10 @@ class ScenarioRunner:
         start = datetime.now(UTC).replace(microsecond=0)
         hazards, net = await asyncio.to_thread(self._ground_truth, card, cfg, world, start)
 
-        client = LlmClient.from_env(bus=self.bus) if options.llm else None
+        # `options.llm` is the launcher's switch and `spec.llm` the
+        # variant's; either one off is the rules path, because a variant that
+        # says "no model" must not be talked into one by a request.
+        client = LlmClient.from_env(bus=self.bus) if (options.llm and self.spec.llm) else None
         compiler_bus = Bus(
             url_for(Role.COMPILER), namespace=self.namespace, writer=PROTECTED_WRITER
         )
@@ -392,7 +436,9 @@ class ScenarioRunner:
         # other agent in variant V1. Handed over only once the run is certain
         # to exist: the failure above closes this client.
         self.triage.llm = client
-        sentinel = build_sentinel(hazard_class, client=client, world=world)
+        sentinel = (
+            build_sentinel(hazard_class, client=client, world=world) if self.spec.mesh else None
+        )
         return _Run(
             card=card,
             options=options,
@@ -402,7 +448,7 @@ class ScenarioRunner:
             sim=SimRunner(
                 world,
                 cfg,
-                modes=modes_for_run(options),
+                modes=modes_for_run(options, self.spec),
                 bus=self.bus,
                 hazards=hazards,
                 start=start,
@@ -415,6 +461,12 @@ class ScenarioRunner:
             client=client,
             sentinel=sentinel,
             scene=WorldSceneRouter(world),
+            world=world,
+            audit=(
+                AuditLog(self.audit_run_id, directory=self.audit_dir)
+                if self.audit_run_id is not None
+                else None
+            ),
         )
 
     def _ground_truth(
@@ -456,8 +508,17 @@ class ScenarioRunner:
         )
         return CompilerService(bus, compiler, pending=self.pending)
 
-    def _agents(self, run: _Run) -> list[SentinelWorker | FusionWorker | ProposerWorker]:
-        """The scenario's sentinel, fusion and the proposer, as workers.
+    def _agents(self, run: _Run) -> list[Any]:
+        """The workers this variant brings up: nothing, the orchestrator, or the mesh.
+
+        V0 reads the feeds with nothing at all -- the replay still fills the
+        streams and the baseline fleet still meets the ground truth, which is
+        what makes it a baseline rather than an empty run. V2 brings up the
+        single orchestrator in place of all four agents. V1, V3 and V4 bring
+        up the mesh, and `spec.critic` is the one flag V3 and V4 differ by.
+
+        The mesh, when it runs, is the scenario's sentinel, fusion and the
+        proposer, as workers.
 
         The proposer borrows the compiler's POI checker, so both ends of the
         pipeline answer the critical-access question off one road graph, and it
@@ -469,29 +530,61 @@ class ScenarioRunner:
         against, and it has no POI checker because critical access is the
         gate's rule and not a second opinion the critic is entitled to.
         """
+        if self.spec.orchestrator:
+            return [
+                OrchestratorWorker(
+                    Orchestrator(
+                        llm=run.client,
+                        playbooks=run.service.compiler.playbooks,
+                        poi=run.service.compiler.poi,
+                        scene=run.scene,
+                        geocoder=index_for(run.world.graph),
+                    ),
+                    self.bus,
+                    compiler=run.service,
+                )
+            ]
+        if not self.spec.mesh or run.sentinel is None:
+            return []
         return [
             SentinelWorker(run.sentinel, self.bus),
             FusionWorker(Fusion(llm=run.client), self.bus),
             ProposerWorker(
                 Proposer(llm=run.client, poi=run.service.compiler.poi, scene=run.scene),
                 self.bus,
-                critic=Critic(llm=run.client, playbooks=run.service.compiler.playbooks),
+                critic=(
+                    Critic(llm=run.client, playbooks=run.service.compiler.playbooks)
+                    if self.spec.critic
+                    else None
+                ),
+                review=self.spec.critic,
                 compiler=run.service,
             ),
         ]
 
     def _launch(self, run: _Run) -> list[asyncio.Task[Any]]:
-        """Start the replay, the agents, the fleets and the counter sampler."""
-        tasks = [
+        """Start the auditor, the replay, the agents, the fleets and the counters.
+
+        The auditor goes first. Its consumer group is created from the start of
+        every stream (`Bus.ensure_group`), so an entry published between
+        `start` returning and the auditor's first read is still sealed rather
+        than raced for.
+        """
+        tasks: list[asyncio.Task[Any]] = []
+        if run.audit is not None:
+            run.auditor = Auditor(run.audit, self.bus)
+            tasks.append(asyncio.create_task(self._record(run), name=f"audit:{run.card.id}"))
+        tasks += [
             asyncio.create_task(self._replay(run), name=f"replay:{run.card.id}"),
             asyncio.create_task(self._fleets(run), name=f"fleets:{run.card.id}"),
             asyncio.create_task(self._counters(run), name=f"counters:{run.card.id}"),
         ]
+        run.workers = self._agents(run)
         tasks.extend(
             asyncio.create_task(
                 self._supervise(run, worker), name=f"agent:{worker.report.sentinel}"
             )
-            for worker in self._agents(run)
+            for worker in run.workers
         )
         for task in tasks:
             task.add_done_callback(lambda done, owner=run: self._finished(owner, done))
@@ -528,6 +621,14 @@ class ScenarioRunner:
                 await asyncio.sleep(WORKER_PAUSE_S)
         run.note(f"{name} failed {WORKER_RESTARTS} times and was given up on")
 
+    async def _record(self, run: _Run) -> None:
+        """Seal every entry that crosses any stream into this run's chain."""
+        auditor = run.auditor
+        if auditor is None:  # pragma: no cover - only started with one
+            return
+        async with auditor:
+            await auditor.run()
+
     async def _replay(self, run: _Run) -> None:
         """Feed the recording onto `events.*` with its recorded spacing."""
         count = 0
@@ -560,6 +661,27 @@ class ScenarioRunner:
             mode.value: sim.blocked_minutes() for mode, sim in target.sim.simulations.items()
         }
         return counters_frame(by_mode, blocked)
+
+    async def _drain(self, run: _Run) -> None:
+        """Read what is left on the streams into the chain, then close it.
+
+        A second consumer in the same group, because the first one's task has
+        just been cancelled: `Bus.consume` hands a consumer its own unacked
+        backlog first, so the entry that read was holding is sealed here
+        rather than lost with the task.
+        """
+        audit = run.audit
+        if audit is None:
+            return
+        try:
+            tail = Auditor(audit, self.bus, consumer="drain-1")
+            async with tail:
+                report = await tail.run(once=True, block_ms=100)
+            log.info("scenario %s: audit log %s", run.card.id, report.summary())
+        except Exception as exc:  # a log that could not be closed is not fatal
+            run.note(f"audit drain failed: {exc}")
+        finally:
+            audit.close()
 
     def _tap(self, mode: SimMode, result: Any) -> None:
         """One tick, straight to the viewer. Called inside the tick loop.
@@ -604,6 +726,11 @@ class ScenarioRunner:
             for task in run.tasks:
                 task.cancel()
             await asyncio.gather(*run.tasks, return_exceptions=True)
+            # Everything that writes has stopped, so whatever is still on the
+            # streams is this run's tail. Drained into the chain before the
+            # streams are deleted, or a log would end wherever the auditor
+            # happened to be when the run was stopped.
+            await self._drain(run)
             await run.service.close()
             await run.compiler_bus.close()
             if run.client is not None:
@@ -625,14 +752,21 @@ class ScenarioRunner:
             return idle
 
 
-def modes_for_run(options: StartOptions) -> tuple[SimMode, ...]:
+def modes_for_run(options: StartOptions, spec: VariantSpec = DEFAULT_SPEC) -> tuple[SimMode, ...]:
     """The fleet sets one run steps, live first.
 
     Both modes go into the one `SimRunner` rather than two, which is what
     keeps them on a single clock: the same tick loop steps the advised fleet
     and the baseline, so the counters the viewer puts side by side are read
     off the same simulated instant.
+
+    The variant has the last word. V0 steps the ghost fleet alone: there is no
+    advised fleet in it, which is the whole of what the baseline means.
+    `--no-ghost` then drops the baseline from any other variant, which halves
+    the tick cost of a run that is only exercising the pipeline.
     """
+    if SimMode.LIVE not in spec.modes:
+        return tuple(spec.modes)
     return (SimMode.LIVE, SimMode.GHOST) if options.ghost else (SimMode.LIVE,)
 
 

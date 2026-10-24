@@ -1,0 +1,12 @@
+{
+  "hazard": true,
+  "hazard_class": "FLOOD",
+  "severity": 4,
+  "confidence": 0.78,
+  "location_text": "",
+  "radius_m": 0.0,
+  "action": "NO_ENTRY",
+  "reason": "A flash flood warning with a considerable damage threat covers the whole polygon the product drew, and flood.v1 allows NO_ENTRY at severity 4.",
+  "verdict": "APPROVE",
+  "verdict_reason": "The warning is the issuing office's own product, so the closure rests on an authoritative source."
+}
