@@ -34,6 +34,11 @@ dependencies = [
     "typer",
     "rich",
     "orjson",
+    # `hu eval` writes the ablation's three charts. A dependency of the
+    # package rather than an extra: the eval is one of the things this
+    # prototype is for, and a results directory with the table but not the
+    # figures would be half an answer.
+    "matplotlib",
 ]
 
 [project.scripts]

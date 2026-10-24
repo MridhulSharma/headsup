@@ -1,0 +1,12 @@
+{
+  "hazard": true,
+  "hazard_class": "SIGNAL_OUTAGE",
+  "severity": 3,
+  "confidence": 0.62,
+  "location_text": "",
+  "radius_m": 60.0,
+  "action": "ALL_WAY_STOP",
+  "reason": "A signal reported in unscheduled flash is dark to a vehicle approaching it, and signal_outage.v1 allows the all-way-stop rule for the intersection it is at.",
+  "verdict": "APPROVE",
+  "verdict_reason": "The feed is the city's own signal status board, and the rule asked for is the least restrictive one for a dark signal."
+}

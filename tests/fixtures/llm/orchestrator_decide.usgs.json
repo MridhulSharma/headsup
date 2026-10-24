@@ -1,0 +1,12 @@
+{
+  "hazard": false,
+  "hazard_class": "FLOOD",
+  "severity": 2,
+  "confidence": 0.3,
+  "location_text": "",
+  "radius_m": 0.0,
+  "action": "SPEED_CAP",
+  "reason": "A gauge-height reading on its own says the creek is at a stage, not that a road is under water, so this record is not a hazard to advise on by itself.",
+  "verdict": "APPROVE",
+  "verdict_reason": "Nothing is proposed for this record."
+}

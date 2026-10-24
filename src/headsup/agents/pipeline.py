@@ -42,6 +42,12 @@ rules path, rather than to an approval: the gate still gets a verdict from a
 critic that measured the proposal, and the pipeline never publishes because
 the reviewer broke.
 
+`review=False` runs the pipeline with no second read at all, which is variant
+V3 of the ablation. The gate still needs a verdict, so the proposer's own
+approval is written and `reviewed_by` says it was the proposer: the difference
+between V3 and V4 then shows up in the audit log as what did the reviewing,
+not as a missing stage.
+
 The compiler service is injected and optional. With one, this is S1 end to end;
 without one the pipeline stops at `proposals`, which is what lets a process
 with no signing key and no world build still run the agents. The single-writer
@@ -68,7 +74,7 @@ from headsup.bus import (
     BusError,
     BusMessage,
 )
-from headsup.contracts import CandidateHazard, CriticVerdict, Hazard, ProposedAdvisory
+from headsup.contracts import CandidateHazard, CriticVerdict, Hazard, ProposedAdvisory, Verdict
 
 log = logging.getLogger(__name__)
 
@@ -211,17 +217,22 @@ class ProposerWorker(_Worker):
         proposals_stream: str = STREAM_PROPOSALS,
         verdicts_stream: str = STREAM_VERDICTS,
         critic: Critic | None = None,
+        review: bool = True,
         compiler: Publisher | None = None,
         on_proposal: OnProposal | None = None,
     ) -> None:
         self.name = proposer.name
         super().__init__(bus, consumer=consumer, group=group)
         self.proposer = proposer
+        #: Whether a proposal is reviewed at all. False is variant V3.
+        self.review = review
         #: The independent second read. Built here if the caller did not pass
         #: one, with whatever client the proposer has: a pipeline wired with a
         #: model has a critic that can use it, and one without has a critic on
         #: its rules path, which is the same arrangement every other agent has.
-        self.critic = critic if critic is not None else Critic(llm=proposer.llm)
+        self.critic = (
+            critic if critic is not None else (Critic(llm=proposer.llm) if review else None)
+        )
         self.proposals_stream = proposals_stream
         self.verdicts_stream = verdicts_stream
         self.compiler = compiler
@@ -276,7 +287,22 @@ class ProposerWorker(_Worker):
         cannot measure - must not take the proposal with it, and must not be
         read as an approval either. The deterministic rules path answers
         instead, which is a real review with the same `reviewed_by` on it.
+
+        With no critic at all (V3) the proposer approves its own proposal and
+        says so. That is not a review and the verdict does not pretend to be
+        one: the gate's own rules are the only thing standing between the
+        proposal and a signature, which is what the variant exists to measure.
         """
+        if self.critic is None or not self.review:
+            return CriticVerdict(
+                proposal_id=proposal.id,
+                verdict=Verdict.APPROVE,
+                reasons=[
+                    "No critic in this configuration: the proposing agent approved its own "
+                    "proposal and nothing reviewed it."
+                ],
+                reviewed_by=self.proposer.name,
+            )
         try:
             return await self.critic.review(proposal)
         except Exception as exc:

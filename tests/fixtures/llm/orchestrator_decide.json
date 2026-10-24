@@ -1,0 +1,12 @@
+{
+  "hazard": true,
+  "hazard_class": "EMERGENCY_SCENE",
+  "severity": 3,
+  "confidence": 0.6,
+  "location_text": "",
+  "radius_m": 60.0,
+  "action": "KEEP_CLEAR",
+  "reason": "A feed with no committed fixture of its own is read as an active scene at the record's own position, which is the most restrictive reading this prompt allows without corroboration.",
+  "verdict": "APPROVE",
+  "verdict_reason": "One agent chose and reviewed this action; there is no independent second read."
+}

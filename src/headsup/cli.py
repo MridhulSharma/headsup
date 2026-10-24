@@ -16,6 +16,7 @@ from headsup.api.cli import register as register_api
 from headsup.audit.cli import audit_app
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
+from headsup.eval.cli import register as register_eval
 from headsup.ingest.cli import ingest_app
 from headsup.scenario.cli import register as register_scenario
 from headsup.sim.cli import register as register_sim
@@ -52,6 +53,11 @@ register_agents(app)
 # `hu serve` and `hu demo`: the API and the agents in one process, which is
 # what lets the viewer start a scenario on demand.
 register_api(app)
+
+# `hu eval`: the ablation. One verb for the same reason `hu sim` is one -- a
+# sweep is a single thing you start and watch -- and it reads its figures back
+# out of the audit logs the runs wrote.
+register_eval(app)
 
 console = Console()
 err = Console(stderr=True)

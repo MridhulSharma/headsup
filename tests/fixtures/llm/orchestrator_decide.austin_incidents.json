@@ -1,0 +1,12 @@
+{
+  "hazard": true,
+  "hazard_class": "EMERGENCY_SCENE",
+  "severity": 4,
+  "confidence": 0.71,
+  "location_text": "W 6TH ST / GUADALUPE ST",
+  "radius_m": 60.0,
+  "action": "KEEP_CLEAR",
+  "reason": "The dispatch record places responding units at the junction, which is an active scene, and emergency_scene.v1 allows KEEP_CLEAR for it.",
+  "verdict": "APPROVE",
+  "verdict_reason": "One agent read the record, placed it and chose the action; this verdict is its own and not a second opinion."
+}
