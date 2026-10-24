@@ -94,7 +94,11 @@ def _exposure(city: str, regions, *, use_nodes: bool) -> float:
 
 
 def test_s1_is_set_in_san_antonio_and_s2_in_austin() -> None:
-    assert SCENARIO_CITY == {"s1_flood": "san_antonio", "s2_blackout": "austin"}
+    assert SCENARIO_CITY == {
+        "s1_flood": "san_antonio",
+        "s2_blackout": "austin",
+        "s3_incident": "austin",
+    }
 
 
 def test_at_least_a_fifth_of_s1_trips_cross_the_salado_creek_reach() -> None:

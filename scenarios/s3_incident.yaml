@@ -1,0 +1,277 @@
+# S3: downtown Austin incident board, 14 October 2026, with one scripted scene.
+#
+# GENERATED. Rebuild with:
+#   uv run hu scenario fetch-incidents
+#
+# This scenario is the third kind of honesty in `scenarios/`. S1 is a
+# recording of something that happened. S2 is a generated feed on a real map.
+# S3 is a real recording with scripted records inside it: twelve hours of the
+# City of Austin incident board over the built downtown bbox, every column and
+# timestamp as the city published them, plus 6 records this repository wrote
+# and marked `scripted: true` in the fixture itself.
+#
+# `scripted: true` below is therefore the truth about the run as a whole, and
+# the per-record flag in the recording is what says which records it is about.
+
+id: s3_incident
+name: Downtown Austin emergency scene
+city: austin
+hazard_class: EMERGENCY_SCENE
+
+# True because the scene the run is about was written here. The God's Eye View
+# labels any run of a scripted scenario.
+scripted: true
+
+# The one line the Test Scene launcher shows under the title.
+what_if: >-
+  What if a fleet kept the approach from the fire station clear before the
+  second engine arrived, on a report dispatch had not yet called a crash?
+
+# Where the viewer puts the camera when this scene opens: 6th at Guadalupe,
+# looking east down 6th with the fire station block in frame.
+start_view:
+  lon: -97.746282
+  lat: 30.269042
+  height: 900
+  heading: 95
+  pitch: -35
+
+summary: >-
+  An emergency scene at 6th and Guadalupe, reported the way this feed really
+  reports one: first as a 'Traffic Impediment' with no coordinates at all and
+  the cross streets only in the address line, then reclassified five minutes
+  later to 'AUTO/ PED' with a position attached. Around it runs the
+  real board for the same twelve hours - 5 downtown records, crashes
+  and hazards, published and archived exactly as the city published and
+  archived them. Two scripted decoys, a stalled vehicle and loose livestock,
+  are placeable and are not scenes.
+
+window:
+  start: 2026-10-14T11:00:00Z
+  end: 2026-10-14T23:00:00Z
+  duration_minutes: 720
+  # The first scripted scene record: the clock the time-to-advisory budget is
+  # measured from, and 20 s into the run at the demo speed of 60x.
+  first_scene_at: 2026-10-14T11:20:00Z
+  first_scene_offset_seconds: 20
+  # The reclassification, which is the first record a keyword rule on the
+  # structured type field could act on.
+  reclassified_at: 2026-10-14T11:25:00Z
+  reclassified_offset_seconds: 25
+
+recording:
+  fixture: data/recordings/s3_incident/fixture/austin_incidents.jsonl
+  payloads: 144
+  # Rows written across every poll: a report that is open for an hour appears
+  # in twelve of them, which is what a reader of this feed really sees.
+  records: 371
+  events: 371
+  bytes: 166250
+  feeds:
+    austin_incidents:
+      payloads: 144
+      events: 371
+
+feeds:
+  austin_incidents:
+    dataset: dx9v-zd7x
+    poll_seconds: 300
+    bbox: [-97.76, 30.258, -97.728, 30.282]
+    # The only structured field this feed has is `issue_reported`, a dispatch
+    # type string with no closed vocabulary behind it. The address is free
+    # text, and some records carry no coordinates. That is what makes this the
+    # scenario a rules-only variant is expected to struggle with.
+    structured_field: issue_reported
+    real_records: 5
+    scripted_records: 6
+    # Every record below was written here. Minutes from `window.start`.
+    scripted:
+      - { at: 20, report: 'scripted-6th-guadalupe-scene', issue: 'Traffic Impediment', located: false, status: ACTIVE }
+        # no coordinates, and a dispatch type no keyword calls a scene
+      - { at: 25, report: 'scripted-6th-guadalupe-scene', issue: 'AUTO/ PED', located: true, status: ACTIVE }
+        # the status update that changes the incident type, with coordinates
+      - { at: 40, report: 'scripted-6th-guadalupe-scene', issue: 'AUTO/ PED', located: true, status: ACTIVE }
+        # re-listed while the scene is open
+      - { at: 75, report: 'scripted-6th-guadalupe-scene', issue: 'AUTO/ PED', located: true, status: ARCHIVED }
+        # the archive record that closes it
+      - { at: 35, report: 'scripted-7th-stalled-vehicle', issue: 'Stalled Vehicle', located: false, status: ACTIVE }
+        # decoy: placeable, not a scene
+      - { at: 50, report: 'scripted-15th-loose-livestock', issue: 'LOOSE LIVESTOCK', located: true, status: ACTIVE }
+        # decoy: a real dispatch type that is not an emergency scene
+    # Every record below is the city's own, kept verbatim.
+    real:
+      - { published: 2026-10-14T12:36:13Z, issue: 'Crash Service', address: 'Guadalupe St / W Cesar Chavez St' }
+      - { published: 2026-10-14T13:30:46Z, issue: 'Traffic Hazard', address: 'Walsh St / W 6th St' }
+      - { published: 2026-10-14T17:11:44Z, issue: 'Crash Urgent', address: '1500 N Ih 35 Sb' }
+      - { published: 2026-10-14T20:54:28Z, issue: 'Traffic Hazard', address: '910-919 W Cesar Chavez St' }
+      - { published: 2026-10-14T22:47:58Z, issue: 'Crash Urgent', address: '1000-1020 E 3rd St' }
+
+# What is physically true while the scene is open, independent of any advisory:
+# the junction at W 6TH ST / GUADALUPE ST is blocked, so the edges inside the
+# area below are impassable and a vehicle that drives into one stops there.
+# The simulator reads this block and nothing else - the ghost fleet meets it
+# as well, which is the whole point of keeping ground truth out of the agent
+# pipeline.
+#
+# The area is 60 m around the junction, which is the same disc
+# `agents.sentinels.incident` publishes for a scene it places there. So an
+# advisory this run produces covers the edges this run blocks, and nothing is
+# blocked that no advisory could reach.
+#
+# The window is the recording's own, as minutes into the run rather than
+# absolute instants: the run starts whenever it is started, and what the
+# recording fixes is how far into it the scene is reported (20) and
+# when it is archived (75).
+#
+# Only the scripted scene is here. The real records in this window are real
+# incidents, but nothing in this repository knows how far they reached or when
+# they truly ended, so labelling them would be inventing the labels the eval is
+# scored against. See `scoring` below.
+ground_truth:
+  - id: s3-sixth-guadalupe-scene
+    class: EMERGENCY_SCENE
+    severity: 3
+    from_offset_minutes: 20
+    until_offset_minutes: 75
+    geometry:
+      type: Polygon
+      coordinates:
+        - - [-97.7456579, 30.269042]
+          - [-97.7456609, 30.2689891]
+          - [-97.7456699, 30.2689367]
+          - [-97.7456848, 30.2688853]
+          - [-97.7457054, 30.2688354]
+          - [-97.7457316, 30.2687875]
+          - [-97.7457631, 30.268742]
+          - [-97.7457996, 30.2686995]
+          - [-97.7458407, 30.2686602]
+          - [-97.7458861, 30.2686247]
+          - [-97.7459353, 30.2685931]
+          - [-97.7459878, 30.2685659]
+          - [-97.7460432, 30.2685432]
+          - [-97.7461008, 30.2685253]
+          - [-97.7461603, 30.2685125]
+          - [-97.7462208, 30.2685047]
+          - [-97.746282, 30.2685021]
+          - [-97.7463432, 30.2685047]
+          - [-97.7464037, 30.2685125]
+          - [-97.7464632, 30.2685253]
+          - [-97.7465208, 30.2685432]
+          - [-97.7465762, 30.2685659]
+          - [-97.7466287, 30.2685931]
+          - [-97.7466779, 30.2686247]
+          - [-97.7467233, 30.2686602]
+          - [-97.7467644, 30.2686995]
+          - [-97.7468009, 30.268742]
+          - [-97.7468324, 30.2687875]
+          - [-97.7468586, 30.2688354]
+          - [-97.7468792, 30.2688853]
+          - [-97.7468941, 30.2689367]
+          - [-97.7469031, 30.2689891]
+          - [-97.7469061, 30.269042]
+          - [-97.7469031, 30.2690949]
+          - [-97.7468941, 30.2691473]
+          - [-97.7468792, 30.2691987]
+          - [-97.7468586, 30.2692486]
+          - [-97.7468324, 30.2692965]
+          - [-97.7468009, 30.269342]
+          - [-97.7467644, 30.2693845]
+          - [-97.7467233, 30.2694238]
+          - [-97.7466779, 30.2694593]
+          - [-97.7466287, 30.2694909]
+          - [-97.7465762, 30.2695181]
+          - [-97.7465208, 30.2695408]
+          - [-97.7464632, 30.2695587]
+          - [-97.7464037, 30.2695715]
+          - [-97.7463432, 30.2695793]
+          - [-97.746282, 30.2695819]
+          - [-97.7462208, 30.2695793]
+          - [-97.7461603, 30.2695715]
+          - [-97.7461008, 30.2695587]
+          - [-97.7460432, 30.2695408]
+          - [-97.7459878, 30.2695181]
+          - [-97.7459353, 30.2694909]
+          - [-97.7458861, 30.2694593]
+          - [-97.7458407, 30.2694238]
+          - [-97.7457996, 30.2693845]
+          - [-97.7457631, 30.269342]
+          - [-97.7457316, 30.2692965]
+          - [-97.7457054, 30.2692486]
+          - [-97.7456848, 30.2691987]
+          - [-97.7456699, 30.2691473]
+          - [-97.7456609, 30.2690949]
+          - [-97.7456579, 30.269042]
+
+# How the ablation harness scores a run of this scenario.
+scoring:
+  # A hazard that overlaps a `ground_truth` entry while it is in force.
+  hits_from: ground_truth
+  # Candidates raised from a record that is not `scripted` are neither hits
+  # nor false positives: the record is a real incident with no label.
+  unlabelled: real_records
+  # These two scripted records are placeable and are not emergency scenes. A
+  # run that publishes an EMERGENCY_SCENE over either is a false positive, and
+  # that is the one false positive this scenario can state with certainty.
+  false_positive_if_scene:
+    - scripted-7th-stalled-vehicle
+    - scripted-15th-loose-livestock
+
+expected:
+  # What the incident sentinel should make of the recording.
+  candidate_class: EMERGENCY_SCENE
+  scene_report: scripted-6th-guadalupe-scene
+  # The first record is unlocated, so the scene is placed by intersection
+  # lookup against the OSM graph rather than by the feed.
+  located_by: intersection_lookup
+  scene_point: [-97.746282, 30.269042]
+  scene_radius_m: 60
+  # The rules-only path matches keywords against `issue_reported` alone, so
+  # the first record it can call a scene is the reclassification.
+  rules_only_first_record: 'AUTO/ PED'
+  action: KEEP_CLEAR
+
+replay:
+  default_speed: 60
+  streams: [events.austin_incidents]
+
+provenance:
+  austin_incidents:
+    status: mixed
+    real_records:
+      status: real
+      dataset: dx9v-zd7x
+      source_url: https://data.austintexas.gov/resource/dx9v-zd7x.json
+      retrieved_at: 2026-10-24
+      window: 2026-10-14T11:00:00Z .. 2026-10-14T23:00:00Z
+      bbox: [-97.76, 30.258, -97.728, 30.282]
+      note: >-
+        Every column of every real record is the city's own, taken from the
+        Real-Time Traffic Incident Reports dataset, which keeps its archived
+        rows. Report ids, dispatch type strings, addresses, coordinates,
+        agencies and timestamps are verbatim.
+    scripted_records:
+      status: synthetic
+      count: 6
+      extra_column: responding_units
+      note: >-
+        The 6 records listed under `feeds.austin_incidents.scripted` were
+        written by headsup.scenario.incidents. They carry the feed's own
+        columns plus `responding_units`, which the real dataset does not have:
+        this feed has no narrative column, and rather than write dispatch prose
+        into a column that holds addresses, the injected records keep it in a
+        column that is visibly theirs. Only these records carry
+        `scripted: true`.
+    envelope: reconstructed
+    note: >-
+      The live feed answers with the reports current when it is asked; the
+      archive answers with rows that have since been archived. A poll here is
+      rebuilt as the rows published by that instant whose archive time is
+      after it, newest first. Two columns therefore differ from the archive
+      row: `traffic_report_status` reads ACTIVE in a poll taken before the row
+      was archived, because that is what the board said then, and
+      `traffic_report_status_date_time` is left out of those polls rather than
+      back-dated. Each report appears once more, verbatim and ARCHIVED, in the
+      first poll after its archive time.
+  generator:
+    module: headsup.scenario.incidents
+    command: hu scenario fetch-incidents

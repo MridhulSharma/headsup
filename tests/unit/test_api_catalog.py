@@ -17,7 +17,7 @@ import pytest
 from headsup.api.catalog import SCENARIOS_DIR, CatalogError, ScenarioCatalog
 
 #: Every scenario the repository ships.
-SHIPPED = ("s1_flood", "s2_blackout")
+SHIPPED = ("s1_flood", "s2_blackout", "s3_incident")
 
 
 @pytest.fixture(scope="module")
@@ -48,6 +48,17 @@ def test_s1_is_not_scripted_and_s2_is(catalog: ScenarioCatalog) -> None:
     """S1 replays real observations; S2's signal states were generated."""
     assert catalog.card("s1_flood").scripted is False
     assert catalog.card("s2_blackout").scripted is True
+
+
+def test_s3_is_scripted_because_its_scene_was_written_here(catalog: ScenarioCatalog) -> None:
+    """S3's window is real and the scene inside it is not, so the run is badged.
+
+    The per-record `scripted` flag in the recording says which records were
+    written here; the card says the run as a whole contains some, which is
+    what the viewer badges. A run that looked more real than it is would be
+    the one bad outcome.
+    """
+    assert catalog.card("s3_incident").scripted is True
 
 
 def test_an_unknown_scenario_says_which_ones_exist(catalog: ScenarioCatalog) -> None:

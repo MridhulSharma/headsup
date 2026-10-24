@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from headsup.ingest.austin_incidents import INCIDENT_DATASET
 from headsup.ingest.austin_signals import SIGNAL_STATUS_DATASET
 
 #: USGS parameter code for gauge height in feet.
@@ -31,6 +32,10 @@ class City:
     #: publishes one. Austin does; San Antonio's signals are not on an open
     #: feed, so a city without one simply polls one feed fewer.
     signal_dataset: str | None = None
+    #: Socrata dataset id of this city's traffic incident report feed, if it
+    #: publishes one. Austin does; San Antonio's dispatch board is not open, so
+    #: again a city without one simply polls one feed fewer.
+    incident_dataset: str | None = None
 
     @property
     def gauge_ids(self) -> tuple[str, ...]:
@@ -71,6 +76,7 @@ AUSTIN = City(
         "08159000",  # Onion Ck at US 183
     ),
     signal_dataset=SIGNAL_STATUS_DATASET,
+    incident_dataset=INCIDENT_DATASET,
 )
 
 CITIES: dict[str, City] = {city.key: city for city in (AUSTIN, SAN_ANTONIO)}

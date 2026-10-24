@@ -157,3 +157,51 @@ GEOMETRY_TYPES: tuple[type[_GeometryBase], ...] = (
     Polygon,
     MultiPolygon,
 )
+
+
+#: Decimal places a geometry built by code is rounded to. 1e-7 degrees is
+#: about a centimetre: a buffer or a union produces float noise per vertex, and
+#: a geometry that travels over the bus into an audit record carries none of
+#: it.
+COORD_DIGITS = 7
+
+
+def rings_of(
+    area: shapely_base.BaseGeometry, digits: int = COORD_DIGITS
+) -> list[list[list[float]]]:
+    """One shapely polygon's rings as rounded GeoJSON coordinates."""
+    exterior = getattr(area, "exterior", None)
+    if exterior is None:
+        raise ValueError(f"cannot take rings from {type(area).__name__}")
+    rings = [exterior.coords, *(hole.coords for hole in area.interiors)]
+    return [
+        [[round(float(x), digits), round(float(y), digits)] for x, y in ring]
+        for ring in rings
+        if len(ring) >= 4
+    ]
+
+
+def area_geometry(
+    area: shapely_base.BaseGeometry, digits: int = COORD_DIGITS
+) -> Polygon | MultiPolygon | None:
+    """A shapely area as a contract geometry, or None if it has no usable area.
+
+    Everything that is not an area somebody could be told about - empty,
+    invalid, a bare line where two shapes touched, a ring with too few points
+    to close - comes back None, and the caller keeps whatever it had.
+
+    `agents.fusion` and `agents.sentinels.signals` each predate this and keep
+    their own private copy; new callers use this one.
+    """
+    if area.is_empty or not area.is_valid:
+        return None
+    try:
+        if area.geom_type == "Polygon":
+            rings = rings_of(area, digits)
+            return Polygon(coordinates=rings) if rings else None
+        if area.geom_type == "MultiPolygon":
+            parts = [rings for part in area.geoms if (rings := rings_of(part, digits))]
+            return MultiPolygon(coordinates=parts) if parts else None
+    except ValueError:
+        return None
+    return None

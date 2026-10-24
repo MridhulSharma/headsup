@@ -1,0 +1,8 @@
+{
+  "incident_type": "CRASH",
+  "severity": 4,
+  "location_text": "1500 N Ih 35 Sb",
+  "responding_units": [
+    "APD"
+  ]
+}

@@ -17,6 +17,8 @@ What lives where:
 | `graph` | the igraph copy, edge ids, free-flow times, the two queries |
 | `h3index` | resolution-10 cell index from cells to edges |
 | `pois` | hospitals, fire, EMS and schools, with their access edges |
+| `geocode` | a dispatcher's cross-street string to one junction of the graph |
+| `responders` | the shortest route from the nearest fire or EMS station to a scene |
 | `db` | the `roads` and `pois` tables in PostGIS |
 | `checker` | `WorldPoiChecker`, the real version of D1.3's stub |
 | `raw` | saved Overpass responses, and the offline rebuild from them |
@@ -31,8 +33,9 @@ to a time budget.
 from __future__ import annotations
 
 from headsup.world import raw
-from headsup.world.bbox import AUSTIN_BOX, BOXES, SAN_ANTONIO_BOX, BBox, box
+from headsup.world.bbox import AUSTIN_BOX, BOXES, SAN_ANTONIO_BOX, BBox, box, buffer_m
 from headsup.world.checker import WorldPoiChecker, default_poi_checker
+from headsup.world.geocode import IntersectionIndex, Street, cross_streets, index_for, street
 from headsup.world.graph import (
     DEFAULT_BLOCK_RADIUS_M,
     DEFAULT_SPEED_KPH,
@@ -55,6 +58,13 @@ from headsup.world.model import (
     world_cache_dir,
 )
 from headsup.world.pois import OSM_TAGS, PoiKind, WorldPoi, load_pois, resolve_access, save_pois
+from headsup.world.responders import (
+    NullSceneRouter,
+    SceneCorridor,
+    SceneRouter,
+    WorldSceneRouter,
+    default_scene_router,
+)
 
 __all__ = [
     "AUSTIN_BOX",
@@ -70,18 +80,28 @@ __all__ = [
     "BBox",
     "Edge",
     "EdgeCellIndex",
+    "IntersectionIndex",
+    "NullSceneRouter",
     "PoiKind",
     "RoadGraph",
+    "SceneCorridor",
+    "SceneRouter",
+    "Street",
     "World",
     "WorldError",
     "WorldPoi",
     "WorldPoiChecker",
+    "WorldSceneRouter",
     "as_shapely",
     "box",
+    "buffer_m",
     "clear_world_cache",
     "cover_cells",
+    "cross_streets",
     "default_poi_checker",
+    "default_scene_router",
     "graph_path",
+    "index_for",
     "is_built",
     "load_pois",
     "load_world",
@@ -90,5 +110,6 @@ __all__ = [
     "resolve_access",
     "save_pois",
     "speed_kph",
+    "street",
     "world_cache_dir",
 ]

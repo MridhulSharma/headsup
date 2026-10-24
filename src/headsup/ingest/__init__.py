@@ -7,6 +7,12 @@ into `CivicEvent`s whether it arrived over HTTP a second ago or came off disk.
 
 from __future__ import annotations
 
+from headsup.ingest.austin_incidents import (
+    INCIDENT_DATASET,
+    STATUS_ACTIVE,
+    STATUS_ARCHIVED,
+    AustinIncidentsAdapter,
+)
 from headsup.ingest.austin_signals import (
     ENV_APP_TOKEN,
     FLASHING_STATES,
@@ -73,6 +79,7 @@ __all__ = [
     "FIXTURE_DIR",
     "FLASHING_STATES",
     "GAUGE_HEIGHT",
+    "INCIDENT_DATASET",
     "MAX_SPEED",
     "MIN_SPEED",
     "NWS_INTERVAL",
@@ -86,9 +93,12 @@ __all__ = [
     "SIGNAL_STATUS_DATASET",
     "SODA_BASE",
     "STATE_KINDS",
+    "STATUS_ACTIVE",
+    "STATUS_ARCHIVED",
     "UNSCHEDULED_FLASH_STATES",
     "USGS_INTERVAL",
     "Adapter",
+    "AustinIncidentsAdapter",
     "AustinSignalsAdapter",
     "City",
     "Clock",

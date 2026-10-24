@@ -49,6 +49,7 @@ from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
 from headsup.agents.sentinels.base import Sentinel
 from headsup.agents.sentinels.flood import FloodSentinel
+from headsup.agents.sentinels.incident import IncidentSentinel
 from headsup.agents.sentinels.signals import SignalOutageSentinel
 from headsup.agents.sentinels.worker import SentinelWorker
 from headsup.api.catalog import ScenarioCard
@@ -65,8 +66,10 @@ from headsup.sim.ground_truth import EmptyHazardField, HazardField, ScriptedHaza
 from headsup.sim.network import DriveNetwork, NetworkError
 from headsup.sim.runner import SimRunner
 from headsup.sim.scenarios import scenario_regions
+from headsup.world.geocode import index_for
 from headsup.world.graph import WorldError
-from headsup.world.model import is_built, load_world
+from headsup.world.model import World, is_built, load_world
+from headsup.world.responders import SceneRouter, WorldSceneRouter
 
 log = logging.getLogger(__name__)
 
@@ -74,11 +77,38 @@ log = logging.getLogger(__name__)
 SENTINEL_FOR: dict[HazardClass, type[Sentinel]] = {
     HazardClass.FLOOD: FloodSentinel,
     HazardClass.SIGNAL_OUTAGE: SignalOutageSentinel,
+    HazardClass.EMERGENCY_SCENE: IncidentSentinel,
 }
 
 #: The sentinels that ask a model something. The signal sentinel reads
 #: structured feed fields and takes no client at all.
-MODEL_SENTINELS: frozenset[type[Sentinel]] = frozenset({FloodSentinel})
+MODEL_SENTINELS: frozenset[type[Sentinel]] = frozenset({FloodSentinel, IncidentSentinel})
+
+#: The sentinels that need the city's road graph. The incident feed writes
+#: where an incident is the way a dispatcher types it, and some records carry
+#: no coordinates at all, so placing one is an intersection lookup against the
+#: graph the fleets drive on.
+GRAPH_SENTINELS: frozenset[type[Sentinel]] = frozenset({IncidentSentinel})
+
+
+def build_sentinel(
+    hazard_class: HazardClass, *, client: LlmClient | None, world: World
+) -> Sentinel:
+    """The sentinel one scenario asks for, with what that sentinel needs.
+
+    Three dependencies, each given only to the sentinels that take it: the
+    model client (None on the rules-only path, which is variant V1), and the
+    city's intersection index. A sentinel that takes neither is built bare, so
+    adding one does not mean touching every call site.
+    """
+    sentinel_class = SENTINEL_FOR[hazard_class]
+    kwargs: dict[str, Any] = {}
+    if sentinel_class in MODEL_SENTINELS:
+        kwargs["llm"] = client
+    if sentinel_class in GRAPH_SENTINELS:
+        kwargs["geocoder"] = index_for(world.graph)
+    return sentinel_class(**kwargs)  # type: ignore[call-arg]
+
 
 #: Default fleet size for a scenario run. Smaller than the 900 of the
 #: throughput check: a launcher run is watched, and 300 vehicles already more
@@ -159,6 +189,9 @@ class _Run:
     compiler_bus: Bus
     client: LlmClient | None
     sentinel: Sentinel
+    #: Where responders come from, for a KEEP_CLEAR corridor. The proposer's,
+    #: built on the same world the POI checker answers off.
+    scene: SceneRouter
     tasks: list[asyncio.Task[Any]] = field(default_factory=list)
     replay_complete: bool = False
     fleets_complete: bool = False
@@ -341,12 +374,7 @@ class ScenarioRunner:
                 await client.aclose()
             raise ScenarioError(str(exc)) from exc
 
-        sentinel_class = SENTINEL_FOR[hazard_class]
-        sentinel = (
-            sentinel_class(llm=client)  # type: ignore[call-arg]
-            if sentinel_class in MODEL_SENTINELS
-            else sentinel_class()  # type: ignore[call-arg]
-        )
+        sentinel = build_sentinel(hazard_class, client=client, world=world)
         return _Run(
             card=card,
             options=options,
@@ -368,6 +396,7 @@ class ScenarioRunner:
             compiler_bus=compiler_bus,
             client=client,
             sentinel=sentinel,
+            scene=WorldSceneRouter(world),
         )
 
     def _ground_truth(
@@ -413,13 +442,15 @@ class ScenarioRunner:
         """The scenario's sentinel, fusion and the proposer, as workers.
 
         The proposer borrows the compiler's POI checker, so both ends of the
-        pipeline answer the critical-access question off one road graph.
+        pipeline answer the critical-access question off one road graph, and it
+        takes the run's scene router, so a keep-clear corridor is routed over
+        that same graph.
         """
         return [
             SentinelWorker(run.sentinel, self.bus),
             FusionWorker(Fusion(llm=run.client), self.bus),
             ProposerWorker(
-                Proposer(llm=run.client, poi=run.service.compiler.poi),
+                Proposer(llm=run.client, poi=run.service.compiler.poi, scene=run.scene),
                 self.bus,
                 compiler=run.service,
             ),

@@ -10,6 +10,7 @@ action the model named, and that the proposer never hands it one to refuse.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -20,6 +21,7 @@ from headsup.agents.compiler.poi import BLOCKING_ACTIONS
 from headsup.agents.critic import stub_verdict
 from headsup.agents.proposer import (
     PROPOSER_RULES,
+    PURPOSE,
     ProposedAction,
     Proposer,
     playbook_block,
@@ -317,3 +319,175 @@ async def test_a_hazard_whose_window_has_closed_proposes_nothing() -> None:
     proposer = Proposer(llm=mock_llm(), poi=poi_checker())
     assert await proposer.propose(expired) is None
     assert proposer.proposals == 0
+
+
+# --- the one computed area ---------------------------------------------------
+
+
+class StubSceneRouter:
+    """A router that answers with a fixed corridor, or with nothing.
+
+    Structural, like every other double here: the proposer never imports the
+    world layer, and `WorldSceneRouter` satisfies the same protocol.
+    """
+
+    def __init__(self, *, corridor: object | None = None) -> None:
+        self.corridor_value = corridor
+        self.asked: list[tuple[float, float, float]] = []
+
+    def corridor(
+        self, scene: object, *, width_m: float, radius_m: float, max_route_m: float
+    ) -> object | None:
+        self.asked.append((width_m, radius_m, max_route_m))
+        return self.corridor_value
+
+    def describes_itself(self) -> str:
+        return "stub-scene-router"
+
+
+@dataclass(frozen=True, slots=True)
+class StubCorridor:
+    """What a router hands back: an area, the numbers, and one clause of prose."""
+
+    geometry: Polygon
+    width_m: float = 30.0
+    radius_m: float = 120.0
+    summary: str = "30 m corridor along the 700 m route from FIRE_STATION Station 1"
+
+
+def scene_hazard(*, severity: int = 2) -> Hazard:
+    """A fused emergency scene: severity 2, because its feed is not authoritative."""
+    return hazard(hazard_class=HazardClass.EMERGENCY_SCENE, severity=severity, geometry=box(0.002))
+
+
+async def test_an_emergency_scene_asks_for_the_corridor_rather_than_the_scene() -> None:
+    """The one place a proposal's geometry is not the hazard's own.
+
+    What a fleet can usefully be told about a scene is to leave the approach
+    clear; the scene itself stops a vehicle whatever anybody was told.
+    """
+    corridor = StubCorridor(geometry=box(0.01))
+    router = StubSceneRouter(corridor=corridor)
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker(), scene=router)
+
+    proposal = await proposer.propose(scene_hazard())
+    assert proposal is not None
+    assert proposal.action.type is ActionType.KEEP_CLEAR
+    assert proposal.geometry == corridor.geometry
+    # The width and the radius travel with the action, so a reader does not
+    # have to infer them from the polygon.
+    assert proposal.action.params == {"width_m": 30.0, "radius_m": 120.0}
+    assert corridor.summary in (proposal.rationale or "")
+    assert proposer.corridors == 1
+    # The caps are the playbook's, not the router's.
+    caps = default_playbooks().require(HazardClass.EMERGENCY_SCENE).keep_clear
+    assert caps is not None
+    assert router.asked == [(caps.corridor_width_m, caps.no_stop_radius_m, caps.max_route_m)]
+
+
+async def test_a_scene_with_no_router_keeps_the_hazards_own_area() -> None:
+    """The default everywhere else, and the behaviour before a world is built."""
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker())
+    subject = scene_hazard()
+    proposal = await proposer.propose(subject)
+    assert proposal is not None
+    assert proposal.action.type is ActionType.KEEP_CLEAR
+    assert proposal.geometry == subject.geometry
+    assert proposal.action.params == {}
+    assert proposer.corridors == 0
+
+
+async def test_a_scene_no_station_can_be_routed_to_keeps_its_own_area() -> None:
+    router = StubSceneRouter(corridor=None)
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker(), scene=router)
+    subject = scene_hazard()
+    proposal = await proposer.propose(subject)
+    assert proposal is not None
+    assert proposal.geometry == subject.geometry
+    assert proposer.unrouted_scenes == 1
+
+
+async def test_a_class_whose_playbook_has_no_keep_clear_caps_is_not_routed() -> None:
+    """`playbooks/flood.yaml` names no corridor, so no corridor is drawn."""
+    router = StubSceneRouter(corridor=StubCorridor(geometry=box(0.01)))
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker(), scene=router)
+    subject = hazard(hazard_class=HazardClass.FLOOD, severity=4)
+    proposal = await proposer.propose(subject)
+    assert proposal is not None
+    assert proposal.geometry == subject.geometry
+    assert router.asked == []
+
+
+async def test_the_corridor_only_attaches_to_the_keep_clear_action() -> None:
+    """A companion or a fallback action is about the hazard, not the approach."""
+    corridor = StubCorridor(geometry=box(0.01))
+    router = StubSceneRouter(corridor=corridor)
+    # Severity 3 lets the model's NO_ENTRY through the blocking-severity gate.
+    proposer = Proposer(
+        llm=mock_llm(scripted(ActionType.NO_ENTRY)), poi=poi_checker(), scene=router
+    )
+    subject = scene_hazard(severity=3)
+    proposal = await proposer.propose(subject)
+    assert proposal is not None
+    assert proposal.action.type is ActionType.NO_ENTRY
+    assert proposal.geometry == subject.geometry
+    assert proposal.action.params == {}
+
+
+async def test_the_compiler_gates_a_computed_area_like_any_other() -> None:
+    """A corridor is not a privileged geometry: the area cap still measures it."""
+    oversized = StubCorridor(geometry=box(2.0))
+    proposer = Proposer(
+        llm=mock_llm(), poi=poi_checker(), scene=StubSceneRouter(corridor=oversized)
+    )
+    proposal = await proposer.propose(scene_hazard())
+    assert proposal is not None
+
+    compiler = Compiler(poi=poi_checker(), clock=clock())
+    record = compiler.compile(proposal, stub_verdict(proposal))
+    assert record.ok is False
+    assert RuleCode.AREA_UNDER_CAP in record.codes
+
+
+# --- what mock mode answers per class ---------------------------------------
+
+
+@pytest.mark.parametrize("hazard_class", list(HazardClass))
+def test_every_hazard_class_gets_a_mock_answer_its_own_playbook_allows(
+    hazard_class: HazardClass,
+) -> None:
+    """The judgment call is answered per class, so the answers have to fit.
+
+    `Proposer._choose` passes the hazard class as the fixture `variant`, and a
+    class with no fixture of its own falls back to `proposer_action.json`. A
+    fallback the class forbids is not a loud failure: the action is discarded,
+    `rejected_actions` ticks up and the run continues on the rules path - which
+    is exactly how a scenario ends up measuring the rules path while claiming
+    to measure the model. This is the test that would have caught that.
+    """
+    from headsup.llm import FixtureStore
+
+    payload = FixtureStore().load(PURPOSE, hazard_class.value.lower())
+    answer = ProposedAction.model_validate(payload)
+    playbook = default_playbooks().require(hazard_class)
+    assert playbook.allows(answer.action), (
+        f"mock mode answers {answer.action.value} for {hazard_class.value}, which "
+        f"{playbook.policy_rule} does not allow"
+    )
+
+
+async def test_a_signal_outage_takes_the_stop_rule_from_the_model() -> None:
+    """S2's own fixture, rather than the flood answer by fallback.
+
+    The companion test below scripts a forbidden action and asserts the
+    rejection path. This one asserts the normal path: the model is asked, it
+    answers something `signal_outage.v1` allows, and nothing is rejected.
+    """
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker())
+    proposal = await proposer.propose(hazard(hazard_class=HazardClass.SIGNAL_OUTAGE, severity=3))
+    assert proposal is not None
+    assert proposal.action.type is ActionType.ALL_WAY_STOP
+    assert proposer.rejected_actions == 0
+    # The model's reason travels with the proposal; the rules path writes its
+    # own sentence, so this is also how the two paths are told apart.
+    assert "Rules path:" not in (proposal.rationale or "")

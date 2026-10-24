@@ -1,0 +1,5 @@
+{
+  "action": "SPEED_CAP",
+  "reason": "Wind and rain over the whole service area degrade braking and visibility everywhere rather than blocking anywhere, so an approach-speed cap addresses it; pausing the service is for conditions a slower vehicle still cannot handle.",
+  "confidence": 0.69
+}

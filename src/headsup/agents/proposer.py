@@ -37,10 +37,23 @@ ablation runs on it, `rules_only=True` selects it, and every `LlmError` -
 model that names a disallowed action: the proposal is still produced, from the
 rules, and `rejected_actions` counts the attempt.
 
-**What the model may not touch.** Not the geometry (the hazard's own), not the
-evidence (the hazard's own), not the severity, not the window, and not the
-`policy_rule` - that comes from `playbook.rule_for(action)`. It chooses one
-action from a closed list and writes a sentence about why.
+**What the model may not touch.** Not the geometry, not the evidence (the
+hazard's own), not the severity, not the window, and not the `policy_rule` -
+that comes from `playbook.rule_for(action)`. It chooses one action from a
+closed list and writes a sentence about why.
+
+**One action's area is computed rather than copied.** Every proposal carries
+the hazard's own geometry, with one exception: a `KEEP_CLEAR` for an
+`EMERGENCY_SCENE`. What a fleet can usefully be asked about a scene is not the
+scene - a vehicle that drives into it stops either way - but the approach the
+responders are coming up, and no feed ever drew that. So when the class's
+playbook carries `keep_clear` caps and a `SceneRouter` answers, the geometry is
+the corridor along the shortest route from the nearest fire or EMS station to
+the scene, unioned with a no-stop radius around the scene itself. The caps are
+the playbook's, the route is the city graph's, and the result goes through
+exactly the same `check_area` and `check_two_key` gate as any other geometry:
+a computed area is not a privileged one. No router, or no route, and the
+proposal keeps the hazard's area, which is what every other class does.
 
 **One hazard can need more than one action.** A block of dark signals is not
 one problem. Telling a fleet to treat the junctions as all-way stops settles
@@ -65,6 +78,7 @@ import asyncio
 import logging
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 
 from headsup.agents.compiler.playbooks import Playbook, PlaybookSet, default_playbooks
 from headsup.agents.compiler.poi import (
@@ -86,6 +100,13 @@ from headsup.contracts import (
     utcnow,
 )
 from headsup.llm import LlmClient, LlmError, Tier, data_block
+
+if TYPE_CHECKING:  # pragma: no cover - annotations only
+    # Imported for the annotations alone. `WorldSceneRouter` satisfies the
+    # protocol structurally, exactly as `WorldPoiChecker` satisfies
+    # `PoiChecker`, so the agents layer keeps no runtime dependency on the
+    # world layer and there is no import cycle to manage.
+    from headsup.world.responders import SceneCorridor, SceneRouter
 
 log = logging.getLogger(__name__)
 
@@ -234,12 +255,16 @@ class Proposer:
         llm: LlmClient | None = None,
         playbooks: PlaybookSet | None = None,
         poi: PoiChecker | None = None,
+        scene: SceneRouter | None = None,
         rules_only: bool = False,
         name: str = PROPOSER_NAME,
     ) -> None:
         self.llm = llm
         self.playbooks = playbooks if playbooks is not None else default_playbooks()
         self.poi: PoiChecker = poi if poi is not None else NullPoiChecker()
+        #: Where the responders come from. None means no corridor is drawn and
+        #: an EMERGENCY_SCENE keeps the hazard's own area.
+        self.scene = scene
         #: Variant V1: never ask a model, use the deterministic path only.
         self.rules_only = rules_only
         self.name = name
@@ -250,6 +275,9 @@ class Proposer:
         self.llm_failures = 0
         #: Model answers naming an action the playbook does not allow.
         self.rejected_actions = 0
+        #: Keep-clear corridors drawn, and scenes no station could be routed to.
+        self.corridors = 0
+        self.unrouted_scenes = 0
 
     async def propose(self, hazard: Hazard) -> ProposedAdvisory | None:
         """The primary proposal for this hazard, or None if nothing may be asked.
@@ -304,6 +332,7 @@ class Proposer:
                 continue
             asked.append((companion, self._companion_reason(hazard, primary, companion)))
 
+        corridor = await self._corridor(hazard, playbook, allowed)
         return [
             self._proposal(
                 hazard,
@@ -312,9 +341,48 @@ class Proposer:
                 why,
                 valid_from=valid_from,
                 valid_until=valid_until,
+                corridor=corridor,
             )
             for action_type, why in asked
         ]
+
+    async def _corridor(
+        self, hazard: Hazard, playbook: Playbook, allowed: list[ActionType]
+    ) -> SceneCorridor | None:
+        """The keep-clear corridor for this hazard, if one applies at all.
+
+        Asked once per hazard rather than once per proposal, and in a worker
+        thread for the reason `_blocked_map` is: routing over the city graph is
+        synchronous CPU work, and a loop that is not running is a replay losing
+        its pacing and a viewer socket going quiet.
+
+        None whenever any link in the chain is absent - no router, no caps in
+        the playbook, KEEP_CLEAR not among the actions left for this geometry,
+        or no station the graph can route from. All of those are normal, and
+        all of them leave the hazard's own area in place.
+        """
+        caps = playbook.keep_clear
+        if self.scene is None or caps is None or ActionType.KEEP_CLEAR not in allowed:
+            return None
+        router, geometry = self.scene, hazard.geometry
+        found = await asyncio.to_thread(
+            lambda: router.corridor(
+                geometry,
+                width_m=caps.corridor_width_m,
+                radius_m=caps.no_stop_radius_m,
+                max_route_m=caps.max_route_m,
+            )
+        )
+        if found is None:
+            self.unrouted_scenes += 1
+            log.info(
+                "%s: no responder route to %s; KEEP_CLEAR keeps the hazard area",
+                self.name,
+                hazard.id,
+            )
+            return None
+        self.corridors += 1
+        return found
 
     def _companion_reason(self, hazard: Hazard, primary: ActionType, companion: ActionType) -> str:
         """Why a companion was asked for alongside the primary action."""
@@ -334,26 +402,38 @@ class Proposer:
         *,
         valid_from: datetime,
         valid_until: datetime,
+        corridor: SceneCorridor | None = None,
     ) -> ProposedAdvisory:
         """One action as a proposal. Counted here, where one is actually made."""
+        drawn = corridor if corridor is not None and action_type is ActionType.KEEP_CLEAR else None
+        params = _params_for(action_type, hazard.severity)
+        why = reason
+        if drawn is not None:
+            # The width and the radius the area was drawn with travel with the
+            # action, so a reader of the advisory can see what was asked for
+            # rather than having to infer it from the polygon.
+            params = {**params, "width_m": drawn.width_m, "radius_m": drawn.radius_m}
+            why = f"{reason} Corridor: {drawn.summary}."
         action = Action(
             type=action_type,
             applies_to=AppliesTo(operators=["*"], vehicle_classes=["*"]),
-            params=_params_for(action_type, hazard.severity),
+            params=params,
         )
         self.proposals += 1
         return ProposedAdvisory(
             hazard=hazard,
             action=action,
-            # The hazard's own geometry and citations travel on unchanged. The
-            # proposer narrows what is asked for, never where or on what basis.
-            geometry=hazard.geometry,
+            # The hazard's own citations travel on unchanged, and so does its
+            # geometry - except for the one computed area the module docstring
+            # describes: a keep-clear corridor no feed drew and nothing but the
+            # road graph could have drawn.
+            geometry=hazard.geometry if drawn is None else drawn.geometry,
             valid_from=valid_from,
             valid_until=valid_until,
             evidence=hazard.evidence,
             policy_rule=playbook.rule_for(action_type),
             proposed_by=self.name,
-            rationale=reason[:MAX_RATIONALE],
+            rationale=why[:MAX_RATIONALE],
         )
 
     # --- what may be asked for ----------------------------------------------
@@ -465,6 +545,19 @@ class Proposer:
                 schema=ProposedAction,
                 system=(PROPOSER_RULES, playbook_block(playbook)),
                 messages=data_block("hazard_context", self._context(hazard, allowed, blocked)),
+                # A fixture selector in mock mode, ignored elsewhere: the
+                # committed answer for a flood is not a sensible answer for an
+                # emergency scene. Taken from the closed `HazardClass` enum,
+                # never from anything a feed wrote.
+                #
+                # A class with no fixture of its own falls back to
+                # `proposer_action.json`, so that file's action has to be one
+                # every such class allows - otherwise mock mode hands this
+                # method an action the playbook forbids, it is counted in
+                # `rejected_actions`, and the whole scenario quietly runs on
+                # the rules path. `test_every_hazard_class_gets_a_mock_answer_
+                # its_own_playbook_allows` is what holds that.
+                variant=hazard.hazard_class.value.lower(),
             )
         except LlmError as exc:
             self.llm_failures += 1
