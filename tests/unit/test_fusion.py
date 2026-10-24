@@ -24,6 +24,7 @@ from headsup.agents.fusion import (
     FLOOD_REACH_RADIUS_M,
     FUSION_RULES,
     MAX_CONFIDENCE,
+    STALE_BREAKER,
     STALE_FLOOR,
     Fusion,
     FusionRationale,
@@ -282,7 +283,14 @@ async def test_no_amount_of_agreement_reaches_certainty() -> None:
 
 
 async def test_a_stale_reading_is_decayed_but_never_to_zero() -> None:
-    """Ten hours of silence floors a vote at `STALE_FLOOR`, not at nothing."""
+    """Ten hours of silence floors a vote, then the breaker cuts it - not to nothing.
+
+    Both reductions land on the NWS vote here: `STALE_FLOOR` is where the
+    half-life stops, and ten hours is far past three 60 s poll intervals, so
+    `STALE_BREAKER` takes half of what the floor left. The floored-and-cut
+    vote still raises the fused confidence above the fresh reading's own,
+    which is what "old, not wrong" has to keep meaning.
+    """
     fusion = Fusion(window=timedelta(hours=24))
     await fusion.on_candidate(candidate(name="stale", confidence=0.5))
     fresh = await fusion.on_candidate(
@@ -294,7 +302,7 @@ async def test_a_stale_reading_is_decayed_but_never_to_zero() -> None:
             observed_at=T0 + timedelta(hours=10),
         )
     )
-    expected = noisy_or(0.5 * STALE_FLOOR, 0.5)
+    expected = noisy_or(0.5 * STALE_FLOOR * STALE_BREAKER, 0.5)
     assert fresh.confidence == pytest.approx(expected, abs=1e-4)
     assert fresh.confidence > 0.5
 

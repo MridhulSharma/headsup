@@ -38,6 +38,11 @@ Two separate mechanisms are being measured, which is why the tests split:
   `GROUP_WINDOW` is three hours, so a group whose feeds have all gone quiet
   is still there with a confidence somebody can see is low. That is the
   hazard staying alive.
+* **The stale-feed breaker cuts what the floor left.** Once the gauge has
+  missed three of its own poll intervals (`ingest.freshness`) it is not a
+  slow feed any more, and `STALE_BREAKER` takes half of the floored vote.
+  This is the attack's own failure mode being priced in: the floor alone
+  would leave a silent sensor holding a quarter of its weight indefinitely.
 
 Everything the hazard cites it keeps: `_Group.evidence` accumulates, so the
 gauge's citation - and with it the narrowed geometry, which is measured off
@@ -59,7 +64,13 @@ import pytest
 from mode import LLM_MARK, attack_client
 
 from fixtures.ingest import POLYGON_ALERT, WARNING_RING, gauge_reading, nws_body
-from headsup.agents.fusion import GROUP_WINDOW, HALF_LIFE, STALE_FLOOR, Fusion
+from headsup.agents.fusion import (
+    GROUP_WINDOW,
+    HALF_LIFE,
+    STALE_BREAKER,
+    STALE_FLOOR,
+    Fusion,
+)
 from headsup.agents.sentinels.flood import (
     GAUGE_WEIGHT,
     GAUGE_WINDOW,
@@ -334,8 +345,10 @@ async def test_a_quiet_feed_decays_to_the_floor_and_no_further() -> None:
     the clock is moved by a hazard on the other side of the state, the first
     group is left untouched for 155 minutes, and then its own reading is
     offered again - which is what a replayer does with a re-listed product.
-    `STALE_FLOOR` is what stops the confidence reaching zero, and
-    `GROUP_WINDOW` is what stops the hazard being dropped.
+    `STALE_FLOOR` is where the half-life stops, `STALE_BREAKER` is the cut a
+    feed takes for having missed three polls, and `GROUP_WINDOW` is what stops
+    the hazard being dropped. Together they are what keeps the confidence off
+    zero while making it plainly low.
     """
     sentinel = FloodSentinel(llm=attack_client())
     (warning,) = await sentinel.on_event(nws_event(alert(), at=timedelta(0)))
@@ -362,7 +375,9 @@ async def test_a_quiet_feed_decays_to_the_floor_and_no_further() -> None:
 
     assert stale.id == fresh.id
     assert stale.confidence < fresh.confidence
-    assert stale.confidence == pytest.approx(STALE_FLOOR * corroborated.confidence, abs=1e-3)
+    assert stale.confidence == pytest.approx(
+        STALE_FLOOR * STALE_BREAKER * corroborated.confidence, abs=1e-3
+    )
     assert stale.confidence > 0.0
     assert stale.sources == {Source.NWS, Source.USGS}
     assert warning.geometry == corroborated.geometry  # the office's own polygon

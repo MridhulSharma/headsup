@@ -24,12 +24,22 @@ to corroborate itself a second time here. Two *different* sentinels agreeing is
 what raises a fused confidence, and `MAX_CONFIDENCE` keeps the result short of
 certainty however many agree.
 
-**Staleness.** A feed that has gone quiet is not wrong, it is old, so its vote
-decays on a half-life rather than being dropped, and never below `STALE_FLOOR`.
-The clock is feed time - the newest `observed_at` fusion has seen - so a
-recording replayed at 60x ages its own groups 60 times faster, and a feed that
-stops reporting expires nothing at all. That is the safe direction: the hazard
-stays until something says otherwise.
+**Staleness, and the breaker under it.** A feed that has gone quiet is not
+wrong, it is old, so its vote decays on a half-life rather than being dropped,
+and never below `STALE_FLOOR`. The clock is feed time - the newest
+`observed_at` fusion has seen - so a recording replayed at 60x ages its own
+groups 60 times faster, and a feed that stops reporting expires nothing at
+all. That is the safe direction: the hazard stays until something says
+otherwise.
+
+Past a point, though, silence stops meaning "old" and starts meaning "gone".
+Once a feed has missed three of its own poll intervals
+(`ingest.freshness.STALE_FACTOR`, measured against that feed's cadence rather
+than one timeout for all of them) its breaker trips and what the half-life
+left of its vote is cut by `STALE_BREAKER` - a reading nobody is refreshing is
+not evidence that the water is still over the road. `GET /healthz` reports the
+same verdict per feed, so an operator sees a dead gauge rather than inferring
+it from a confidence that drifted down.
 
 **Narrowing a FLOOD hazard to the reach its gauges cover.** An NWS flash flood
 warning polygon is a county-scale forecast area - S1's is 1440 km2 - and the
@@ -92,6 +102,7 @@ from headsup.contracts import (
     Source,
     utcnow,
 )
+from headsup.ingest.freshness import is_stale
 from headsup.llm import LlmClient, LlmError, Tier, data_block
 
 log = logging.getLogger(__name__)
@@ -117,6 +128,15 @@ HALF_LIFE = timedelta(minutes=45)
 #: However stale a reading is, it keeps this much of its weight. A feed that
 #: has gone quiet is old, not wrong.
 STALE_FLOOR = 0.25
+
+#: What is left of a vote whose feed has missed `STALE_FACTOR` of its own poll
+#: intervals (`ingest.freshness`). Applied under `STALE_FLOOR`, so the floor
+#: protects a reading that is merely old and this cuts one whose feed has
+#: stopped: at that point the reading is not evidence that the hazard persists,
+#: it is the last thing anybody heard before the sensor went away. Still not
+#: zero, and still not an expiry - a tripped breaker lowers confidence, and
+#: only `valid_until` ends an advisory.
+STALE_BREAKER = 0.5
 
 #: Severity at and above which the evidence threshold applies.
 EVIDENCE_SEVERITY = 3
@@ -214,6 +234,16 @@ class FusionRationale(HeadsUpModel):
 def _newest(candidate: CandidateHazard) -> datetime:
     """When the freshest thing this candidate cites was observed."""
     return max(cite.observed_at for cite in candidate.evidence)
+
+
+def _newest_citation(candidate: CandidateHazard) -> Evidence:
+    """The citation the candidate's freshness is measured by.
+
+    Ties break on the feed name so two citations observed at the same instant
+    pick the same one every run, which is what keeps a replayed confidence
+    identical to the live one.
+    """
+    return max(candidate.evidence, key=lambda cite: (cite.observed_at, cite.source.value))
 
 
 @dataclass(slots=True)
@@ -436,14 +466,47 @@ class Fusion:
     # --- building a hazard --------------------------------------------------
 
     def _decayed(self, candidate: CandidateHazard) -> float:
-        """A candidate's confidence, aged by how stale its newest citation is."""
+        """A candidate's confidence, aged by how stale its newest citation is.
+
+        Two separate reductions, in this order. The half-life ages a reading
+        for being old and stops at `STALE_FLOOR`. The breaker then cuts what
+        is left if the feed behind that reading has gone quiet for
+        `STALE_FACTOR` of its own poll interval, because a feed that has
+        missed three polls is no longer reporting that the hazard is still
+        there.
+        """
         if self._now is None:  # pragma: no cover - set before any group exists
             return candidate.confidence
-        age = (self._now - _newest(candidate)).total_seconds()
+        cite = _newest_citation(candidate)
+        age = (self._now - cite.observed_at).total_seconds()
         if age <= 0:
             return candidate.confidence
         factor = max(STALE_FLOOR, 0.5 ** (age / HALF_LIFE.total_seconds()))
+        if is_stale(cite.source, observed_at=cite.observed_at, now=self._now):
+            factor *= STALE_BREAKER
         return candidate.confidence * factor
+
+    def stale_sources(self) -> tuple[Source, ...]:
+        """The feeds whose breaker has tripped against fusion's own clock.
+
+        Fusion's clock is the newest `observed_at` it has seen, so this is the
+        same verdict `GET /healthz` reports, reached from the citations rather
+        than from the replay.
+        """
+        if self._now is None:
+            return ()
+        newest: dict[Source, datetime] = {}
+        for group in self._groups.values():
+            for candidate in group.candidates:
+                for cite in candidate.evidence:
+                    seen = newest.get(cite.source)
+                    if seen is None or cite.observed_at > seen:
+                        newest[cite.source] = cite.observed_at
+        return tuple(
+            source
+            for source in sorted(newest, key=lambda item: item.value)
+            if is_stale(source, observed_at=newest[source], now=self._now)
+        )
 
     def _votes(self, group: _Group) -> dict[str, float]:
         """One decayed vote per sentinel: its most confident live reading."""
