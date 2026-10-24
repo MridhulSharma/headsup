@@ -57,6 +57,7 @@ from headsup.agents.compiler.approvals import (
 )
 from headsup.agents.compiler.geo import area_km2
 from headsup.agents.compiler.signing import verify
+from headsup.agents.triage import AlreadyDecided, DecisionOutcome, TriageDesk
 from headsup.api.catalog import CatalogError, ScenarioCard, ScenarioCatalog
 from headsup.api.frames import RailIndex
 from headsup.api.hub import Subscriber, ViewerHub
@@ -138,6 +139,9 @@ class ApiState:
     index: RailIndex = field(default_factory=RailIndex)
     registry: OperatorRegistry = field(default_factory=OperatorRegistry)
     approvals: InMemoryApprovals = field(default_factory=InMemoryApprovals)
+    #: The assist queue, clustered into decision cards. Fed by the tailer and
+    #: answered over `/assist/clusters`.
+    triage: TriageDesk = field(default_factory=TriageDesk)
     pending: PendingCompiles = field(default_factory=PendingCompiles)
     bus: Bus | None = None
     writer_bus: Bus | None = None
@@ -182,9 +186,16 @@ class ApiState:
             self.registry,
             approvals=self.approvals,
             pending=self.pending,
+            triage=self.triage,
             namespace=self.namespace,
         )
-        self.tailer = StreamTailer(self.bus, self.hub, self.index, on_advisory=self.fan_advisory)
+        self.tailer = StreamTailer(
+            self.bus,
+            self.hub,
+            self.index,
+            on_advisory=self.fan_advisory,
+            on_assist=self.triage.offer,
+        )
         self._tail_task = asyncio.create_task(self.tailer.run(), name="viewer-tailer")
         self.hub.reset(self.runner.status())
         if self.autostart is not None:
@@ -273,6 +284,16 @@ class ApprovalRequest(BaseModel):
 
     approved_by: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:\-]+$")
     minutes: float = Field(default=DEFAULT_TTL.total_seconds() / 60, gt=0.0, le=1440.0)
+    note: str | None = Field(default=None, min_length=1, max_length=2000)
+
+
+class DecideRequest(BaseModel):
+    """One operator's answer to one decision card."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: DecisionOutcome = DecisionOutcome.PROCEED
+    decided_by: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9._:\-]+$")
     note: str | None = Field(default=None, min_length=1, max_length=2000)
 
 
@@ -500,6 +521,55 @@ def create_app(state: ApiState | None = None) -> FastAPI:
         body["fingerprint"] = approval.fingerprint
         body["advisory_id"] = published
         return _json(body, code=status.HTTP_201_CREATED)
+
+    # --- the assist queue ---------------------------------------------------
+
+    @app.get("/assist/clusters")
+    async def get_assist_clusters(
+        open_only: Annotated[bool, Query()] = False,
+    ) -> JSONResponse:
+        """The decision cards the assist queue has collapsed into.
+
+        The summaries are written here rather than as the requests arrive, so
+        a surge of 300 requests into eight scenarios costs eight volume calls
+        on the first read and none on the next - and a card nobody ever looked
+        at costs nothing at all.
+        """
+        await api.triage.summarise()
+        return _json(api.triage.board(open_only=open_only))
+
+    @app.post("/assist/clusters/{cluster_id}/decide", status_code=status.HTTP_201_CREATED)
+    async def decide_assist_cluster(cluster_id: str, request: DecideRequest) -> JSONResponse:
+        """Answer one scenario, for every vehicle whose request matches it.
+
+        The response says what the decision reached: the vehicles on the card
+        when it was taken, and - for `PER_VEHICLE` - that it reached none of
+        them and the requests are back to one card each. A card can be
+        answered once; a second answer is a 409 rather than an overwrite,
+        because the first one has already been applied.
+        """
+        try:
+            decision = api.triage.decide(
+                cluster_id,
+                outcome=request.outcome,
+                decided_by=request.decided_by,
+                note=request.note,
+            )
+        except KeyError as exc:
+            raise HTTPException(
+                status.HTTP_404_NOT_FOUND, f"no decision card {cluster_id}"
+            ) from exc
+        except AlreadyDecided as exc:
+            raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+        cluster = api.triage.cluster(cluster_id)
+        return _json(
+            {
+                "decision": decision.model_dump(mode="json"),
+                "applied_to": decision.vehicle_ids if decision.action else [],
+                "card": cluster.card() if cluster is not None else None,
+            },
+            code=status.HTTP_201_CREATED,
+        )
 
     # --- scenario control ---------------------------------------------------
 
