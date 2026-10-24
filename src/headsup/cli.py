@@ -13,6 +13,7 @@ from headsup import infra as infra_mod
 from headsup.agents.cli import register as register_agents
 from headsup.agents.compiler.cli import register as register_compiler
 from headsup.api.cli import register as register_api
+from headsup.audit.cli import audit_app
 from headsup.bus.cli import bus_app
 from headsup.contracts import schemas as schema_mod
 from headsup.ingest.cli import ingest_app
@@ -33,6 +34,7 @@ app.add_typer(schemas_app, name="schemas")
 app.add_typer(ingest_app, name="ingest")
 app.add_typer(bus_app, name="bus")
 app.add_typer(world_app, name="world")
+app.add_typer(audit_app, name="audit")
 
 # `hu scenario` builds the generated S2 recording and its descriptor.
 register_scenario(app)

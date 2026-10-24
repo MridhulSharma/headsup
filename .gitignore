@@ -32,6 +32,8 @@ dist/
 # --- Data: caches and raw recordings stay local ---
 data/cache/
 data/recordings/**/raw/
+# Audit chains and after-action reports are per-run artifacts.
+data/audit/
 
 # --- Editors and OS ---
 .vscode/

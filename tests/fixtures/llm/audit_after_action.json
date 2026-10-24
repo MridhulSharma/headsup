@@ -1,0 +1,17 @@
+{
+  "headline": "One flood advisory published and one refused, over a twelve-entry run with an intact chain",
+  "narrative": "The run opens with a flood warning from the weather feed and a gauge reading alongside it, which fusion weighed into a single flood hazard at severity 4. The proposer asked for a no-entry closure under flood.no_entry.v1 and the critic approved it; the compiler published it with a second key from a duty officer. A second proposal was refused for an area over the playbook cap, and no advisory was ever written for it. One vehicle then stopped at the flooded edge and asked for a human, and one fleet acknowledged the published advisory.",
+  "findings": [
+    {
+      "claim": "The published closure carried a two-key approval, so no single process could have published it alone.",
+      "entries": ["4d3401a3fe85", "e6b1acea596b"]
+    },
+    {
+      "claim": "The second proposal was refused on the area cap rather than on judgment, and the refusal names the measurement and the cap it was judged against.",
+      "entries": ["c60d73e860a7"]
+    }
+  ],
+  "open_questions": [
+    "The log does not say whether the vehicle that asked for assistance was still waiting when the run ended."
+  ]
+}
