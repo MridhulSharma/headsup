@@ -17,6 +17,11 @@ sits on the other side of the fleet: it reads the `assist` stream the vehicles
 write to and collapses a surge of requests into one decision card per
 scenario, for a person to answer over HTTP.
 
+`agents.injection` sits beside the sentinels rather than in the pipeline: it
+scans the prose a feed carries, records an `InjectionFlag` on the `audit`
+stream when that prose is shaped like an instruction, and withholds nothing
+(attack A1).
+
 `agents.pipeline` holds the two bus workers for the middle stages, and
 `hu agents --only fusion,proposer` is how they are started. Fusion and the
 proposer each ask a `judgment` model one question and each have a complete
@@ -45,6 +50,13 @@ from headsup.agents.fusion import (
     STALE_FLOOR,
     Fusion,
     FusionRationale,
+)
+from headsup.agents.injection import (
+    GUARD_NAME,
+    PATTERNS,
+    InjectionFlag,
+    InjectionGuard,
+    scan,
 )
 from headsup.agents.pipeline import FusionWorker, ProposerWorker, Publisher
 from headsup.agents.proposer import (
@@ -81,9 +93,11 @@ __all__ = [
     "CRITIC_RULES",
     "EVIDENCE_SEVERITY",
     "FUSION_RULES",
+    "GUARD_NAME",
     "MAX_CONFIDENCE",
     "MIN_FRACTION",
     "OVERLAP_PAD_M",
+    "PATTERNS",
     "PREFERENCE",
     "PROPOSER_RULES",
     "RESOLUTION",
@@ -101,6 +115,8 @@ __all__ = [
     "Fusion",
     "FusionRationale",
     "FusionWorker",
+    "InjectionFlag",
+    "InjectionGuard",
     "ProposedAction",
     "Proposer",
     "ProposerWorker",
@@ -114,4 +130,5 @@ __all__ = [
     "playbook_block",
     "review_rules",
     "rules_summary",
+    "scan",
 ]

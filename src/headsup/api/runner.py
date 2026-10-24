@@ -56,6 +56,7 @@ from headsup.agents.compiler.compiler import Compiler, CompilerError
 from headsup.agents.compiler.service import CompilerService, PublishOutcome
 from headsup.agents.critic import Critic
 from headsup.agents.fusion import Fusion
+from headsup.agents.injection import InjectionGuard
 from headsup.agents.orchestrator import Orchestrator, OrchestratorWorker
 from headsup.agents.pipeline import FusionWorker, ProposerWorker
 from headsup.agents.proposer import Proposer
@@ -112,19 +113,27 @@ GRAPH_SENTINELS: frozenset[type[Sentinel]] = frozenset({IncidentSentinel})
 
 
 def build_sentinel(
-    hazard_class: HazardClass, *, client: LlmClient | None, world: World
+    hazard_class: HazardClass,
+    *,
+    client: LlmClient | None,
+    world: World,
+    guard: InjectionGuard | None = None,
 ) -> Sentinel:
     """The sentinel one scenario asks for, with what that sentinel needs.
 
-    Three dependencies, each given only to the sentinels that take it: the
-    model client (None on the rules-only path, which is variant V1), and the
-    city's intersection index. A sentinel that takes neither is built bare, so
-    adding one does not mean touching every call site.
+    Four dependencies, each given only to the sentinels that take it: the
+    model client (None on the rules-only path, which is variant V1), the
+    city's intersection index, and the injection guard, which goes to the
+    sentinels whose feeds carry prose. A sentinel that takes none of them is
+    built bare, so adding one does not mean touching every call site.
     """
     sentinel_class = SENTINEL_FOR[hazard_class]
     kwargs: dict[str, Any] = {}
     if sentinel_class in MODEL_SENTINELS:
         kwargs["llm"] = client
+        # The guard goes with the prose, not with the model: a run on the
+        # rules path still records that a feed tried to give an instruction.
+        kwargs["guard"] = guard
     if sentinel_class in GRAPH_SENTINELS:
         kwargs["geocoder"] = index_for(world.graph)
     return sentinel_class(**kwargs)  # type: ignore[call-arg]
@@ -437,7 +446,16 @@ class ScenarioRunner:
         # to exist: the failure above closes this client.
         self.triage.llm = client
         sentinel = (
-            build_sentinel(hazard_class, client=client, world=world) if self.spec.mesh else None
+            build_sentinel(
+                hazard_class,
+                client=client,
+                world=world,
+                # Flags land on the `audit` stream the auditor chains, so an
+                # injection attempt is in the run's log beside the decisions.
+                guard=InjectionGuard(self.bus),
+            )
+            if self.spec.mesh
+            else None
         )
         return _Run(
             card=card,

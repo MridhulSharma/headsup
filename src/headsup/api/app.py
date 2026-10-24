@@ -14,6 +14,7 @@ The routes, and who they are for:
 | `GET /advisories`, `GET /hazards` | anyone; this is the neutral layer's public face |
 | `POST /advisories` | a compiler process, credential only |
 | `POST /approvals/{proposal_id}`, `GET /approvals` | whoever holds the second key |
+| `POST /responder/move`, `GET /responder/orders` | a verified responder |
 | `WS /viewer` | the God's Eye View layer |
 | `WS /operators/{op}` | one fleet |
 
@@ -23,6 +24,16 @@ ways: the credential in `X-Headsup-Credential`, a signature check on the
 advisory itself, and the compiler-only Redis writer underneath. An advisory
 that does not verify is refused rather than published and marked, because
 publishing it would put this server's name on it.
+
+**`POST /responder/move` verifies before it records, and records nothing
+else.** A move order is an emergency responder asking vehicles out of an area,
+so the route checks the token in `X-Headsup-Responder` against
+`api.responders` and refuses the call outright if it does not match: nothing is
+recorded and nothing is handed on. A call that does check out is recorded as a
+`MoveOrder` and goes no further - it is not a proposal, it is not an advisory,
+and there is no path from this route to the compiler. See
+`headsup.api.responders` for why the identity comes off the token rather than
+out of the body (attack A5).
 
 **Feed and model text is data here too.** Advisory rationales, hazard notes and
 critic reasons travel through the sockets and the JSON responses as values. No
@@ -66,6 +77,14 @@ from headsup.api.operators import (
     AckRejected,
     OperatorRegistry,
     OperatorSession,
+)
+from headsup.api.responders import (
+    ACCEPTED_NOTE,
+    REFUSED_NOTE,
+    RESPONDER_HEADER,
+    MoveOrderRequest,
+    Responder,
+    ResponderRegistry,
 )
 from headsup.api.runner import AlreadyRunning, ScenarioError, ScenarioRunner, StartOptions
 from headsup.api.second_key import DEMO_APPROVER, hold_the_second_key
@@ -139,6 +158,10 @@ class ApiState:
     index: RailIndex = field(default_factory=RailIndex)
     registry: OperatorRegistry = field(default_factory=OperatorRegistry)
     approvals: InMemoryApprovals = field(default_factory=InMemoryApprovals)
+    #: The responders whose move orders this server accepts, from
+    #: `HU_RESPONDER_TOKENS`. Empty means every call to `POST /responder/move`
+    #: is refused, which is the closed-by-default stance the credential takes.
+    responders: ResponderRegistry = field(default_factory=ResponderRegistry.from_env)
     #: The assist queue, clustered into decision cards. Fed by the tailer and
     #: answered over `/assist/clusters`.
     triage: TriageDesk = field(default_factory=TriageDesk)
@@ -569,6 +592,55 @@ def create_app(state: ApiState | None = None) -> FastAPI:
                 "card": cluster.card() if cluster is not None else None,
             },
             code=status.HTTP_201_CREATED,
+        )
+
+    # --- verified responders ------------------------------------------------
+
+    def require_responder(token: str | None) -> Responder:
+        """The responder this token belongs to, or a 401.
+
+        The only way to get a `Responder`, and the first statement of the one
+        handler that needs one: an order is never built from a call whose
+        token has not been matched, and a refused call is counted and
+        returned before the body is looked at again.
+        """
+        found = api.responders.check(token)
+        if found is None:
+            api.responders.refused += 1
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, REFUSED_NOTE)
+        return found
+
+    @app.post("/responder/move", status_code=status.HTTP_201_CREATED)
+    async def post_move_order(
+        request: MoveOrderRequest,
+        token: Annotated[str | None, Header(alias=RESPONDER_HEADER)] = None,
+    ) -> JSONResponse:
+        """One verified responder asking vehicles out of an area.
+
+        The identity on the order is the one the token matched, and never
+        anything the body said - `MoveOrderRequest` has no field for it. The
+        order is recorded and that is all: nothing here calls the compiler,
+        writes to `advisories` or adds to `PendingCompiles`.
+        """
+        order = api.responders.issue(require_responder(token), request)
+        return _json(
+            {"order": order.to_wire(), "note": ACCEPTED_NOTE},
+            code=status.HTTP_201_CREATED,
+        )
+
+    @app.get("/responder/orders")
+    async def get_move_orders() -> JSONResponse:
+        """Every verified order this run, and how many calls were refused."""
+        orders = api.responders.waiting()
+        return _json(
+            {
+                "orders": [order.to_wire() for order in orders],
+                "counters": {
+                    "orders": len(orders),
+                    "refused": api.responders.refused,
+                    "responders": len(api.responders.responders),
+                },
+            }
         )
 
     # --- scenario control ---------------------------------------------------

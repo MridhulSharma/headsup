@@ -47,6 +47,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 from shapely.geometry import base as shapely_base
 
+from headsup.agents.injection import InjectionGuard
 from headsup.agents.sentinels.base import (
     Sentinel,
     distance_m,
@@ -273,8 +274,10 @@ class FloodSentinel(Sentinel):
     sources = (Source.NWS, Source.USGS)
     window = ALERT_WINDOW
 
-    def __init__(self, *, llm: LlmClient | None = None) -> None:
-        super().__init__()
+    def __init__(
+        self, *, llm: LlmClient | None = None, guard: InjectionGuard | None = None
+    ) -> None:
+        super().__init__(guard=guard)
         self.llm = llm
         self._alerts: dict[str, _Alert] = {}
         self._gauges: dict[str, _Gauge] = {}
@@ -282,6 +285,10 @@ class FloodSentinel(Sentinel):
         self.llm_failures = 0
 
     # --- reading ------------------------------------------------------------
+
+    def free_text(self, event: CivicEvent) -> str:
+        """The product's prose: the same text the volume call would be given."""
+        return _text_of(event) if event.source is Source.NWS else ""
 
     async def read(self, event: CivicEvent) -> list[CandidateHazard]:
         if event.source is Source.NWS:

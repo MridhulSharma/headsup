@@ -34,6 +34,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from mode import LIVE, LLM_MARK, attack_client
 
 from headsup.agents.triage import (
     WINDOW,
@@ -72,6 +73,10 @@ BLOCKS: tuple[tuple[float, float], ...] = (
 #: Two reasons, because a dark signal and water across the road in the same
 #: block are two scenarios and two decisions however close together they are.
 REASONS: tuple[AssistReason, ...] = (AssistReason.DARK_SIGNAL, AssistReason.FLOODED_EDGE)
+
+#: `llm` in a live run and nothing in a mock one, so the default
+#: `-m "not llm"` sweep cannot spend money even with `HU_LLM_MODE` set.
+pytestmark = LLM_MARK
 
 
 def request_at(
@@ -124,8 +129,8 @@ def surge(count: int = SURGE, span: timedelta = SPAN) -> list[AssistRequest]:
 
 @pytest.fixture
 def desk() -> TriageDesk:
-    """A desk with the mock client, so card prose costs nothing."""
-    return TriageDesk(llm=LlmClient.mock())
+    """A desk with whichever client `mode.py` chose; mock by default."""
+    return TriageDesk(llm=attack_client())
 
 
 # --- the headline ----------------------------------------------------------
@@ -308,7 +313,8 @@ async def test_a_clusters_id_is_the_same_on_a_replay() -> None:
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[TestClient, ApiState]]:
     """The app with a Redis that is deliberately absent, as in `test_api_app`."""
     monkeypatch.setenv("REDIS_URL", "redis://127.0.0.1:6399/0")
-    monkeypatch.setenv("HU_LLM_MODE", "mock")
+    if not LIVE:
+        monkeypatch.setenv("HU_LLM_MODE", "mock")
     state = ApiState(namespace="test_a4_surge", credential="test-credential")
     with TestClient(create_app(state)) as instance:
         yield instance, state

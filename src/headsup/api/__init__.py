@@ -12,6 +12,7 @@
 | `frames` | bus entries as viewer frames, with the ids that link them up |
 | `hub` | fan-out to every viewer, and the snapshot a late joiner gets |
 | `operators` | service areas, and the signed push / verified ack protocol |
+| `responders` | which move orders are from a verified responder (attack A5) |
 | `store` | `GET /advisories` and `GET /hazards`, read back off the streams |
 | `cli` | `hu serve` and `hu demo` |
 """
@@ -51,6 +52,14 @@ from headsup.api.operators import (
     OperatorSession,
     ServiceArea,
 )
+from headsup.api.responders import (
+    ENV_TOKENS,
+    RESPONDER_HEADER,
+    MoveOrderRequest,
+    Responder,
+    ResponderRegistry,
+    fingerprint,
+)
 from headsup.api.runner import (
     AlreadyRunning,
     ScenarioError,
@@ -65,6 +74,7 @@ __all__ = [
     "CREDENTIAL_HEADER",
     "DEFAULT_HOST",
     "DEFAULT_PORT",
+    "ENV_TOKENS",
     "FRAME_ADVISORY",
     "FRAME_COUNTERS",
     "FRAME_GHOST_TELEMETRY",
@@ -72,15 +82,19 @@ __all__ = [
     "FRAME_TELEMETRY",
     "KNOWN_OPERATORS",
     "RAIL_STAGES",
+    "RESPONDER_HEADER",
     "SCENARIOS_DIR",
     "AckRejected",
     "AlreadyRunning",
     "ApiState",
     "CatalogError",
+    "MoveOrderRequest",
     "OperatorRegistry",
     "OperatorSession",
     "QueryError",
     "RailIndex",
+    "Responder",
+    "ResponderRegistry",
     "ScenarioCard",
     "ScenarioCatalog",
     "ScenarioError",
@@ -95,6 +109,7 @@ __all__ = [
     "create_app",
     "default_host",
     "default_port",
+    "fingerprint",
     "parse_bbox",
     "read_advisories",
     "read_hazards",

@@ -16,6 +16,14 @@ Three things are deliberately shared rather than left to each sentinel:
   a recording twice does not give fusion two readings of one hazard.
 * **Metres.** Degrees are not a distance. Both sentinels measure on the WGS84
   ellipsoid, the same way `agents.compiler.geo` measures area.
+
+One more thing is shared, and it is not interpretation: an optional
+`InjectionGuard`. `on_event` scans whatever `free_text` a sentinel says its
+feed carries in prose and records an `InjectionFlag` on the `audit` stream if
+that prose is shaped like an instruction (attack A1). It runs before `read`
+and changes nothing about it - the event travels on as data either way, and
+the scan happens whether or not this sentinel has a model to hand, because the
+record of the attempt is worth keeping in variant V1 too.
 """
 
 from __future__ import annotations
@@ -29,6 +37,7 @@ from shapely.affinity import scale as affine_scale
 from shapely.geometry import base as shapely_base
 from shapely.ops import nearest_points
 
+from headsup.agents.injection import InjectionGuard
 from headsup.bus import events_stream
 from headsup.contracts import CandidateHazard, CivicEvent, Identifier, Source
 from headsup.ingest.base import derive_id
@@ -105,8 +114,12 @@ class Sentinel(ABC):
     #: How long state read off an event stays relevant.
     window: timedelta = timedelta(minutes=60)
 
-    def __init__(self) -> None:
+    def __init__(self, *, guard: InjectionGuard | None = None) -> None:
         self._now: datetime | None = None
+        #: Scans this feed's prose for instruction-shaped text and records it.
+        #: None means no scan: a sentinel under test that does not care, and
+        #: the default everywhere a sink would have nowhere to publish.
+        self.guard = guard
         #: Events seen, candidates emitted: what the worker reports.
         self.events = 0
         self.emitted = 0
@@ -142,6 +155,8 @@ class Sentinel(ABC):
         self.events += 1
         self.observed(event)
         self.prune()
+        if self.guard is not None:
+            await self.guard.check(event, self.free_text(event), detected_by=self.name)
         candidates = await self.read(event)
         self.emitted += len(candidates)
         return candidates
@@ -153,6 +168,15 @@ class Sentinel(ABC):
         and prunes nothing.
         """
         return None
+
+    def free_text(self, event: CivicEvent) -> str:
+        """Everything this event says in prose, for the guard to scan.
+
+        A hook, empty by default: a feed whose meaning is entirely a code - a
+        signal's `operation_state` - carries no prose to scan, and a sentinel
+        that reads one overrides nothing.
+        """
+        return ""
 
     @abstractmethod
     async def read(self, event: CivicEvent) -> list[CandidateHazard]:
