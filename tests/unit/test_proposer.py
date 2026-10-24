@@ -21,6 +21,7 @@ from headsup.agents.compiler.poi import BLOCKING_ACTIONS
 from headsup.agents.critic import stub_verdict
 from headsup.agents.proposer import (
     PROPOSER_RULES,
+    PURPOSE,
     ProposedAction,
     Proposer,
     playbook_block,
@@ -446,3 +447,47 @@ async def test_the_compiler_gates_a_computed_area_like_any_other() -> None:
     record = compiler.compile(proposal, stub_verdict(proposal))
     assert record.ok is False
     assert RuleCode.AREA_UNDER_CAP in record.codes
+
+
+# --- what mock mode answers per class ---------------------------------------
+
+
+@pytest.mark.parametrize("hazard_class", list(HazardClass))
+def test_every_hazard_class_gets_a_mock_answer_its_own_playbook_allows(
+    hazard_class: HazardClass,
+) -> None:
+    """The judgment call is answered per class, so the answers have to fit.
+
+    `Proposer._choose` passes the hazard class as the fixture `variant`, and a
+    class with no fixture of its own falls back to `proposer_action.json`. A
+    fallback the class forbids is not a loud failure: the action is discarded,
+    `rejected_actions` ticks up and the run continues on the rules path - which
+    is exactly how a scenario ends up measuring the rules path while claiming
+    to measure the model. This is the test that would have caught that.
+    """
+    from headsup.llm import FixtureStore
+
+    payload = FixtureStore().load(PURPOSE, hazard_class.value.lower())
+    answer = ProposedAction.model_validate(payload)
+    playbook = default_playbooks().require(hazard_class)
+    assert playbook.allows(answer.action), (
+        f"mock mode answers {answer.action.value} for {hazard_class.value}, which "
+        f"{playbook.policy_rule} does not allow"
+    )
+
+
+async def test_a_signal_outage_takes_the_stop_rule_from_the_model() -> None:
+    """S2's own fixture, rather than the flood answer by fallback.
+
+    The companion test below scripts a forbidden action and asserts the
+    rejection path. This one asserts the normal path: the model is asked, it
+    answers something `signal_outage.v1` allows, and nothing is rejected.
+    """
+    proposer = Proposer(llm=mock_llm(), poi=poi_checker())
+    proposal = await proposer.propose(hazard(hazard_class=HazardClass.SIGNAL_OUTAGE, severity=3))
+    assert proposal is not None
+    assert proposal.action.type is ActionType.ALL_WAY_STOP
+    assert proposer.rejected_actions == 0
+    # The model's reason travels with the proposal; the rules path writes its
+    # own sentence, so this is also how the two paths are told apart.
+    assert "Rules path:" not in (proposal.rationale or "")

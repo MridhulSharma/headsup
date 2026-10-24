@@ -549,6 +549,14 @@ class Proposer:
                 # committed answer for a flood is not a sensible answer for an
                 # emergency scene. Taken from the closed `HazardClass` enum,
                 # never from anything a feed wrote.
+                #
+                # A class with no fixture of its own falls back to
+                # `proposer_action.json`, so that file's action has to be one
+                # every such class allows - otherwise mock mode hands this
+                # method an action the playbook forbids, it is counted in
+                # `rejected_actions`, and the whole scenario quietly runs on
+                # the rules path. `test_every_hazard_class_gets_a_mock_answer_
+                # its_own_playbook_allows` is what holds that.
                 variant=hazard.hazard_class.value.lower(),
             )
         except LlmError as exc:

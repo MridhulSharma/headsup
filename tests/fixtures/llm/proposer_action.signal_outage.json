@@ -1,0 +1,5 @@
+{
+  "action": "ALL_WAY_STOP",
+  "reason": "A dark signal is not a closed road: the junction still works as an all-way stop, and closing the block would push traffic onto the neighbouring dark intersections, so the stop rule is the least restrictive action that settles the right of way.",
+  "confidence": 0.81
+}
