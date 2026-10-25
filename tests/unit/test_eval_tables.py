@@ -117,7 +117,7 @@ def test_the_csv_carries_no_chart_series(tmp_path: Path) -> None:
 def test_the_table_prints_a_median_per_variant_with_its_run_count(tmp_path: Path) -> None:
     path = tables_mod.write_markdown(sweep_rows(), tmp_path, minutes=10, llm_mode="mock")
     text = path.read_text(encoding="utf-8")
-    assert "# Ablation: what Heads Up changes" in text
+    assert "# Ablation: what Signum changes" in text
     assert "s3_incident" in text and "s2_blackout" in text
     for variant in ("V0", "V1", "V4"):
         assert f"| {variant} | 2 |" in text
