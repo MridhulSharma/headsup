@@ -1,7 +1,9 @@
-# Heads Up
+# Signum
 
-> **"Heads Up" is a placeholder name.** It stands in for the Civic Layer plan and
-> will be renamed before any release beyond this prototype.
+> **The code says `headsup`.** That was the working name and it stays as the
+> identifier throughout: the repository, the `headsup` Python package, the `hu`
+> CLI, `src/headsup/`, and the viewer's `?mode=headsup`. Renaming those during a
+> five-day build buys nothing a judge can see. The tool is Signum.
 
 A neutral civic layer that turns public city signals into **signed, expiring
 advisories** any robotaxi fleet can consume. The city publishes once; every fleet
@@ -19,7 +21,7 @@ cluster goes dark, an engine company takes a lane — and there is no channel th
 tells every fleet at once. Today each operator integrates with each city
 separately, or not at all.
 
-Heads Up is one integration per city instead of one per fleet. A hazard becomes
+Signum is one integration per city instead of one per fleet. A hazard becomes
 a signed GeoJSON advisory with an action, an area, an expiry, and the evidence it
 rests on. Fleets subscribe. Compliance stays the operator's call, and every
 decision is recorded on both sides.
@@ -80,7 +82,7 @@ public data.
 
 20 runs, real model (`claude-sonnet-5-5` / `claude-haiku-5-5`), **$0.249 total
 spend** against a $25 guard — prompt and response caching did most of the work.
-Variants: **V0** no Heads Up (baseline), **V1** rules only, no model, **V3** agents
+Variants: **V0** no Signum (baseline), **V1** rules only, no model, **V3** agents
 without the critic, **V4** full pipeline. Full tables in
 [`results/ablation.md`](results/ablation.md); per-run rows in
 [`results/ablation.csv`](results/ablation.csv).
@@ -91,7 +93,7 @@ Means over the two seeds all variants share (42, 43):
 
 | S3 emergency scene | assist requests | reduction vs V0 | missed hazards |
 | --- | --- | --- | --- |
-| V0 — no Heads Up | 550.0 | — | 1 |
+| V0 — no Signum | 550.0 | — | 1 |
 | V1 — rules only | 541.0 | **1.6%** | 0 |
 | V4 — full pipeline | 282.5 | **48.6%** | 0 |
 
