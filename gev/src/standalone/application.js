@@ -9,6 +9,7 @@ import { createStandaloneTools } from './tools.js';
 import { resolveLocale, applyDocumentLanguage } from '../i18n/locale.js';
 import { applyDocumentTranslations, setLocale } from '../i18n/index.js';
 import { createGoogleTokenSource } from '../maps/googleTokens.js';
+import { applyHeadsupBrand } from '../headsup/brand.js';
 import { createHeadsupModeConfig, markHeadsupMode } from '../headsup/mode.js';
 import { createScenarioClient } from '../headsup/scenarios.js';
 import { startStandaloneChromeWithoutSettings } from './startupChrome.js';
@@ -49,6 +50,10 @@ export function createStandaloneApplication({
     ...(scenarioFallbackUrl === undefined ? {} : { scenarioFallbackUrl }),
   });
   markHeadsupMode(document, mode);
+  // The product name goes on before the scene is built, so the cover a
+  // viewer looks at while the world loads already says Signum rather than
+  // the fork's name. `?mode=full` is left as upstream built it.
+  if (mode.headsUp) applyHeadsupBrand(document);
   const headsupScenarios = mode.headsUp
     ? createScenarioClient({
         baseUrl: mode.scenarioBaseUrl,

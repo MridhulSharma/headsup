@@ -161,7 +161,23 @@ export function consoleTestDocument() {
   const doc = {
     activeElement: null,
     createElement: (tag) => createNode(doc, tag),
-    createTextNode: (text) => ({ tagName: '#TEXT', textContent: text }),
+    // A text node carries no element descendants and matches no selector.
+    // It answers the few reads the walker makes so that a heading holding
+    // text does not make `querySelector` on an ancestor throw.
+    createTextNode: (text) => ({
+      tagName: '#TEXT',
+      textContent: text,
+      id: '',
+      parent: null,
+      children: [],
+      classList: { contains: () => false },
+      descendants: () => [],
+      remove() {
+        if (!this.parent) return;
+        this.parent.children.splice(this.parent.children.indexOf(this), 1);
+        this.parent = null;
+      },
+    }),
     getElementById: (id) =>
       doc.documentElement.descendants().find((node) => node.id === id) ?? null,
     querySelector: (selector) => doc.documentElement.querySelector(selector),
