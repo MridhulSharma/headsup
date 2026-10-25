@@ -49,6 +49,26 @@ COLUMNS: tuple[tuple[str, str, int], ...] = (
     ("p95 agent latency (ms)", "p95_agent_latency_ms", 0),
 )
 
+#: Printed under the per-scenario tables. What a reader has to know to read a
+#: median correctly, and the one column that is not trustworthy for every row.
+READING_NOTES: tuple[str, ...] = (
+    "## Reading the table",
+    "",
+    "Every cell is the **median** over that variant's runs in that scenario; the",
+    "`runs` column says how many, and a median over two runs is a median over two",
+    "numbers.",
+    "",
+    "- Variants do not necessarily share seeds. `--seeds` sets a count per seed",
+    "  group, so a rules variant and an agent variant may have run different ones.",
+    "  Compare them over the seeds both ran rather than between these medians.",
+    "- `p95 agent latency (ms)` is the 95th percentile over every agent invocation",
+    "  in a run, including work queued behind a surge. It is not the time a fleet",
+    "  waits for an advisory; that is `time to advisory`, beside it. A value orders",
+    "  of magnitude above the others is a clock artifact rather than a latency and",
+    "  should not be reported as one.",
+)
+
+
 #: What the headline chart and the headline table row compare.
 HEADLINE_VARIANTS: tuple[Variant, ...] = (Variant.V0, Variant.V1, Variant.V4)
 HEADLINE_SCENARIO = "s3_incident"
@@ -181,6 +201,7 @@ def markdown(
             cells = [cell(bucket, field).text(digits) for _name, field, digits in COLUMNS]
             lines.append(f"| {variant.value} | {len(bucket)} | " + " | ".join(cells) + " |")
 
+    lines += ["", *READING_NOTES]
     lines += ["", "## The headline", ""]
     lines += _headline(buckets)
 
