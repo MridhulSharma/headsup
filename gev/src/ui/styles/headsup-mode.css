@@ -43,10 +43,32 @@ body.headsup-mode
   display: none;
 }
 
-/* The tagline. The product name stays: this IS the fork, and saying so is
-   the honest thing on screen. */
+/* ── The name on the chrome ─────────────────────────────────
+   The tagline goes: it is the fork's line, not a claim this console makes.
+
+   The product name goes too, and is replaced rather than hidden. This viewer
+   IS a fork of God's Eye View and says so where the licence requires it --
+   gev/NOTICE, gev/LICENSE and the credit in the root README, none of which
+   moves -- but the tool a viewer is looking at is Signum, and two names on
+   one screen only asks which one it is. src/headsup/brand.js writes the
+   wordmark into #title-bar's heading and the loading cover's, because both
+   come from static markup upstream owns and neither template is edited.
+
+   What is left here is what CSS can say that a rewrite cannot: the logo is
+   gone in this mode even if a future template adds another one, and nothing
+   on the cover animates. A gaze-tracking eye is the fork's motif, and a
+   civic advisory layer that watches the cursor back is the wrong first
+   impression. */
 body.headsup-mode #title-bar .subtitle {
   display: none;
+}
+
+body.headsup-mode :is(#title-bar, #loading-screen) .brand-logo {
+  display: none;
+}
+
+body.headsup-mode #loading-screen :is(.loader-content, .loader-content *) {
+  animation: none;
 }
 
 /* Upstream's ACTIVE STYLE readout. The scenario readout it used to host moved

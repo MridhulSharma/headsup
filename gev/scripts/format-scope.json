@@ -1085,5 +1085,7 @@
   "src/headsup/advisory.js",
   "src/headsup/advisory.test.mjs",
   "src/headsup/render.js",
-  "src/headsup/render.test.mjs"
+  "src/headsup/render.test.mjs",
+  "src/headsup/brand.js",
+  "src/headsup/brand.test.mjs"
 ]
