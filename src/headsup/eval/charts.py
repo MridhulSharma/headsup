@@ -12,10 +12,16 @@ the audit logs. The queue chart needs more than a median, so it reads the
 that run's own telemetry frames.
 
 **No dual-axis chart.** The headline compares two measures of different scale
--- blocked corridor vehicle-minutes and a count of missed hazards -- and
+-- a count of remote-assist requests and a count of missed hazards -- and
 putting them on two y-scales in one frame is the one chart mistake that makes
 any two series look however the axes were chosen. They are two stacked panels
 over the same variants instead, which says the same thing and cannot mislead.
+
+**The headline is drawn over shared seeds.** `--seeds` sets a count per seed
+group, so a rules variant may have run seeds an agent variant did not. A
+median of three against a median of two is not a comparison, so the headline
+restricts every variant to the seeds all of them ran and says so on the
+figure. The per-scenario tables keep every run.
 
 **Identity is never colour alone.** Every series is in the legend or directly
 labelled, and the values are printed on the marks, so the figure survives
@@ -232,15 +238,39 @@ def queue_depth_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | Non
     return path
 
 
+def shared_seed_rows(
+    rows: Sequence[RunMetrics], variants: Sequence[Variant], scenario: str
+) -> tuple[list[RunMetrics], set[int]]:
+    """The runs of `scenario` on the seeds every one of `variants` ran.
+
+    Falls back to all of them when the variants share no seed at all, because
+    a chart that silently drew nothing would be worse than one drawn over
+    uneven groups -- the caption says which happened either way.
+    """
+    seeds = {
+        variant.value: {row.seed for row in rows if row.variant == variant.value}
+        for variant in variants
+    }
+    common: set[int] = set.intersection(*seeds.values()) if seeds and all(seeds.values()) else set()
+    if not common:
+        return list(rows), set()
+    return [row for row in rows if row.seed in common], common
+
+
 def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
-    """The headline: S3 blocked-corridor minutes and missed hazards, V0, V1, V4.
+    """The headline: S3 remote-assist load and missed hazards, V0, V1, V4.
+
+    Assist requests rather than blocked-corridor minutes, because corridor
+    minutes are where V1 and V4 agree and the assist queue is where they do
+    not. Both figures stay in the tables; this is the one the pitch rests on.
 
     Two panels over the same three variants rather than two y-axes in one
     frame. The measures have nothing to do with each other's scale -- one is
-    vehicle-minutes, the other a count of two or three hazards -- and a dual
-    axis would let the choice of scales decide what the chart appeared to say.
+    a few hundred requests, the other a count of two or three hazards -- and a
+    dual axis would let the choice of scales decide what the chart said.
     """
     good = [row for row in usable(rows) if row.scenario == HEADLINE_SCENARIO]
+    good, common = shared_seed_rows(good, HEADLINE_VARIANTS, HEADLINE_SCENARIO)
     buckets = grouped(good)
     variants = [
         variant for variant in HEADLINE_VARIANTS if buckets.get((variant.value, HEADLINE_SCENARIO))
@@ -253,14 +283,24 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
         2, 1, figsize=(9.0, 7.0), dpi=DPI, facecolor=SURFACE, sharex=True
     )
     panels = (
-        (top, "blocked_corridor_minutes", "blocked corridor (vehicle-minutes)", SERIES[0], "%.1f"),
-        (bottom, "missed_hazards", "hazards nothing was published about", SERIES[1], "%.0f"),
+        (top, "assist_requests", "remote-assist requests", SERIES[0], "%.1f"),
+        (bottom, "missed_hazards", "missed hazards", SERIES[1], "%.0f"),
     )
     for ax, field, ylabel, colour, fmt in panels:
         values = [
             cell(buckets.get((variant.value, HEADLINE_SCENARIO), []), field).value or 0.0
             for variant in variants
         ]
+        # The change against the baseline rides on the bar label. A separate
+        # annotation collides with the subtitle on the tallest bar, and the
+        # figure has to survive being screenshotted out of its caption.
+        labels = [fmt % value for value in values]
+        if field == "assist_requests" and values and values[0]:
+            base, against = values[0], variants[0].value
+            labels = [labels[0]] + [
+                f"{text}   \u2212{(base - value) / base * 100:.0f}% vs {against}"
+                for text, value in zip(labels[1:], values[1:], strict=True)
+            ]
         bars = ax.bar(
             [variant.value for variant in variants],
             values,
@@ -269,25 +309,34 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
             edgecolor=SURFACE,
             linewidth=1.5,
         )
-        ax.bar_label(bars, fmt=fmt, color=INK_SECONDARY, fontsize=9, padding=2)
+        ax.bar_label(bars, labels=labels, color=INK_SECONDARY, fontsize=9.5, padding=3)
+        # Headroom, so a label on the tallest bar does not reach the title.
+        ax.set_ylim(0, max(values) * 1.26 if max(values) else 1.0)
         _style(ax, title="", ylabel=ylabel)
 
     top.set_title(
-        f"{HEADLINE_SCENARIO}: what the baseline and the rules-only reading cost",
+        f"{HEADLINE_SCENARIO}: the remote-assist load each reading leaves behind",
         color=INK,
         fontsize=13,
         loc="left",
-        pad=18,
+        pad=42,
+    )
+    seeds_line = (
+        "Mean over seeds " + " and ".join(str(seed) for seed in sorted(common))
+        if common
+        else "Median over every run, which are not the same seeds per variant"
     )
     top.text(
         0.0,
-        1.02,
-        "Median over seeds. V0 has no Signum at all; V1 reads the feed with keywords "
-        "and no model; V4 is the full system.",
+        1.03,
+        f"{seeds_line}, the ones every variant ran.\n"
+        "V0 has no Signum; V1 reads the feed with keywords and no model; "
+        "V4 is the full system.",
         transform=top.transAxes,
         color=INK_SECONDARY,
         fontsize=9.5,
         va="bottom",
+        linespacing=1.5,
     )
     path = directory / HEADLINE_CHART
     figure.tight_layout()
