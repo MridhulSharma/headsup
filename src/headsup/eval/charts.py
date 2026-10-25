@@ -282,7 +282,7 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
     top.text(
         0.0,
         1.02,
-        "Median over seeds. V0 has no Heads Up at all; V1 reads the feed with keywords "
+        "Median over seeds. V0 has no Signum at all; V1 reads the feed with keywords "
         "and no model; V4 is the full system.",
         transform=top.transAxes,
         color=INK_SECONDARY,

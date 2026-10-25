@@ -1,4 +1,4 @@
-# Ablation: what Heads Up changes
+# Ablation: what Signum changes
 
 *20 runs, 20 measurable, written 2026-10-25T14:33:27.642092+00:00.*
 
@@ -9,10 +9,10 @@ Every figure below was computed by reading the runs' hash-chained audit logs and
 - Wall-clock minutes per run: 10
 - Model mode: claude
 - Variants:
-  - **V0** - baseline, no Heads Up: fleets ghost, rules only, no agents, seeds from `rules`
+  - **V0** - baseline, no Signum: fleets ghost, rules only, no agents, seeds from `rules`
   - **V1** - rules only, no model: fleets live+ghost, rules only, mesh, critic, seeds from `rules`
   - **V3** - mesh without critic: fleets live+ghost, model, mesh, seeds from `ai`
-  - **V4** - full Heads Up: fleets live+ghost, model, mesh, critic, seeds from `ai`
+  - **V4** - full Signum: fleets live+ghost, model, mesh, critic, seeds from `ai`
 
 ## s2_blackout
 

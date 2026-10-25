@@ -165,7 +165,7 @@ def markdown(
     buckets = grouped(good)
 
     lines: list[str] = [
-        "# Ablation: what Heads Up changes",
+        "# Ablation: what Signum changes",
         "",
         f"*{len(rows)} runs, {len(good)} measurable, written {utcnow().isoformat()}.*",
         "",

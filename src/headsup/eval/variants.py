@@ -77,7 +77,7 @@ class VariantSpec:
 SPECS: dict[Variant, VariantSpec] = {
     Variant.V0: VariantSpec(
         variant=Variant.V0,
-        label="baseline, no Heads Up",
+        label="baseline, no Signum",
         modes=(SimMode.GHOST,),
         llm=False,
         mesh=False,
@@ -117,7 +117,7 @@ SPECS: dict[Variant, VariantSpec] = {
     ),
     Variant.V4: VariantSpec(
         variant=Variant.V4,
-        label="full Heads Up",
+        label="full Signum",
         modes=(SimMode.LIVE, SimMode.GHOST),
         llm=True,
         mesh=True,
