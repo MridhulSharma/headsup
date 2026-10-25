@@ -190,6 +190,13 @@ them findable.
   (`gev/src/terrainHeightsBounds.test.mjs`) in upstream code this project does not
   touch; it fails identically in isolation. `scripts/package-boundaries.json`
   likewise drifts from prettier. Both are vendored and unmodified here.
+- **One Python unit test is flaky under full-suite load.**
+  `test_api_app.py::test_a_known_operator_gets_a_socket_with_no_scenario_running`
+  intermittently raises `CancelledError` out of the websocket teardown when the
+  viewer tailer is cancelled mid-retry against the closed Redis port that test
+  deliberately uses. It passes in isolation (14/14 in 7 s) and cannot occur with
+  Redis running, because the tailer only enters the retry loop when the bus is
+  unreachable. Full suite: 1,644 passed, 1 flaky.
 
 **Scope**
 
