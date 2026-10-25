@@ -7,6 +7,7 @@ import { createRecentImageryPanel } from '../ui/recentImagery.js';
 import { initGevVoiceCommands } from '../voice/gevRealtime.js';
 import { cancelHeadsupFlight, flyToHeadsupView } from '../headsup/camera.js';
 import { startHeadsupConsole } from '../headsup/console.js';
+import { applyHeadsupRenderBudget } from '../headsup/render.js';
 import { installViews, isEmbeddedInline } from './embed.js';
 import { installScopeMask, destroyScopeMask } from '../scopeMask.js';
 import {
@@ -118,6 +119,13 @@ export function createApplicationTools({
   }
   if (startChrome)
     defer(startChrome({ loadingScreen, styleManager, dataManager, signal }));
+  // The Heads Up frame budget: a coarser photoreal tileset and the
+  // resolution scale, both stated in src/headsup/render.js and applied before
+  // the governor takes over the render loop, so the first frame it draws is
+  // already the one this mode asked for. `?mode=full` keeps upstream's
+  // defaults.
+  if (headsupMode?.headsUp) applyHeadsupRenderBudget({ viewer, tileset });
+
   // Idle render governor: flips the scene into requestRenderMode whenever
   // nothing animates per frame. Installed AFTER every module above has had
   // its chance to register pre-install holds. (perf wave 2)

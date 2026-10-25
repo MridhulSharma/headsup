@@ -1,30 +1,33 @@
 /**
  * The Heads Up console: the chrome `?mode=headsup` puts over the fork.
  *
- * This module only ADDS. It retitles one panel header, appends its own rows
- * into one surface upstream already owns, and builds two of its own. Nothing
- * upstream is removed, and nothing upstream's own code holds a reference to is
- * replaced — `#active-style-name`, `#hud-gsd`, `#scene-select` and the rest
- * all stay in the document, hidden by `src/ui/styles/headsup-mode.css` from
- * the single `body.headsup-mode` hook. That is the whole reason a
- * `git subtree pull` stays a clean merge.
+ * This module only ADDS. It builds its own dock and its own banner, and
+ * touches no upstream node at all. Nothing upstream is removed, and nothing
+ * upstream's own code holds a reference to is replaced — `#data-toggles`,
+ * `#active-style-name`, `#hud-gsd`, `#scene-select` and the rest all stay in
+ * the document, hidden by `src/ui/styles/headsup-mode.css` from the single
+ * `body.headsup-mode` hook. That is the whole reason a `git subtree pull`
+ * stays a clean merge.
  *
  * The screen is split: the globe draws into a rectangular viewport filling the
- * left 55% of the window, and everything this console says sits in a dock
- * filling the right 45%, as four blocks top to bottom.
+ * left 60% of the window, and everything this console says sits in a dock
+ * filling the right 40% — a top row 70% of the window high, split into two
+ * columns of 20% window width each, over a bottom row 30% high carrying two
+ * panes across the dock's whole width.
  *
- * | Surface | Heads Up use |
+ * | Pane | Heads Up use |
  * | --- | --- |
- * | `#data-panel` / `#data-toggles` | Hazards, one row per fleet, the ghost fleet, corridors |
- * | (new) `#headsup-dock` ① | scenario control: one launch button per test scene, sim clock, replay speed, the scripted badge, Exit |
- * | (new) `#headsup-dock` ② | `#headsup-pipeline-rail`, the agent rail and its stage cards |
- * | (new) `#headsup-dock` ③ | `#headsup-advisory`, the active advisory, always on screen |
- * | (new) `#headsup-dock` ④ | the counter strip |
- * | (new) `#headsup-banner` | the what-if provenance line |
+ * | `#headsup-controls` (top left) | the control panel: one launch button per test scene, the sim clock, replay speed, the scripted badge and Exit, then the cohort toggles and the legend |
+ * | `#headsup-pipeline-rail` (top right) | the agent rail and its stage cards |
+ * | `#headsup-status` (bottom left) | STATUS: the counter strip |
+ * | `#headsup-advisory` (bottom right) | the active advisory, always on screen |
+ * | `#headsup-banner` | the what-if provenance line |
  *
- * `#scene-panel`, `#style-indicator` and the HUD's bottom-right corner hosted
- * three of these before the dock existed. They are left exactly as upstream
- * built them and hidden by the stylesheet, not rebuilt or emptied.
+ * `#data-panel`, `#scene-panel`, `#style-indicator` and the HUD's bottom-right
+ * corner hosted four of these before the dock existed. They are left exactly
+ * as upstream built them and hidden by the stylesheet, not rebuilt or emptied
+ * — including the cohort rows, which used to be appended into upstream's
+ * `#data-toggles` and are built in this console's own control panel instead.
  *
  * Every string a person reads goes through `t()`. Every string that came off
  * the feed — a scenario name, a city, an operator id, a critic's reason, a
@@ -177,13 +180,62 @@ export function startHeadsupConsole({
     hud.setMode('on');
   }
 
-  // ── Left panel: the Heads Up layers ─────────────────────────────────────
+  // ── The dock: the right 40%, in four panes ──────────────────────────────
+  //
+  // One fixed column beside the viewport rather than four surfaces scattered
+  // over the globe: a top row 70% of the window high, split into two columns
+  // of 20% window width — the control panel, then the agent rail — over a
+  // bottom row 30% high carrying STATUS and the active advisory.
+  //
+  // The four panes are created here, in the order they are read, and filled
+  // further down. Each is placed in a NAMED grid area by the stylesheet
+  // rather than by its position in this list, because the rail is hidden on
+  // the landing view: an auto-placed grid would pull STATUS up into the
+  // column the rail had just vacated.
+  const dock = mount(element('aside', 'headsup-dock'), doc.body);
+  dock.id = 'headsup-dock';
+  dock.setAttribute('aria-label', t('Heads Up console'));
 
-  const dataPanel = doc.getElementById('data-panel');
-  const dataTitle = dataPanel?.querySelector('.panel-title');
-  const previousDataTitle = dataTitle?.textContent ?? null;
-  if (dataTitle) dataTitle.textContent = t('HEADS UP LAYERS');
-  const toggles = doc.getElementById('data-toggles');
+  // Top left: everything a person can press, in one pane — the scenario
+  // picker, then the cohort toggles, then the legend. The cohort rows used to
+  // be appended into upstream's `#data-toggles`, which put the controls for
+  // this console on the far side of the globe from the console itself. That
+  // panel is left in the document and hidden by the stylesheet; nothing
+  // upstream built is moved or emptied.
+  const controlPanel = element(
+    'section',
+    'headsup-block headsup-controls',
+    dock,
+  );
+  controlPanel.id = 'headsup-controls';
+  const sceneBlock = element(
+    'section',
+    'headsup-control-group headsup-scenes',
+    controlPanel,
+  );
+  const layersGroup = element(
+    'section',
+    'headsup-control-group headsup-layers',
+    controlPanel,
+  );
+  // Top right: the agent rail, which grows with what the pipeline says and
+  // scrolls inside its own region.
+  const rail = element('aside', 'headsup-rail headsup-block', dock);
+  // Bottom left: STATUS. Bottom right: the advisory in force.
+  const stripBlock = element('section', 'headsup-block headsup-strip', dock);
+  stripBlock.id = 'headsup-status';
+  const advisoryBlock = element(
+    'section',
+    'headsup-block headsup-advisory',
+    dock,
+  );
+  advisoryBlock.id = 'headsup-advisory';
+
+  // ── The control panel: the Heads Up layers ──────────────────────────────
+
+  const layersTitle = element('h2', 'headsup-block-title', layersGroup);
+  layersTitle.textContent = t('HEADS UP LAYERS');
+  const toggles = element('div', 'headsup-toggle-list', layersGroup);
   const cohortRows = new Map();
   let fleetGroup = null;
 
@@ -397,25 +449,12 @@ export function startHeadsupConsole({
     }
   };
 
-  // ── The dock: the right 45%, four blocks ────────────────────────────────
-  //
-  // One fixed column beside the viewport rather than four surfaces scattered
-  // over the globe. The blocks are created here, in the order they are read,
-  // and filled further down: the rail is the only one that can grow, so it is
-  // the one the grid hands its slack to and the one that scrolls. Everything
-  // else is sized by its content, which is what makes the column fit 1080
-  // without a scrollbar of its own (src/headsup/layout.test.mjs).
-  const dock = mount(element('aside', 'headsup-dock'), doc.body);
-  dock.id = 'headsup-dock';
-  dock.setAttribute('aria-label', t('Heads Up console'));
-
-  // ── Block 1: scenario control ───────────────────────────────────────────
+  // ── The control panel: the scenario picker ──────────────────────────────
   //
   // One button per test scene, launched directly. The dialog this replaced
   // asked a person to open a list before they could see what was on it; the
   // whole list is three entries long, and on a wall display a modal over the
   // globe is one more thing to dismiss.
-  const sceneBlock = element('section', 'headsup-block headsup-scenes', dock);
   const scenesTitle = element('h2', 'headsup-block-title', sceneBlock);
   scenesTitle.textContent = t('TEST SCENE');
   const sceneList = element('div', 'headsup-scene-list', sceneBlock);
@@ -459,24 +498,12 @@ export function startHeadsupConsole({
   exitButton.title = t('Stop the replay and fly back to the landing view');
   exitButton.hidden = true;
 
-  // ── Block 2: the agent pipeline rail ────────────────────────────────────
-  //
-  // Created here so the dock reads top to bottom in source order; filled
-  // below, with its behaviour from D3.6 unchanged.
-  const rail = element('aside', 'headsup-rail headsup-block', dock);
-
-  // ── Block 3: the active advisory ────────────────────────────────────────
+  // ── Bottom right: the active advisory ───────────────────────────────────
   //
   // Always on screen, including when nothing is in force: what an operator
   // reads off a wall at a glance is whether an advisory is live and what it
   // asks for, and a card that appears only when one exists makes its absence
   // something you have to notice rather than something you are told.
-  const advisoryBlock = element(
-    'section',
-    'headsup-block headsup-advisory',
-    dock,
-  );
-  advisoryBlock.id = 'headsup-advisory';
   const advisoryHeader = element(
     'div',
     'headsup-advisory-header',
@@ -508,8 +535,13 @@ export function startHeadsupConsole({
     signature: advisoryCell(t('SIGNATURE'), 'headsup-advisory-signature'),
   });
 
-  // ── Block 4: the counter strip ──────────────────────────────────────────
-  const stripBlock = element('section', 'headsup-block headsup-strip', dock);
+  // ── Bottom left: STATUS, the counter strip ──────────────────────────────
+  //
+  // The pane carries a title, because a corner of a wall display holding four
+  // numbers has to say what they are the status OF — and the cells wrap into
+  // a grid rather than a row, since the pane is a fifth of the window wide.
+  const statusTitle = element('h2', 'headsup-block-title', stripBlock);
+  statusTitle.textContent = t('STATUS');
   const strip = element('div', 'headsup-counters', stripBlock);
   /** @type {Map<string, object>} One entry per counter cell. */
   const counterCells = new Map();
@@ -1544,9 +1576,6 @@ export function startHeadsupConsole({
       }
     }
     for (const node of owned.splice(0)) node.remove();
-    // Hand the one retitled header back exactly as it was found.
-    if (dataTitle && previousDataTitle !== null)
-      dataTitle.textContent = previousDataTitle;
     cohortRows.clear();
     counterCells.clear();
     stageRows.clear();

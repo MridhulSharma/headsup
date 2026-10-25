@@ -1910,6 +1910,7 @@
       "src/headsup/console.js",
       "src/headsup/pipeline.js",
       "src/headsup/advisory.js",
+      "src/headsup/render.js",
       "src/ui/placeNames.js",
       "src/cyberSonarScene.js",
       "src/cyberSonar.js",

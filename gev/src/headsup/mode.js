@@ -148,10 +148,16 @@ export function createHeadsupModeConfig({
     omitLayers: Object.freeze(headsUp ? [...HEADSUP_OMITTED_LAYERS] : []),
     /** Layer ids Heads Up mode enables once registration is sealed. */
     enableLayers: Object.freeze(headsUp ? [HEADSUP_LAYER_ID] : []),
-    /** Upstream's own layer rows own `#data-toggles` only in full mode. */
+    /**
+     * Whether upstream's own layer rows mount into `#data-toggles`. Heads Up
+     * mode builds its cohort rows in its own control panel instead, and the
+     * stylesheet hides upstream's panel whole, so nothing mounts there.
+     */
     upstreamLayerPanel: !headsUp,
     /** Subsystem ids this mode does not start; see the list above. */
-    omitSubsystems: Object.freeze(headsUp ? [...HEADSUP_OMITTED_SUBSYSTEMS] : []),
+    omitSubsystems: Object.freeze(
+      headsUp ? [...HEADSUP_OMITTED_SUBSYSTEMS] : [],
+    ),
     /** The reconnaissance detection overlay over the layers we omit. */
     detection: !headsUp,
     /** The tracked-entity readout, which detection feeds. */

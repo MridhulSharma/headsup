@@ -59,10 +59,7 @@ test('Heads Up mode omits the feeds it has no use for and gates the extras', () 
       scopeMask: false,
     },
   );
-  assert.deepEqual(
-    [...mode.omitSubsystems],
-    [...HEADSUP_OMITTED_SUBSYSTEMS],
-  );
+  assert.deepEqual([...mode.omitSubsystems], [...HEADSUP_OMITTED_SUBSYSTEMS]);
   assert.equal(mode.scenarioBaseUrl, 'http://localhost:8765');
 });
 

@@ -72,6 +72,17 @@ body.headsup-mode #scene-panel {
   display: none;
 }
 
+/* Upstream's DATA LAYERS panel. The Heads Up cohort rows used to be appended
+   into its `#data-toggles` list, which put the controls for this console on
+   the far side of the globe from the console itself — and left them inside a
+   panel that opens COLLAPSED. They are built in the dock's control panel
+   instead, so this panel would now stand open and empty over the viewport.
+   The node and its list stay in the document exactly as upstream built them;
+   upstream's own code still owns both. */
+body.headsup-mode #data-panel {
+  display: none;
+}
+
 /* DISPLAY controls for the two subsystems this mode does not start
    (`omitSubsystems` in src/headsup/mode.js). DETECT reads the air/sea/space
    layers Heads Up mode never registers, and Scope is the circular mask the
@@ -79,7 +90,10 @@ body.headsup-mode #scene-panel {
    can only mislead, so the group goes — the markup is upstream's and is
    untouched. */
 body.headsup-mode
-  :is(.pp-toggle-group:has(> #detection-toggle), .pp-toggle-group:has(> #scope-toggle)) {
+  :is(
+    .pp-toggle-group:has(> #detection-toggle),
+    .pp-toggle-group:has(> #scope-toggle)
+  ) {
   display: none;
 }
 
@@ -105,14 +119,16 @@ body.headsup-mode #cesium-credits {
 /* ── Shared Heads Up tokens ──────────────────────────────────────────── */
 /* The geometry tokens are the layout CONTRACT, and
    src/headsup/layout.test.mjs reads them out of this file: it computes the
-   viewport rectangle and the dock column from them at 1920x1080 and asserts
-   that they tile the window exactly, that nothing this mode adds reaches into
-   the viewport, and that the dock's four blocks fit its height. Change one and
-   that test recomputes the rectangles and says whether the layout survived.
+   viewport rectangle and the dock's four panes from them at 1920x1080 and
+   asserts that they tile the window exactly and that nothing this mode adds
+   reaches into the viewport. Change one and that test recomputes the
+   rectangles and says whether the layout survived.
 
-   `--headsup-viewport-width` and `--headsup-dock-width` MUST sum to 100vw.
-   That is what makes "no horizontal scroll" a property of the stylesheet
-   rather than a thing somebody checks in a browser. */
+   `--headsup-viewport-width` and `--headsup-dock-width` MUST sum to 100vw,
+   the two dock columns MUST sum to the dock's width, and the two dock rows to
+   100vh. That is what makes "no horizontal scroll", and "every pane is the
+   fraction of the window it claims", properties of the stylesheet rather than
+   things somebody checks in a browser. */
 body.headsup-mode {
   --headsup-amber: #ffd166;
   --headsup-live: #38f0c0;
@@ -120,27 +136,29 @@ body.headsup-mode {
   --headsup-ghost: #ff5a52;
   --headsup-surface: rgba(10, 12, 18, 0.82);
   --headsup-border: rgba(255, 255, 255, 0.12);
-  /* The rectangle the globe draws into, and the column of blocks beside it. */
-  --headsup-viewport-width: 55vw;
-  --headsup-dock-width: 45vw;
-  --headsup-dock-gap: 10px;
-  --headsup-dock-padding: 14px;
-  /* The three content-sized blocks' caps. The rail takes whatever is left,
-     which is why it is the one that scrolls. */
-  --headsup-scenes-max-height: 300px;
-  --headsup-advisory-max-height: 250px;
-  --headsup-strip-max-height: 112px;
-  --headsup-rail-min-height: 180px;
+  /* The rectangle the globe draws into, and the dock beside it. */
+  --headsup-viewport-width: 60vw;
+  --headsup-dock-width: 40vw;
+  /* The dock's own grid: two columns of 20vw, over a 70vh row and a 30vh one.
+     The panes TILE those tracks, so each one is exactly the fraction of the
+     window it claims. */
+  --headsup-dock-column-width: 20vw;
+  --headsup-dock-top-height: 70vh;
+  --headsup-dock-bottom-height: 30vh;
+  /* A pane's own inset. The dock carries no padding and no gap of its own:
+     a pane's border IS the line between two regions, which is what keeps the
+     grid's arithmetic the plain percentages above. */
+  --headsup-pane-padding: 12px 14px;
 }
 
 /* ── The rectangular viewport ────────────────────────────────────────────
-   The globe fills the left 55% at full height. Three surfaces have to agree
+   The globe fills the left 60% at full height. Three surfaces have to agree
    on that rectangle, or the picture and the chrome drawn over it would be
    measured against different boxes:
 
    - `#cesiumContainer` is the scene itself. Cesium sizes its canvas from this
      element, so narrowing it narrows the drawing buffer — which is the whole
-     point: a rectangle 55% wide rasterizes fewer pixels than a full-window
+     point: a rectangle 60% wide rasterizes fewer pixels than a full-window
      one, and the Heads Up fleet is paid for per pixel.
    - `#world-overlay-root` hosts the label canvas, which is sized from the
      scene canvas (`ensureCanvasSize` in src/overlays/worldOverlay.js). It is
@@ -175,20 +193,26 @@ body.headsup-mode .headsup-banner {
   max-width: calc(var(--headsup-viewport-width) - 48px);
 }
 
-/* Upstream's right-rail lane, which is now the dock's column. Panels that
+/* Upstream's right-rail lane, which the dock now fills. Panels that
    lane hosts (the Bhote Koshi event panel, the recent-imagery readout) move
    to the inside edge of the viewport rather than under the dock. */
 body.headsup-mode {
   --right-rail-x: calc(var(--headsup-dock-width) + 24px);
 }
 
-/* ── The dock: the right 45% ─────────────────────────────────────────────
-   Four blocks, top to bottom: scenario control, the agent rail, the active
-   advisory, the counter strip. A grid rather than a stack of fixed panels,
-   because the one thing that varies is how much the rail has to say: its row
-   takes the slack and scrolls, and the other three are sized by their own
-   content under the caps above. The column itself never scrolls — a wall
-   display nobody is sitting at cannot be scrolled. */
+/* ── The dock: the right 40% ─────────────────────────────────────────────
+   Four panes in two rows. The top row is 70% of the window high and splits
+   into two columns of 20% window width: the control panel, then the agent
+   rail. The bottom row is the remaining 30%, and carries STATUS beside the
+   active advisory across the dock's whole width.
+
+   Every pane is placed in a NAMED area rather than by source order, because
+   the rail is hidden on the landing view: under auto-placement, hiding it
+   would pull STATUS up into the column it had just vacated.
+
+   The dock itself never scrolls — a wall display nobody is sitting at cannot
+   be scrolled — so the two panes whose content arrives from the feed scroll
+   inside their own region instead. */
 .headsup-dock {
   position: fixed;
   top: 0;
@@ -196,21 +220,46 @@ body.headsup-mode {
   bottom: 0;
   z-index: 110;
   display: grid;
-  grid-template-rows: auto minmax(var(--headsup-rail-min-height), 1fr) auto auto;
-  gap: var(--headsup-dock-gap);
+  grid-template-columns:
+    var(--headsup-dock-column-width)
+    var(--headsup-dock-column-width);
+  grid-template-rows:
+    var(--headsup-dock-top-height)
+    var(--headsup-dock-bottom-height);
+  grid-template-areas:
+    'controls rail'
+    'status advisory';
   width: var(--headsup-dock-width);
-  padding: var(--headsup-dock-padding);
   overflow: hidden;
   border-left: 1px solid var(--headsup-border);
   background: var(--headsup-surface);
   backdrop-filter: blur(12px);
 }
 
+.headsup-controls {
+  grid-area: controls;
+}
+
+.headsup-rail {
+  grid-area: rail;
+}
+
+.headsup-strip {
+  grid-area: status;
+}
+
+.headsup-advisory {
+  grid-area: advisory;
+}
+
+/* A pane is one region of that grid, and its border is the line between two
+   regions — which is why it has no radius and the dock has no gap: a rounded
+   pane in a tiled grid draws four gaps nobody asked for. */
 .headsup-block {
+  min-width: 0;
   min-height: 0;
-  padding: 12px 14px;
+  padding: var(--headsup-pane-padding);
   border: 1px solid var(--headsup-border);
-  border-radius: var(--panel-radius);
   background: rgba(255, 255, 255, 0.02);
 }
 
@@ -224,25 +273,43 @@ body.headsup-mode {
   color: var(--text-secondary);
 }
 
+/* The control panel: the scenario picker, the cohort toggles and the legend,
+   in one pane. It is the pane most likely to outgrow its region — a fleet row
+   per operator and a legend row per hazard class both arrive from the feed —
+   so it scrolls inside itself rather than pushing the grid around. */
+.headsup-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.headsup-control-group {
+  min-height: 0;
+}
+
 .headsup-scenes {
   display: flex;
-  max-height: var(--headsup-scenes-max-height);
   flex-direction: column;
   gap: 8px;
-  overflow-y: auto;
+}
+
+/* The cohort rows and the legend, under their group's own title. */
+.headsup-toggle-list {
+  display: flex;
+  flex-direction: column;
 }
 
 .headsup-advisory {
-  max-height: var(--headsup-advisory-max-height);
   overflow-y: auto;
 }
 
 .headsup-strip {
-  max-height: var(--headsup-strip-max-height);
   overflow: hidden;
 }
 
-/* ── Left panel: the Heads Up layer cohorts ──────────────────────────── */
+/* ── The control panel: the Heads Up layer cohorts ───────────────────── */
 .headsup-group {
   margin: 10px 0 4px;
   font-family: var(--font-mono);
@@ -329,7 +396,7 @@ body.headsup-mode {
   color: var(--text-dim);
 }
 
-/* ── Left panel: the legend ──────────────────────────────────────────── */
+/* ── The control panel: the legend ───────────────────────────────────── */
 .headsup-legend {
   display: grid;
   gap: 4px;
@@ -381,7 +448,7 @@ body.headsup-mode {
   color: var(--text-dim);
 }
 
-/* ── Block 1: the test scenes, as buttons ────────────────────────────── */
+/* ── The scenario picker: the test scenes, as buttons ────────────────── */
 /* Each entry launches its replay on one press. The dialog this replaced made
    a person open a three-item list before they could read it. */
 .headsup-scene-list {
@@ -469,7 +536,7 @@ body.headsup-mode {
   display: none;
 }
 
-/* ── Block 1: sim clock, replay speed, scripted badge, Exit ──────────── */
+/* ── The scenario picker: clock, speed, badge, Exit ──────────────────── */
 /* Left-aligned label/value pairs: in a column they read as a list, where the
    right-aligned readout they replaced was reading against the window edge. */
 .headsup-readout {
@@ -548,17 +615,17 @@ body.headsup-mode {
   display: none;
 }
 
-/* ── Bottom right: the counter strip ─────────────────────────────────── */
-/* Block 4 of the dock, and the cells read left to right the way the column
-   above them does. Height is still capped by the block (see the geometry
-   tokens): the sparkline is the one cell that could otherwise grow, and the
-   cap is what keeps all four blocks inside 1080. */
+/* ── Bottom left: STATUS, the counter strip ──────────────────────────── */
+/* The STATUS pane is a fifth of the window wide, so its five readings sit in
+   a two-column grid rather than in one row: a row of five cells that must not
+   wrap their own labels would overflow a 20vw pane at every window size this
+   console is used at. Three rows of them fit the 30vh region, which is why
+   the pane needs no cap of its own any more. */
 .headsup-counters {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
-  justify-content: flex-start;
-  flex-wrap: nowrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  align-content: start;
   white-space: nowrap;
 }
 
@@ -688,11 +755,11 @@ body.headsup-mode {
 }
 
 /* ── The agent pipeline rail ─────────────────────────────────────────── */
-/* Block 2 of the dock, and the only block that can grow: a card with a
-   dispatch message in it is taller than the room any fixed height would give
-   it. The grid hands this row the column's slack and the rail scrolls inside
-   it, so the three content-sized blocks around it keep their place however
-   much the pipeline has to say. */
+/* The dock's top-right pane, and the one whose content can outgrow its
+   region: a card with a dispatch message in it is taller than the room any
+   fixed height would give it. The region itself is fixed by the grid — 20% of
+   the window wide by 70% high — and the rail scrolls inside it, so however
+   much the pipeline has to say, the three panes around it keep their place. */
 .headsup-rail {
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -1096,7 +1163,7 @@ body.headsup-mode {
   color: var(--text-secondary);
 }
 
-/* ── Block 3: the active advisory ────────────────────────────────────── */
+/* ── Bottom right: the active advisory ───────────────────────────────── */
 /* Always on screen, including when nothing is in force. The action is the
    line set largest, because it is the one thing the advisory ASKS FOR: a
    hazard class describes the world, an action changes what a fleet does. */
@@ -1200,11 +1267,12 @@ body.headsup-mode {
 }
 
 /* ── Narrow viewports ───────────────────────────────────────────────── */
-/* The split is a claim about a wide screen: a 45% column of a 1000px window
-   is 450px of chrome over a 550px picture. Below 1280px the dock goes and the
-   globe takes the window back, rather than the two of them sharing a space
-   neither can use. Every geometry rule above is restated here in reverse, so
-   the viewport, the frame and the two centred surfaces agree again. */
+/* The split is a claim about a wide screen: a 40% dock of a 1000px window is
+   400px of chrome over a 600px picture, in two columns of 200px. Below 1280px
+   the dock goes and the globe takes the window back, rather than the two of
+   them sharing a space neither can use. Every geometry rule above is restated
+   here in reverse, so the viewport, the frame and the two centred surfaces
+   agree again. */
 @media (max-width: 1280px) {
   .headsup-dock {
     display: none;
@@ -1213,6 +1281,7 @@ body.headsup-mode {
   body.headsup-mode {
     --headsup-viewport-width: 100vw;
     --headsup-dock-width: 0vw;
+    --headsup-dock-column-width: 0vw;
     --right-rail-x: 52px;
   }
 

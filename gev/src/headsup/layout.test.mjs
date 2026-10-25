@@ -9,18 +9,21 @@ import { fileURLToPath } from 'node:url';
  *
  * The build step states the screen split as a requirement, so it is checked
  * against the STYLESHEET, because that is where the numbers live. The geometry
- * tokens in `headsup-mode.css` are read out of the CSS, the two rectangles are
- * computed from them at 1920x1080, and the claims the layout makes are
+ * tokens in `headsup-mode.css` are read out of the CSS, the five rectangles
+ * are computed from them at 1920x1080, and the claims the layout makes are
  * asserted:
  *
- * 1. The viewport rectangle and the dock column TILE the window — they sum to
- *    its width exactly, which is what makes "no horizontal scroll" a property
- *    of the stylesheet rather than something somebody checks in a browser.
+ * 1. The viewport rectangle and the dock TILE the window — they sum to its
+ *    width exactly, which is what makes "no horizontal scroll" a property of
+ *    the stylesheet rather than something somebody checks in a browser.
  * 2. The dock does not reach into the viewport rectangle, and the viewport is
  *    a rectangle at FULL height rather than an inscribed shape.
- * 3. The dock's four blocks fit its height, so the column never needs a
- *    scrollbar of its own — one block scrolls, the column does not.
- * 4. Upstream's two centred surfaces (`#command-dock`, the what-if banner) are
+ * 3. The dock's four panes tile the dock: two columns of 20% window width
+ *    across, a 70% row over a 30% row down, each pane in a NAMED grid area so
+ *    that hiding the rail cannot reflow the other three.
+ * 4. The dock column never scrolls — the two panes whose content arrives from
+ *    the feed scroll inside their own region instead.
+ * 5. Upstream's two centred surfaces (`#command-dock`, the what-if banner) are
  *    centred on the viewport rectangle and stay inside it.
  *
  * A value this test cannot find in the CSS is a FAILURE, not a skip: a rule
@@ -60,7 +63,7 @@ function pixels(source, declaration, within) {
       -1,
       `layout: ${within} is gone from the stylesheet; this check needs it`,
     );
-    for (let at = source.indexOf(within); at !== -1; ) {
+    for (let at = source.indexOf(within); at !== -1;) {
       const open = source.indexOf('{', at);
       const close = source.indexOf('}', open);
       match = pattern.exec(source.slice(open, close));
@@ -85,12 +88,9 @@ const overlays = css('overlays.css');
 const LAYOUT = Object.freeze({
   viewportWidth: pixels(mode, '--headsup-viewport-width'),
   dockWidth: pixels(mode, '--headsup-dock-width'),
-  dockGap: pixels(mode, '--headsup-dock-gap'),
-  dockPadding: pixels(mode, '--headsup-dock-padding'),
-  scenesMaxHeight: pixels(mode, '--headsup-scenes-max-height'),
-  advisoryMaxHeight: pixels(mode, '--headsup-advisory-max-height'),
-  stripMaxHeight: pixels(mode, '--headsup-strip-max-height'),
-  railMinHeight: pixels(mode, '--headsup-rail-min-height'),
+  dockColumnWidth: pixels(mode, '--headsup-dock-column-width'),
+  dockTopHeight: pixels(mode, '--headsup-dock-top-height'),
+  dockBottomHeight: pixels(mode, '--headsup-dock-bottom-height'),
   bannerTop: pixels(mode, 'top', '.headsup-banner'),
   // Upstream's own HUD corner inset, which the frame is drawn from.
   cornerBottom: pixels(overlays, 'bottom', '.hud-bottom-right'),
@@ -99,7 +99,7 @@ const LAYOUT = Object.freeze({
   creditsBottom: pixels(foundation, 'bottom', '#cesium-credits'),
 });
 
-/** The rectangle the globe draws into: the left 55%, full height. */
+/** The rectangle the globe draws into: the left 60%, full height. */
 const viewportRect = () => ({
   name: 'the 3D viewport',
   left: 0,
@@ -108,7 +108,7 @@ const viewportRect = () => ({
   bottom: VIEWPORT_HEIGHT,
 });
 
-/** The dock: the right 45%, full height. */
+/** The dock: the right 40%, full height. */
 const dockRect = () => ({
   name: 'the console dock',
   left: VIEWPORT_WIDTH - LAYOUT.dockWidth,
@@ -117,8 +117,65 @@ const dockRect = () => ({
   bottom: VIEWPORT_HEIGHT,
 });
 
+/**
+ * The dock's four panes, each from the grid track it is placed in.
+ *
+ * Placement is by named area in the CSS, so the rectangles here are computed
+ * the same way the browser would compute them and not from the order the
+ * console happens to append its panes in.
+ */
+const paneRects = () => {
+  const dock = dockRect();
+  const middleX = dock.left + LAYOUT.dockColumnWidth;
+  const middleY = LAYOUT.dockTopHeight;
+  return [
+    {
+      name: 'the control panel',
+      area: 'controls',
+      left: dock.left,
+      right: middleX,
+      top: 0,
+      bottom: middleY,
+    },
+    {
+      name: 'the agent rail',
+      area: 'rail',
+      left: middleX,
+      right: dock.right,
+      top: 0,
+      bottom: middleY,
+    },
+    {
+      name: 'the STATUS pane',
+      area: 'status',
+      left: dock.left,
+      right: middleX,
+      top: middleY,
+      bottom: VIEWPORT_HEIGHT,
+    },
+    {
+      name: 'the advisory pane',
+      area: 'advisory',
+      left: middleX,
+      right: dock.right,
+      top: middleY,
+      bottom: VIEWPORT_HEIGHT,
+    },
+  ];
+};
+
+/** Which class carries each of the dock's named grid areas. */
+const PANE_SELECTORS = Object.freeze({
+  controls: '.headsup-controls',
+  rail: '.headsup-rail',
+  status: '.headsup-strip',
+  advisory: '.headsup-advisory',
+});
+
 const overlaps = (a, b) =>
   a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+
+const area = (rect) => (rect.right - rect.left) * (rect.bottom - rect.top);
 
 test('every value this check depends on is still declared in the CSS', () => {
   // `pixels` throws on a missing declaration, so reaching here is the
@@ -141,7 +198,7 @@ test('the viewport and the dock tile the window, so nothing scrolls sideways', (
   );
 });
 
-test('the viewport is a full-height rectangle filling the left 55%', () => {
+test('the viewport is a full-height rectangle filling the left 60%', () => {
   const view = viewportRect();
   assert.equal(view.top, 0, 'the viewport starts at the top of the window');
   assert.equal(
@@ -151,8 +208,8 @@ test('the viewport is a full-height rectangle filling the left 55%', () => {
   );
   assert.equal(
     Math.round((LAYOUT.viewportWidth / VIEWPORT_WIDTH) * 100),
-    55,
-    'the viewport is 55% of the window wide',
+    60,
+    'the viewport is 60% of the window wide',
   );
   // The HUD frame is drawn inside that rectangle, not over the window.
   assert.match(
@@ -161,7 +218,9 @@ test('the viewport is a full-height rectangle filling the left 55%', () => {
     'the HUD frame no longer ends at the dock edge',
   );
   // And the scene canvas is what was narrowed, which is the whole reason the
-  // rectangle costs fewer pixels than a full-window one.
+  // rectangle costs fewer pixels than a full-window one. No mask, no painting
+  // panels over a full-window canvas: the element Cesium sizes its drawing
+  // buffer from IS the 60% region.
   assert.match(
     mode,
     /#cesiumContainer,\s*#world-overlay-root\)\s*\{\s*width:\s*var\(--headsup-viewport-width\)/,
@@ -169,30 +228,83 @@ test('the viewport is a full-height rectangle filling the left 55%', () => {
   );
 });
 
-test('the dock`s four blocks fit its height without scrolling the column', () => {
-  // Three blocks are capped and the fourth takes the slack, so the question
-  // is whether the capped three plus the rail's own minimum fit. Borders are
-  // not in the CSS as a token, so a pixel each is counted generously.
-  const chrome = LAYOUT.dockPadding * 2 + LAYOUT.dockGap * 3 + 8;
-  const blocks =
-    LAYOUT.scenesMaxHeight +
-    LAYOUT.advisoryMaxHeight +
-    LAYOUT.stripMaxHeight +
-    LAYOUT.railMinHeight;
-  assert.ok(
-    blocks + chrome <= VIEWPORT_HEIGHT,
-    `the four blocks need ${blocks + chrome}px of the ${VIEWPORT_HEIGHT}px window`,
+test('the dock`s four panes tile it: two 20% columns, a 70% row over a 30% one', () => {
+  assert.equal(
+    LAYOUT.dockColumnWidth * 2,
+    LAYOUT.dockWidth,
+    'the two dock columns must sum to the dock width exactly',
   );
-  // The rail is the one that scrolls; the column itself must not.
+  assert.equal(
+    LAYOUT.dockTopHeight + LAYOUT.dockBottomHeight,
+    VIEWPORT_HEIGHT,
+    'the two dock rows must sum to the window height exactly',
+  );
+  assert.equal(
+    Math.round((LAYOUT.dockColumnWidth / VIEWPORT_WIDTH) * 100),
+    20,
+    'each dock column is 20% of the window wide',
+  );
+  assert.equal(
+    Math.round((LAYOUT.dockTopHeight / VIEWPORT_HEIGHT) * 100),
+    70,
+    'the dock`s top row is 70% of the window high',
+  );
+  const panes = paneRects();
+  // The four panes fill the dock and nothing else: equal areas, no overlap,
+  // and none of them reaching into the picture.
+  let filled = 0;
+  for (const pane of panes) {
+    filled += area(pane);
+    assert.equal(
+      overlaps(pane, viewportRect()),
+      false,
+      `${pane.name} reaches into the 3D viewport`,
+    );
+    for (const other of panes)
+      if (other !== pane)
+        assert.equal(
+          overlaps(pane, other),
+          false,
+          `${pane.name} overlaps ${other.name}`,
+        );
+  }
+  assert.equal(filled, area(dockRect()), 'the four panes do not fill the dock');
+});
+
+test('each pane is placed by name, so hiding the rail cannot reflow the rest', () => {
+  // The rail is hidden on the landing view. Under auto-placement that would
+  // pull STATUS up into the column the rail had just vacated, so the areas are
+  // named and every pane says which one it occupies.
+  assert.match(
+    mode,
+    /grid-template-areas:\s*'controls rail'\s*'status advisory';/,
+    'the dock no longer names its four grid areas',
+  );
+  for (const [name, selector] of Object.entries(PANE_SELECTORS))
+    assert.match(
+      mode,
+      new RegExp(`\\${selector}\\s*\\{[^}]*grid-area:\\s*${name};`),
+      `${selector} is not placed in the ${name} grid area`,
+    );
+});
+
+test('the dock never scrolls; the panes the feed fills scroll inside themselves', () => {
   assert.match(
     mode,
     /\.headsup-dock\s*\{[^}]*overflow:\s*hidden/,
     'the dock column must not scroll',
   );
+  // The rail grows with the pipeline, and the control panel grows with the
+  // fleet and hazard-class rows the feed reports.
   assert.match(
     mode,
     /\.headsup-rail\s*\{[^}]*overflow-y:\s*auto/,
     'the rail must scroll rather than grow',
+  );
+  assert.match(
+    mode,
+    /\.headsup-controls\s*\{[^}]*overflow-y:\s*auto/,
+    'the control panel must scroll rather than grow',
   );
 });
 
@@ -224,7 +336,10 @@ test('upstream`s centred surfaces are centred on the viewport, not the window', 
     mode.indexOf('{', mode.indexOf('#command-dock')),
     mode.indexOf('}', mode.indexOf('#command-dock')),
   );
-  assert.match(dockBlock, /width:\s*min\(calc\(var\(--headsup-viewport-width\)/);
+  assert.match(
+    dockBlock,
+    /width:\s*min\(calc\(var\(--headsup-viewport-width\)/,
+  );
   // And it still clears the bottom of the window by upstream's own inset.
   const dockBottom = pixels(css('command-dock.css'), 'bottom', '#command-dock');
   assert.ok(
@@ -272,7 +387,7 @@ test('the HUD frame keeps its corner inset inside the rectangle', () => {
 });
 
 test('the dock is hidden rather than overlaid on a narrow viewport', () => {
-  // Below 1280px a 45% column is more chrome than picture, so the stylesheet
+  // Below 1280px a 40% dock is more chrome than picture, so the stylesheet
   // takes it off the screen and gives the window back to the globe.
   const narrow = mode.slice(mode.indexOf('@media (max-width: 1280px)'));
   assert.notEqual(narrow.length, 0, 'the narrow-viewport block is gone');
@@ -281,4 +396,5 @@ test('the dock is hidden rather than overlaid on a narrow viewport', () => {
   // while the dock that justified it was gone.
   assert.match(narrow, /--headsup-viewport-width:\s*100vw/);
   assert.match(narrow, /--headsup-dock-width:\s*0vw/);
+  assert.match(narrow, /--headsup-dock-column-width:\s*0vw/);
 });

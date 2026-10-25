@@ -1083,5 +1083,7 @@
   "src/headsup/pipeline.test.mjs",
   "src/headsup/layout.test.mjs",
   "src/headsup/advisory.js",
-  "src/headsup/advisory.test.mjs"
+  "src/headsup/advisory.test.mjs",
+  "src/headsup/render.js",
+  "src/headsup/render.test.mjs"
 ]

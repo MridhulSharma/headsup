@@ -692,3 +692,12 @@ with its uncertainty attached rather than a claim of no change. Anyone who
 needs that attributed should take the ceiling and the loaded reading back to
 back on an idle machine. See the D2.7 section for why the absolute number is
 a property of the hardware either way.
+
+## Known issues
+
+- `npm run layer-token:check` cannot run in this layout: the script builds its
+  pathspec as `src/data/layerState.js`, but `gev/` is vendored one level down,
+  so `git rev-parse <ref>:src/data/layerState.js` fails with *path exists, but
+  not*. Pre-existing, and not this fork's to fix from inside `gev/`.
+  `gev/src/data/layerState.js` is unchanged from HEAD, so the ledger carries
+  0 new tokens — which is what the check would have reported.

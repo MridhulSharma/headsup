@@ -124,8 +124,10 @@ function mount(options = {}) {
   });
   return {
     ...fixture,
-    // Everything this console says now lives in one dock beside the globe.
+    // Everything this console says now lives in one dock beside the globe,
+    // and everything a person can press lives in its control panel.
     dock: fixture.document.getElementById('headsup-dock'),
+    controls: fixture.document.getElementById('headsup-controls'),
     console: console_,
     layer,
     scenarios,
@@ -135,36 +137,47 @@ function mount(options = {}) {
   };
 }
 
-test('the console retitles one panel and builds the dock beside the globe', (t) => {
+test('the console builds its own dock and touches no upstream node', (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  assert.equal(page.dataTitle.textContent, 'HEADS UP LAYERS');
-  // The four Heads Up cohorts, in the order the build step names them.
+  // The dock's four panes. Each is placed by NAME in the stylesheet, so this
+  // is the order they are built in, not the order they are read on screen.
   assert.deepEqual(
-    page.dataToggles
+    page.dock.children.map((pane) => pane.className),
+    [
+      'headsup-block headsup-controls',
+      'headsup-rail headsup-block',
+      'headsup-block headsup-strip',
+      'headsup-block headsup-advisory',
+    ],
+  );
+  // The control panel: the scenario picker over the cohort toggles, with the
+  // four Heads Up cohorts in the order the build step names them.
+  assert.deepEqual(
+    page.controls.children.map((group) => group.className),
+    [
+      'headsup-control-group headsup-scenes',
+      'headsup-control-group headsup-layers',
+    ],
+  );
+  assert.deepEqual(
+    page.controls
       .querySelectorAll('.headsup-cohort')
       .map((row) => row.dataset.cohort),
     ['hazards', 'corridors', 'ghost'],
   );
-  // The dock's four blocks, in the order they are read top to bottom.
-  assert.deepEqual(
-    page.dock.children.map((block) => block.className),
-    [
-      'headsup-block headsup-scenes',
-      'headsup-rail headsup-block',
-      'headsup-block headsup-advisory',
-      'headsup-block headsup-strip',
-    ],
-  );
-  assert.ok(page.dock.querySelector('.headsup-scene-list'));
-  assert.ok(page.dock.querySelector('.headsup-readout'));
+  assert.ok(page.controls.querySelector('.headsup-scene-list'));
+  assert.ok(page.controls.querySelector('.headsup-readout'));
   assert.ok(page.dock.querySelector('.headsup-counters'));
   assert.ok(page.document.getElementById('headsup-pipeline-rail'));
+  assert.ok(page.document.getElementById('headsup-status'));
   assert.ok(page.document.getElementById('headsup-advisory'));
   assert.ok(page.document.getElementById('headsup-banner'));
-  // The three surfaces that hosted these before the dock existed are left
-  // exactly as upstream built them, not emptied or rebuilt: the stylesheet
-  // hides them, which is what keeps a subtree pull a merge.
+  // The four surfaces that hosted these before the dock existed are left
+  // exactly as upstream built them, not emptied, retitled or rebuilt: the
+  // stylesheet hides them, which is what keeps a subtree pull a merge.
+  assert.equal(page.dataTitle.textContent, 'DATA LAYERS');
+  assert.equal(page.dataToggles.children.length, 0);
   assert.equal(page.styleIndicator.querySelector('.headsup-readout'), null);
   assert.equal(page.hudContent.children.length, 0);
   assert.equal(page.sceneTitle.textContent, 'SCENES');
@@ -196,7 +209,7 @@ test('the Heads Up layer is switched on so the socket exists', (t) => {
 test('a cohort row toggles exactly its own cohort', (t) => {
   const page = mount();
   t.after(() => page.console.destroy());
-  const rows = page.dataToggles.querySelectorAll('.headsup-cohort');
+  const rows = page.controls.querySelectorAll('.headsup-cohort');
   const hazards = rows.find((row) => row.dataset.cohort === 'hazards');
   assert.equal(hazards.getAttribute('aria-pressed'), 'true');
   hazards.click();
@@ -216,7 +229,7 @@ test('one row per operator appears as fleets report, and toggles that fleet', (t
   const page = mount({ layer });
   t.after(() => page.console.destroy());
   layer.publish();
-  const fleets = page.dataToggles
+  const fleets = page.controls
     .querySelectorAll('.headsup-cohort')
     .filter((row) => row.dataset.cohort.startsWith('op:'));
   assert.deepEqual(
@@ -302,8 +315,7 @@ test('the readout and the counter strip report the feed, not their own guess', (
     '8.5s',
   );
   assert.equal(
-    page.dock.querySelector('.headsup-feed .headsup-counter-value')
-      .textContent,
+    page.dock.querySelector('.headsup-feed .headsup-counter-value').textContent,
     'LIVE',
   );
 });
@@ -344,8 +356,7 @@ test('an idle feed reads as idle, with no replay speed claimed', (t) => {
     .map((node) => node.textContent);
   assert.deepEqual(readout, ['IDLE', '—', '—']);
   assert.equal(
-    page.dock.querySelector('.headsup-feed .headsup-counter-value')
-      .textContent,
+    page.dock.querySelector('.headsup-feed .headsup-counter-value').textContent,
     'DOWN',
   );
 });
@@ -388,7 +399,7 @@ test('the legend names the hazard classes drawn, and the marks it draws', (t) =>
   const page = mount({ layer });
   t.after(() => page.console.destroy());
   layer.publish();
-  const rows = page.dataToggles
+  const rows = page.controls
     .querySelectorAll('.headsup-legend-row')
     .map((row) => [
       row.querySelector('.headsup-legend-label').textContent,
@@ -406,7 +417,7 @@ test('the legend names the hazard classes drawn, and the marks it draws', (t) =>
     ['Remote assist', '', true],
     ['Declined', '', true],
   ]);
-  const swatches = page.dataToggles
+  const swatches = page.controls
     .querySelectorAll('.headsup-legend-swatch')
     .map((node) => node.style.properties.get('--headsup-legend-color'));
   assert.deepEqual(swatches, ['#2bb3ff', '#ff8c1a']);
@@ -421,7 +432,7 @@ test('a fleet too large to orient, and a fleet that refused, say so', (t) => {
   t.after(() => page.console.destroy());
   layer.publish();
   const row = (name) =>
-    page.dataToggles
+    page.controls
       .querySelectorAll('.headsup-legend-row')
       .find(
         (node) =>
@@ -555,7 +566,10 @@ test('the advisory card reports the action, the hazard, the extent and the windo
   const action = card.querySelector('.headsup-advisory-action');
   assert.equal(action.textContent, 'NO_ENTRY');
   assert.equal(action.dataset.action, 'NO_ENTRY');
-  assert.equal(card.querySelector('.headsup-advisory-id').textContent, 'adv-flood-1');
+  assert.equal(
+    card.querySelector('.headsup-advisory-id').textContent,
+    'adv-flood-1',
+  );
   const values = card
     .querySelectorAll('.headsup-advisory-grid dd')
     .map((node) => node.textContent);
@@ -644,7 +658,10 @@ test('the dock lists every test scene with its what-if line', async (t) => {
   const buttons = page.dock.querySelectorAll('.headsup-scene-btn');
   assert.equal(buttons.length, 1);
   assert.equal(buttons[0].dataset.scenario, 's1_flood');
-  assert.equal(buttons[0].querySelector('.headsup-scene-code').textContent, 'S1');
+  assert.equal(
+    buttons[0].querySelector('.headsup-scene-code').textContent,
+    'S1',
+  );
   assert.equal(
     buttons[0].querySelector('.headsup-scene-whatif').textContent,
     SCENARIO.whatIf,
@@ -781,16 +798,18 @@ test('an Escape with nothing open is left for upstream`s own handlers', (t) => {
   assert.equal(other.defaultPrevented, false);
 });
 
-test('teardown takes back every node it added and the panel title', (t) => {
+test('teardown takes back every node it added', (t) => {
   const page = mount();
   page.console.destroy();
+  // Neither panel was ever retitled: the dock owns scenario control and the
+  // cohort rows now, and the stylesheet hides upstream's panels whole.
   assert.equal(page.dataTitle.textContent, 'DATA LAYERS');
-  // The scene panel was never retitled: the dock owns scenario control now,
-  // and the stylesheet hides upstream's panel whole.
   assert.equal(page.sceneTitle.textContent, 'SCENES');
   assert.equal(page.document.getElementById('headsup-banner'), null);
   assert.equal(page.document.getElementById('headsup-dock'), null);
+  assert.equal(page.document.getElementById('headsup-controls'), null);
   assert.equal(page.document.getElementById('headsup-pipeline-rail'), null);
+  assert.equal(page.document.getElementById('headsup-status'), null);
   assert.equal(page.document.getElementById('headsup-advisory'), null);
   // Idempotent: the application defers it, and an abort can also reach it.
   page.console.destroy();
@@ -1235,8 +1254,7 @@ test('a snapshot whose pipeline is not the shape this build knows is a quiet rai
   layer.publish();
   assert.equal(railStage(page, 'fusion').dataset.lit, 'false');
   assert.equal(
-    page.dock.querySelector('.headsup-feed .headsup-counter-value')
-      .textContent,
+    page.dock.querySelector('.headsup-feed .headsup-counter-value').textContent,
     'LIVE',
   );
 });
