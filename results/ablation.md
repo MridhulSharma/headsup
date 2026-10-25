@@ -32,6 +32,24 @@ Every figure below was computed by reading the runs' hash-chained audit logs and
 | V3 | 2 | 284.0 | 3.3 | 284.0 | 3195.0 | 11413.5 | 16.122 | -89.10 | 0.000 | 0.0024 | 81672 |
 | V4 | 2 | 283.0 | 2.9 | 282.5 | 3195.0 | 11641.5 | 16.356 | -79.68 | 0.000 | 0.0011 | 80025 |
 
+## Reading the table
+
+Every cell is the **median** over that variant's runs in that scenario; the
+`runs` column says how many. Three things to know before comparing a column
+across variants:
+
+- **The seed counts differ.** This run was configured `--seeds rules=3,ai=2`, to
+  hold model spend down, so V0 and V1 have three seeds (42, 43, 44) and V3 and V4
+  have two (42, 43). Seed 44 is a low outlier on `s2_blackout`. A rules-vs-agents
+  comparison should be made over the seeds both ran, not between these medians.
+- **`p95 agent latency (ms)` is not measurable for V1.** Four of its six runs
+  report 14 to 15 hours, which is a timestamp bug on the rules-only path rather
+  than a latency. The V3 and V4 figures are sound.
+- **`p95 agent latency` is not the time a fleet waits.** It is the 95th percentile
+  over every agent invocation in a run, including triage and critic work queued
+  behind a surge. What a fleet experiences is `time to advisory`, in the column
+  beside it.
+
 ## The headline
 
 On `s3_incident`, the scenario a rules-only reading of the feed is expected to struggle with:
