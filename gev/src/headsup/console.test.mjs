@@ -533,7 +533,14 @@ test('the advisory card is on screen with its empty state before anything is in 
   // The fields are not drawn as dashes: "nothing in force" is a reading, and
   // a grid of em dashes would read as an advisory nobody filled in.
   assert.equal(card.querySelector('.headsup-advisory-grid').hidden, true);
-  assert.equal(card.querySelector('.headsup-advisory-action').hidden, true);
+  assert.equal(card.querySelector('.headsup-advisory-action-row').hidden, true);
+  assert.equal(card.querySelector('.headsup-advisory-evidence').hidden, true);
+  // The band says which state it is in, so the quiet card is not mistaken
+  // for one that has stopped reporting.
+  assert.equal(
+    card.querySelector('.headsup-advisory-state').textContent,
+    'STANDBY',
+  );
 });
 
 test('the advisory card reports the action, the hazard, the extent and the window', (t) => {
@@ -562,6 +569,10 @@ test('the advisory card reports the action, the hazard, the extent and the windo
   layer.publish();
   const card = page.document.getElementById('headsup-advisory');
   assert.equal(card.dataset.state, 'live');
+  assert.equal(
+    card.querySelector('.headsup-advisory-state').textContent,
+    'IN FORCE',
+  );
   // The action is the thing the advisory asks for, so it is its own line.
   const action = card.querySelector('.headsup-advisory-action');
   assert.equal(action.textContent, 'NO_ENTRY');
@@ -570,21 +581,102 @@ test('the advisory card reports the action, the hazard, the extent and the windo
     card.querySelector('.headsup-advisory-id').textContent,
     'adv-flood-1',
   );
-  const values = card
-    .querySelectorAll('.headsup-advisory-grid dd')
-    .map((node) => node.textContent);
-  assert.equal(values[0], 'FLOOD');
-  assert.equal(values[1], '4 of 5');
+  // One labelled row per field, in the order they are read. The row is
+  // addressed by the field it carries rather than by its index, so adding a
+  // row cannot silently move an assertion onto another value.
+  const values = card.querySelectorAll('.headsup-advisory-grid dd');
+  const field = (name) =>
+    values.find((node) => node.dataset.field === name) ?? null;
+  assert.deepEqual(
+    values.map((node) => node.dataset.field),
+    ['hazard', 'severity', 'extent', 'expiry', 'issuer', 'signature'],
+  );
+  assert.equal(field('hazard').textContent, 'FLOOD');
+  assert.equal(
+    card.querySelector('.headsup-advisory-severity-text').textContent,
+    '4 of 5',
+  );
+  // The pips are a view of the same number, so they carry its level.
+  assert.equal(card.querySelector('.headsup-advisory-pips').dataset.level, '4');
   // About a square kilometre, in the unit it reads at.
-  assert.match(values[2], /^1\.0[01] km²$/);
-  assert.match(values[3], /^1m 3\ds \(\d\d:\d\d:\d\dZ\)$/);
+  assert.match(field('extent').textContent, /^1\.0[01] km²$/);
+  // Time left beside the instant the window closes: the countdown alone
+  // cannot be checked against a clock on a wall.
+  assert.match(
+    card.querySelector('.headsup-advisory-countdown').textContent,
+    /^1m 3\ds$/,
+  );
+  assert.match(
+    card.querySelector('.headsup-advisory-until').textContent,
+    /^\d\d:\d\d:\d\dZ$/,
+  );
+  assert.equal(field('expiry').dataset.urgency, 'open');
+  assert.equal(field('issuer').textContent, 'headsup/compiler');
   // The feeds it rests on, named — not a count, which would answer "how
   // much evidence" rather than "whose".
-  assert.equal(values[4], 'NWS, USGS');
-  assert.equal(values[5], 'verified');
+  assert.deepEqual(
+    card
+      .querySelectorAll('.headsup-advisory-chip')
+      .map((chip) => chip.textContent),
+    ['NWS', 'USGS'],
+  );
+  assert.equal(field('signature').textContent, 'verified');
   assert.equal(
     card.querySelector('.headsup-advisory-signature').dataset.signature,
     'verified',
+  );
+});
+
+test('a citation naming no feed is its own chip rather than a silent drop', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: {
+      scenario: null,
+      advisories: [
+        liveAdvisory({
+          evidence: [
+            { source: 'nws', kind: 'nws.flood_warning' },
+            { source: null, kind: 'usgs.gauge' },
+          ],
+          evidenceCount: 2,
+        }),
+      ],
+      pipeline: { acks: [], compiles: [] },
+    },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  const card = page.document.getElementById('headsup-advisory');
+  // The card still stands, and the chip row still accounts for both
+  // citations: an advisory with one unreadable source is not a blank card.
+  assert.equal(card.dataset.state, 'live');
+  assert.deepEqual(
+    card
+      .querySelectorAll('.headsup-advisory-chip')
+      .map((chip) => chip.textContent),
+    ['NWS', '+1 unnamed'],
+  );
+});
+
+test('an advisory citing nothing says so, rather than showing an empty row', (t) => {
+  const layer = fakeLayer({
+    stats: { connected: true },
+    feed: {
+      scenario: null,
+      advisories: [liveAdvisory({ evidence: [], evidenceCount: 0 })],
+      pipeline: { acks: [], compiles: [] },
+    },
+  });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  assert.deepEqual(
+    page.document
+      .getElementById('headsup-advisory')
+      .querySelectorAll('.headsup-advisory-chip')
+      .map((chip) => chip.textContent),
+    ['none cited'],
   );
 });
 
@@ -644,7 +736,9 @@ test('a corridor advisory reports its length, and a second live one is counted',
     card.querySelector('.headsup-advisory-id').textContent,
     'adv-keep-clear-6 · 2 in force',
   );
-  const extent = card.querySelectorAll('.headsup-advisory-grid dd')[2];
+  const extent = card
+    .querySelectorAll('.headsup-advisory-grid dd')
+    .find((node) => node.dataset.field === 'extent');
   // Metres, because that is the unit a third of a kilometre reads at.
   assert.match(extent.textContent, /^33\d m corridor$/);
 });

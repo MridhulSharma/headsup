@@ -3070,6 +3070,11 @@
   "{severity} of 5": "{severity} de 5",
   "{length} corridor": "corredor de {length}",
   "point": "punto",
-  "{remaining} ({clock}Z)": "{remaining} ({clock}Z)",
+  "ACTION": "ACCIÓN",
+  "ISSUER": "EMISOR",
+  "IN FORCE": "EN VIGOR",
+  "STANDBY": "EN ESPERA",
+  "+{count} unnamed": "+{count} sin fuente",
+  "Cited evidence that named no feed": "Evidencia citada que no nombró ninguna fuente",
   "none cited": "sin citar"
 }

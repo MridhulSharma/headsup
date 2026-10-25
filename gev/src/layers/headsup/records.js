@@ -209,6 +209,10 @@ export function normalizeTelemetryFrame(payload) {
  * route rather than to an area. Point geometry normalizes to a row with
  * neither, so an advisory this layer cannot yet draw is still counted and
  * labelled instead of silently dropped.
+ *
+ * An evidence row missing its `source` is kept with that one field null and
+ * logged, rather than rejecting the advisory; the comment at the evidence
+ * call below says why this path is the exception.
  * @param {unknown} feature Parsed `advisory.feature`.
  * @returns {object|null} One advisory row, or null when it is unusable.
  */
@@ -281,10 +285,27 @@ export function normalizeAdvisoryFeature(feature) {
   // The evidence rows themselves, not only how many there are. The advisory
   // card names the public feeds an advisory rests on, and reading them off a
   // neighbouring fusion frame instead would be the console inferring
-  // provenance rather than reporting what the advisory carried. A damaged
-  // row rejects the advisory, the same way it does for a fused hazard.
-  const evidence = evidenceRows(properties.evidence);
+  // provenance rather than reporting what the advisory carried.
+  //
+  // A row without a usable `source` is the one damage this path does NOT
+  // reject on. An advisory is the signed artefact the whole demo turns on,
+  // and dropping it whole would blank the card over a missing label on one
+  // citation: the hazard, the action, the window and the signature are all
+  // still exactly what the compiler published. The row is kept with its
+  // source null — the card then names the feeds it can and says how many it
+  // cannot — and the loss is logged, because an advisory whose provenance
+  // this layer could not read is a defect in the feed and not a quiet
+  // display choice. A fused hazard and a candidate still reject: there the
+  // evidence IS the record, so there is nothing else left to show.
+  const evidence = evidenceRows(properties.evidence, {
+    allowMissingSource: true,
+  });
   if (!evidence) return null;
+  const unnamed = evidence.filter((row) => row.source == null).length;
+  if (unnamed)
+    console.warn(
+      `[Data:HeadsUp] Advisory ${id}: ${unnamed} of ${evidence.length} evidence row(s) carry no usable "source"; rendering them with that field omitted.`,
+    );
 
   return {
     id,
@@ -349,18 +370,25 @@ function block(value, limit) {
  *
  * `source` is the field the rail's FEEDS row lights a chip for, so it is
  * the one that has to be an identifier rather than free text: a chip is a
- * claim about WHICH public feed an advisory rests on.
+ * claim about WHICH public feed an advisory rests on. A row that does not
+ * carry one therefore rejects the frame — except where the caller passes
+ * `allowMissingSource`, which keeps the row with `source: null` instead. The
+ * one caller that does is the advisory, and `normalizeAdvisoryFeature` says
+ * why.
  * @param {unknown} rows
+ * @param {object} [options]
+ * @param {boolean} [options.allowMissingSource] Keep a row whose `source` is
+ *   absent or unusable, with the field null, rather than rejecting the frame.
  * @returns {Array<object>|null} Rows, or null when any one is unusable.
  */
-function evidenceRows(rows) {
+function evidenceRows(rows, { allowMissingSource = false } = {}) {
   if (rows == null) return [];
   if (!Array.isArray(rows) || rows.length > MAX_EVIDENCE) return null;
   const normalized = [];
   for (const row of rows) {
     if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
     const source = identifier(row.source);
-    if (!source) return null;
+    if (!source && !allowMissingSource) return null;
     normalized.push({
       eventId: identifier(row.event_id),
       source,

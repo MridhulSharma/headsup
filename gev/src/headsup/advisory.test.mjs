@@ -158,9 +158,35 @@ test('the card reports the advisory`s own fields and its window', () => {
   // Distinct feeds, in the order the advisory cites them: a feed cited twice
   // is still one feed.
   assert.deepEqual(card.sources, ['nws', 'usgs']);
+  assert.equal(card.unnamedSources, 0);
   assert.equal(card.evidenceCount, 3);
   assert.equal(card.liveCount, 1);
   assert.ok(card.areaSqM > 0.97e6 && card.areaSqM < 1.03e6);
+});
+
+test('a citation this layer could not attribute is counted, not dropped', () => {
+  // `records.js` keeps an evidence row whose source it could not read, so the
+  // card has to say that one of the three citations names no feed. Reporting
+  // two feeds and nothing else would be a smaller claim than the advisory
+  // made.
+  const card = buildAdvisoryCard({
+    snapshot: {
+      advisories: [
+        advisory({
+          evidence: [
+            { source: 'nws', kind: 'nws.flood_warning' },
+            { source: null, kind: 'usgs.gauge' },
+            { source: 'nws', kind: 'nws.update' },
+          ],
+          evidenceCount: 3,
+        }),
+      ],
+    },
+    nowMs: 31_000,
+  });
+  assert.deepEqual(card.sources, ['nws']);
+  assert.equal(card.unnamedSources, 1);
+  assert.equal(card.evidenceCount, 3);
 });
 
 test('a compiler answer about another advisory is not read as this one`s', () => {

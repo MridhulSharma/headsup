@@ -204,9 +204,16 @@ export function buildAdvisoryCard({
       .at(-1) ?? null;
   // Distinct feeds, in the order the advisory lists them: which feeds it
   // rests on is the question, and a feed cited twice is still one feed.
+  //
+  // A citation whose source `records.js` could not read is counted rather
+  // than dropped: "two feeds" and "two feeds plus one we cannot name" are
+  // different claims about the same advisory, and the card says which it is.
   const sources = [];
-  for (const row of rows(active.evidence))
-    if (!sources.includes(row.source)) sources.push(row.source);
+  let unnamedSources = 0;
+  for (const row of rows(active.evidence)) {
+    if (row.source == null) unnamedSources += 1;
+    else if (!sources.includes(row.source)) sources.push(row.source);
+  }
   return Object.freeze({
     present: true,
     id: active.id,
@@ -225,6 +232,8 @@ export function buildAdvisoryCard({
     policyRule: active.policyRule,
     issuer: active.issuer,
     sources: Object.freeze(sources),
+    /** Citations this layer could not attribute to any feed. */
+    unnamedSources,
     evidenceCount: active.evidenceCount ?? rows(active.evidence).length,
     signature: signatureState(active, compile),
     /** How many are in force, so a card showing one does not imply one. */

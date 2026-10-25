@@ -3138,6 +3138,11 @@
   "{severity} of 5": "{severity} из 5",
   "{length} corridor": "коридор {length}",
   "point": "точка",
-  "{remaining} ({clock}Z)": "{remaining} ({clock}Z)",
+  "ACTION": "ДЕЙСТВИЕ",
+  "ISSUER": "КЕМ ВЫДАНО",
+  "IN FORCE": "ДЕЙСТВУЕТ",
+  "STANDBY": "ОЖИДАНИЕ",
+  "+{count} unnamed": "+{count} без источника",
+  "Cited evidence that named no feed": "Указанные свидетельства без названия источника",
   "none cited": "не указаны"
 }

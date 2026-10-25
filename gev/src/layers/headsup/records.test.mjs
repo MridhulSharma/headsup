@@ -243,6 +243,55 @@ test('an unsigned advisory is recorded as unsigned, not rejected', () => {
   );
 });
 
+test('an evidence row with no source keeps the advisory, minus the field', (t) => {
+  // An advisory is the signed artefact, and the hazard, the action, the
+  // window and the signature are not damaged by one citation that forgot to
+  // say which feed it came from. The row stays with `source` null and the
+  // loss is logged, rather than the card going blank over a label.
+  const warnings = [];
+  t.mock.method(console, 'warn', (...args) => warnings.push(args.join(' ')));
+  const row = normalizeAdvisoryFeature(
+    advisory(
+      {},
+      {
+        evidence: [
+          { event_id: 'nws-1', source: 'nws', kind: 'nws.flood_warning' },
+          { event_id: 'usgs-1', kind: 'usgs.gauge' },
+        ],
+      },
+    ),
+  );
+  assert.deepEqual(
+    row.evidence.map((cite) => cite.source),
+    ['nws', null],
+  );
+  // Still counted: the advisory rests on two citations whatever this layer
+  // can name them.
+  assert.equal(row.evidenceCount, 2);
+  assert.equal(row.hazardClass, 'FLOOD');
+  assert.equal(row.action, 'NO_ENTRY');
+  assert.equal(row.signed, true);
+  assert.equal(warnings.length, 1);
+  // The warning names the field and the advisory, so a feed defect is
+  // traceable from the console log alone.
+  assert.match(warnings[0], /adv-flood-1/);
+  assert.match(warnings[0], /"source"/);
+});
+
+test('a source that is present but not an identifier is also omitted', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const row = normalizeAdvisoryFeature(
+    advisory(
+      {},
+      { evidence: [{ event_id: 'nws-1', source: 'not a feed id' }] },
+    ),
+  );
+  // Omitted rather than kept as free text: a chip is a claim about WHICH
+  // public feed, and feed text in that slot would be the console repeating
+  // something it cannot check.
+  assert.equal(row.evidence[0].source, null);
+});
+
 test('an advisory outside the contract is rejected whole', () => {
   assert.equal(normalizeAdvisoryFeature(null), null);
   assert.equal(normalizeAdvisoryFeature(advisory({ type: 'Point' })), null);

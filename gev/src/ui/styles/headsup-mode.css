@@ -147,8 +147,25 @@ body.headsup-mode {
   --headsup-dock-bottom-height: 30vh;
   /* A pane's own inset. The dock carries no padding and no gap of its own:
      a pane's border IS the line between two regions, which is what keeps the
-     grid's arithmetic the plain percentages above. */
-  --headsup-pane-padding: 12px 14px;
+     grid's arithmetic the plain percentages above. The two axes are named
+     separately as well, because the advisory card's header band has to cancel
+     the inset to reach the pane's own edges. */
+  --headsup-pane-padding-y: 12px;
+  --headsup-pane-padding-x: 14px;
+  --headsup-pane-padding: var(--headsup-pane-padding-y)
+    var(--headsup-pane-padding-x);
+  /* The advisory card's alert surface, and only that. These are SURFACE reds
+     of their own rather than a wash of `--headsup-down`: that token means
+     "refused, unadvised" on the fleet rows and on the action line, and
+     spending it on a background would make a card's chrome look like a claim.
+     The label lane is shared by the card's grid terms and by the two labelled
+     rows outside it, so every label on the card starts at one x. */
+  --headsup-alert-edge: rgba(239, 71, 111, 0.55);
+  --headsup-alert-band: #6d101c;
+  --headsup-alert-wash: rgba(104, 16, 28, 0.9);
+  --headsup-alert-rule: rgba(255, 180, 190, 0.16);
+  --headsup-alert-text: #ffe6ea;
+  --headsup-advisory-label-width: 70px;
 }
 
 /* ── The rectangular viewport ────────────────────────────────────────────
@@ -1164,59 +1181,194 @@ body.headsup-mode {
 }
 
 /* ── Bottom right: the active advisory ───────────────────────────────── */
-/* Always on screen, including when nothing is in force. The action is the
-   line set largest, because it is the one thing the advisory ASKS FOR: a
-   hazard class describes the world, an action changes what a fleet does. */
+/* A public notice that is also a live alert, and the two readings are held
+   apart by the card's STATE. `[data-state='live']` gets the red gradient, the
+   defined edge and the header band; `[data-state='empty']` keeps the dock's
+   own surface and says, in one dim line, that nothing is in force. A card
+   that shouted either way would be an alert about nothing half the time, and
+   a wall display that shouts when nothing is wrong is one an operator stops
+   looking at — the globe beside it is what should hold the eye until an
+   advisory exists.
+
+   Every value sits on a labelled row. Nothing here is set below 9px, the
+   labels are mono and tracked out, and the values are a size up from them,
+   because this is read off a projector from the back of a room by somebody
+   who did not issue the advisory and cannot ask. */
+.headsup-advisory {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  /* The header band below cancels the pane's inset with negative margins, so
+     it is exactly as wide as the pane's padding box. Were a vertical
+     scrollbar ever to appear in here, that band would then be wider than the
+     content box and the pane would offer a sideways scroll as well. */
+  overflow-x: hidden;
+}
+
+/* The alert surface: the band's deep red at the top, falling to the dock's
+   own near-black, so the card reads as one notice with a head rather than as
+   a panel wearing a stripe. The outer glow is what lifts it off the HUD at a
+   distance, and is kept weak enough that the globe is still the brighter
+   thing on screen. */
+.headsup-advisory[data-state='live'] {
+  border-color: var(--headsup-alert-edge);
+  background: linear-gradient(
+    168deg,
+    var(--headsup-alert-wash) 0%,
+    rgba(26, 8, 12, 0.94) 58%,
+    rgba(10, 12, 18, 0.96) 100%
+  );
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 0 16px rgba(239, 71, 111, 0.14);
+}
+
+/* Nothing in force: the pane as the other three draw themselves. Stated
+   explicitly rather than left to the cascade, so the quiet state is a rule
+   somebody can read and not the absence of one. */
+.headsup-advisory[data-state='empty'] {
+  border-color: var(--headsup-border);
+  background: rgba(255, 255, 255, 0.02);
+  box-shadow: none;
+}
+
+/* The header band. It cancels the pane's own inset so the band reaches the
+   card's edges: a notice's head is the full width of the notice. */
 .headsup-advisory-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
+  margin: calc(-1 * var(--headsup-pane-padding-y))
+    calc(-1 * var(--headsup-pane-padding-x)) 1px;
+  padding: 7px var(--headsup-pane-padding-x) 6px;
+  border-bottom: 1px solid var(--headsup-border);
 }
 
 .headsup-advisory-header .headsup-block-title {
-  margin-bottom: 6px;
+  flex: 0 0 auto;
+  margin-bottom: 0;
+}
+
+.headsup-advisory[data-state='live'] .headsup-advisory-header {
+  border-bottom-color: var(--headsup-alert-edge);
+  background: linear-gradient(
+    90deg,
+    var(--headsup-alert-band) 0%,
+    rgba(109, 16, 28, 0.32) 100%
+  );
+}
+
+.headsup-advisory[data-state='live']
+  .headsup-advisory-header
+  .headsup-block-title {
+  color: var(--headsup-alert-text);
 }
 
 .headsup-advisory-id {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   font-family: var(--font-mono);
   font-size: 9px;
   letter-spacing: 0.6px;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--accent);
 }
 
+.headsup-advisory[data-state='live'] .headsup-advisory-id {
+  color: rgba(255, 230, 234, 0.78);
+}
+
+/* Whether anything is in force, as one word: the reading taken before any
+   field on the card is legible. */
+.headsup-advisory-state {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid var(--headsup-border);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.4px;
+  line-height: 1.2;
+  color: var(--text-dim);
+}
+
+.headsup-advisory[data-state='live'] .headsup-advisory-state {
+  border-color: var(--headsup-down);
+  background: var(--headsup-down);
+  color: #1b0409;
+}
+
+/* The label lane. The two labelled rows outside the grid use it too, so
+   ACTION, the six terms and EVIDENCE all start at the same x. */
+.headsup-advisory-field-label {
+  flex: 0 0 var(--headsup-advisory-label-width);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1.2px;
+  line-height: 1.6;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.headsup-advisory-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+/* The action is the one thing the advisory ASKS FOR — a hazard class
+   describes the world, an action changes what a fleet does — so it is set
+   largest, and boxed like a stamp on a notice. */
 .headsup-advisory-action {
-  margin: 0 0 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 2px 8px;
+  overflow: hidden;
+  border: 1px solid var(--headsup-border);
   font-family: var(--font-mono);
   font-size: 17px;
   font-weight: 600;
   letter-spacing: 1.4px;
-  line-height: 1.2;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--text-primary);
 }
 
 /* A refusal to enter is a different instruction from a speed limit, and the
    colour is keyed on the ACTION rather than on the hazard's severity: what a
-   fleet has to do is the thing this line carries. */
+   fleet has to do is the thing this line carries. On the red field the hue
+   moves to the stamp's border and fill and the text itself stays near-white —
+   a red word on a red card is the one thing here that must not be hard to
+   read. */
 .headsup-advisory-action[data-action='NO_ENTRY'],
 .headsup-advisory-action[data-action='PAUSE_SERVICE'] {
-  color: var(--headsup-down);
+  border-color: var(--headsup-down);
+  background: rgba(239, 71, 111, 0.26);
+  color: #ffd9e0;
 }
 
 .headsup-advisory-action[data-action='SPEED_CAP'],
 .headsup-advisory-action[data-action='ALL_WAY_STOP'],
 .headsup-advisory-action[data-action='DENSITY_CAP'],
 .headsup-advisory-action[data-action='KEEP_CLEAR'] {
-  color: var(--headsup-amber);
+  border-color: var(--headsup-amber);
+  background: rgba(255, 209, 102, 0.16);
+  color: #fff1d2;
 }
 
+/* The fields, as a form: a fixed label lane, values on one left edge, and a
+   hairline under each row so the eye can track across it at a distance. */
 .headsup-advisory-grid {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 3px 10px;
+  grid-template-columns: var(--headsup-advisory-label-width) 1fr;
+  gap: 0 10px;
   margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -1224,26 +1376,92 @@ body.headsup-mode {
 }
 
 .headsup-advisory-grid[hidden],
+.headsup-advisory-action-row[hidden],
 .headsup-advisory-action[hidden],
+.headsup-advisory-evidence[hidden],
 .headsup-advisory-empty[hidden] {
   display: none;
 }
 
+.headsup-advisory-grid :is(dt, dd) {
+  padding: 3px 0;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.headsup-advisory[data-state='live'] .headsup-advisory-grid :is(dt, dd) {
+  border-bottom-color: var(--headsup-alert-rule);
+}
+
 .headsup-advisory-grid dt {
+  font-size: 9px;
+  font-weight: 600;
   letter-spacing: 1.2px;
   color: var(--text-dim);
 }
 
 .headsup-advisory-grid dd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0;
   overflow-wrap: anywhere;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
+}
+
+/* Severity reads twice: as the number, and as five pips somebody can count
+   without reading one. The pips carry the COUNT only — the level is how many
+   are filled and never a hue of its own, so nothing here invents a band the
+   contract does not define. */
+.headsup-advisory-pips {
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 3px;
+}
+
+.headsup-advisory-pip {
+  width: 7px;
+  height: 11px;
+  border: 1px solid rgba(255, 255, 255, 0.26);
+}
+
+.headsup-advisory-pips[data-level='1'] .headsup-advisory-pip:nth-child(-n + 1),
+.headsup-advisory-pips[data-level='2'] .headsup-advisory-pip:nth-child(-n + 2),
+.headsup-advisory-pips[data-level='3'] .headsup-advisory-pip:nth-child(-n + 3),
+.headsup-advisory-pips[data-level='4'] .headsup-advisory-pip:nth-child(-n + 4),
+.headsup-advisory-pips[data-level='5'] .headsup-advisory-pip:nth-child(-n + 5) {
+  border-color: var(--headsup-down);
+  background: var(--headsup-down);
+}
+
+/* Time LEFT beside the instant the window closes. A countdown alone cannot be
+   checked against the clock on the wall, and an instant alone makes somebody
+   do the subtraction. */
+.headsup-advisory-countdown {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  color: var(--text-primary);
+}
+
+.headsup-advisory-expiry[data-urgency='imminent'] .headsup-advisory-countdown {
+  color: var(--headsup-amber);
+}
+
+.headsup-advisory-until {
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
 }
 
 /* The signature is three-valued and the third value is the honest default:
    amber for a signature nobody checked, green only for a check that RAN and
    passed, red for one that failed. Silence is never a yes. */
+.headsup-advisory-signature {
+  font-weight: 600;
+}
+
 .headsup-advisory-signature[data-signature='verified'] {
   color: var(--headsup-live);
 }
@@ -1255,6 +1473,61 @@ body.headsup-mode {
 .headsup-advisory-signature[data-signature='unverified'],
 .headsup-advisory-signature[data-signature='absent'] {
   color: var(--headsup-amber);
+}
+
+/* The feeds it rests on, one chip each: a count answers "how much evidence",
+   and a chip row answers "whose" — which is the question a public advisory
+   has to be able to answer. */
+.headsup-advisory-evidence {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.headsup-advisory-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.headsup-advisory-chip {
+  padding: 2px 6px;
+  border: 1px solid var(--headsup-border);
+  background: rgba(255, 255, 255, 0.05);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.headsup-advisory[data-state='live'] .headsup-advisory-chip {
+  border-color: rgba(255, 190, 200, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--headsup-alert-text);
+}
+
+/* A citation whose feed this layer could not read, and a card resting on no
+   cited feed at all. Both are drawn with a broken edge: the advisory said
+   something here that cannot be shown as a feed name, and a row left empty
+   would claim it said nothing. */
+.headsup-advisory[data-state='live'] .headsup-advisory-chip.is-unnamed {
+  border-style: dashed;
+  border-color: var(--headsup-amber);
+  background: rgba(255, 209, 102, 0.12);
+  color: var(--headsup-amber);
+}
+
+.headsup-advisory[data-state='live'] .headsup-advisory-chip.is-absent {
+  border-style: dashed;
+  border-color: var(--headsup-border);
+  background: none;
+  color: var(--text-dim);
 }
 
 .headsup-advisory-empty {

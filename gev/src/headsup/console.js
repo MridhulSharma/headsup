@@ -112,6 +112,15 @@ export const DECLINED_TAG = msg('DECLINED');
 const IDLE_REFRESH_MS = 1_000;
 
 /**
+ * When the advisory's remaining window reads as about to close.
+ *
+ * One minute, which is the horizon the countdown is refreshed often enough to
+ * be honest about: the card redraws on `IDLE_REFRESH_MS`, so "28s" is at most
+ * a second stale and a minute is sixty of those.
+ */
+const IMMINENT_EXPIRY_MS = 60_000;
+
+/**
  * Start the Heads Up console.
  * @param {object} options
  * @param {Readonly<object>} options.mode Mode config (`./mode.js`).
@@ -504,6 +513,12 @@ export function startHeadsupConsole({
   // reads off a wall at a glance is whether an advisory is live and what it
   // asks for, and a card that appears only when one exists makes its absence
   // something you have to notice rather than something you are told.
+  // It is laid out as a NOTICE and not as a readout: a header band saying
+  // what the card is and whether anything is in force, the action on its own
+  // line because it is the one thing the advisory asks for, then one labelled
+  // row per field, read top to bottom. Every field is labelled even where the
+  // value would be guessable, because this is read off a wall by somebody who
+  // did not issue it.
   const advisoryHeader = element(
     'div',
     'headsup-advisory-header',
@@ -514,26 +529,108 @@ export function startHeadsupConsole({
   // The advisory's own id, and how many are in force: a card showing one
   // advisory must not be read as the claim that there is only one.
   const advisoryIdNode = element('span', 'headsup-advisory-id', advisoryHeader);
-  const advisoryAction = element('p', 'headsup-advisory-action', advisoryBlock);
+  // Whether anything is in force at all, as one word in the band — the
+  // reading somebody takes at three metres before any field is legible.
+  const advisoryState = element(
+    'span',
+    'headsup-advisory-state',
+    advisoryHeader,
+  );
+  const advisoryActionRow = element(
+    'div',
+    'headsup-advisory-action-row',
+    advisoryBlock,
+  );
+  const advisoryActionLabel = element(
+    'span',
+    'headsup-advisory-field-label',
+    advisoryActionRow,
+  );
+  advisoryActionLabel.textContent = t('ACTION');
+  const advisoryAction = element(
+    'p',
+    'headsup-advisory-action',
+    advisoryActionRow,
+  );
   const advisoryGrid = element('dl', 'headsup-advisory-grid', advisoryBlock);
-  const advisoryEmpty = element('p', 'headsup-advisory-empty', advisoryBlock);
 
-  /** One `term / value` cell, rewritten on every render rather than rebuilt. */
-  const advisoryCell = (labelText, className) => {
+  /**
+   * One `term / value` cell, rewritten on every render rather than rebuilt.
+   *
+   * A cell that holds its own child spans is built EMPTY: a placeholder dash
+   * set as text would still be sitting beside them on every later render.
+   */
+  const advisoryCell = (field, labelText, className, placeholder = '—') => {
     const key = element('dt', null, advisoryGrid);
     key.textContent = labelText;
     const value = element('dd', className, advisoryGrid);
-    value.textContent = '—';
+    // The field is named on the node as well as beside it, so a test and a
+    // stylesheet address a row by what it carries rather than by its index.
+    value.dataset.field = field;
+    value.textContent = placeholder;
     return value;
   };
   const advisoryCells = Object.freeze({
-    hazard: advisoryCell(t('HAZARD')),
-    severity: advisoryCell(t('SEVERITY')),
-    extent: advisoryCell(t('AREA')),
-    expiry: advisoryCell(t('EXPIRES')),
-    sources: advisoryCell(t('EVIDENCE')),
-    signature: advisoryCell(t('SIGNATURE'), 'headsup-advisory-signature'),
+    hazard: advisoryCell('hazard', t('HAZARD')),
+    severity: advisoryCell('severity', t('SEVERITY'), null, ''),
+    extent: advisoryCell('extent', t('AREA')),
+    expiry: advisoryCell('expiry', t('EXPIRES'), 'headsup-advisory-expiry', ''),
+    issuer: advisoryCell('issuer', t('ISSUER')),
+    signature: advisoryCell(
+      'signature',
+      t('SIGNATURE'),
+      'headsup-advisory-signature',
+    ),
   });
+  // Severity reads twice: as the number, and as five pips somebody can count
+  // without reading one. The pips are a VIEW of the same field and not a
+  // second claim, so they are driven by that one value and are hidden from a
+  // screen reader, which already has the number.
+  const advisorySeverityText = element(
+    'span',
+    'headsup-advisory-severity-text',
+    advisoryCells.severity,
+  );
+  const advisoryPips = element(
+    'span',
+    'headsup-advisory-pips',
+    advisoryCells.severity,
+  );
+  advisoryPips.setAttribute('aria-hidden', 'true');
+  for (let index = 0; index < 5; index++)
+    element('span', 'headsup-advisory-pip', advisoryPips);
+  // The window reads as time LEFT beside the instant it ends: a countdown
+  // alone cannot be checked against a clock on a wall, and an instant alone
+  // makes somebody do the subtraction.
+  const advisoryCountdown = element(
+    'span',
+    'headsup-advisory-countdown',
+    advisoryCells.expiry,
+  );
+  const advisoryUntil = element(
+    'span',
+    'headsup-advisory-until',
+    advisoryCells.expiry,
+  );
+  // The feeds it rests on, as a chip row under the fields: a chip per feed is
+  // countable at a glance, which a comma-separated line is not.
+  const advisoryEvidence = element(
+    'div',
+    'headsup-advisory-evidence',
+    advisoryBlock,
+  );
+  const advisoryEvidenceLabel = element(
+    'span',
+    'headsup-advisory-field-label',
+    advisoryEvidence,
+  );
+  advisoryEvidenceLabel.textContent = t('EVIDENCE');
+  const advisoryChips = element(
+    'div',
+    'headsup-advisory-chips',
+    advisoryEvidence,
+  );
+  const advisoryEmpty = element('p', 'headsup-advisory-empty', advisoryBlock);
 
   // ── Bottom left: STATUS, the counter strip ──────────────────────────────
   //
@@ -1365,21 +1462,30 @@ export function startHeadsupConsole({
     absent: msg('absent'),
   });
 
+  /** The chip row's current contents, so it is rebuilt only when it changes. */
+  let advisoryChipKey = null;
+
   /**
    * Draw the advisory card.
    *
    * The cells exist from the start and only their text changes, so a card
    * refreshed twice a second never rebuilds under a pointer — the same rule
-   * the rail's rows keep. The empty state swaps two nodes rather than
-   * emptying the grid, because "no advisory in force" is a reading and not a
-   * blank.
+   * the rail's rows keep. The chip row is the one part that is rebuilt, and
+   * only when the set of feeds it names actually changes. The empty state
+   * swaps two nodes rather than emptying the grid, because "no advisory in
+   * force" is a reading and not a blank — and the card drops back to the
+   * dock's own surface while it holds one: a red notice standing over an
+   * empty window is an alert about nothing, and a wall that shouts when
+   * nothing is wrong teaches an operator to stop looking at it.
    */
   const renderAdvisory = (feed, view) => {
     const card_ = buildAdvisoryCard({ snapshot: feed, view, nowMs: now() });
     advisoryBlock.dataset.state = card_.present ? 'live' : 'empty';
     advisoryEmpty.hidden = card_.present;
-    advisoryAction.hidden = !card_.present;
+    advisoryActionRow.hidden = !card_.present;
     advisoryGrid.hidden = !card_.present;
+    advisoryEvidence.hidden = !card_.present;
+    advisoryState.textContent = card_.present ? t('IN FORCE') : t('STANDBY');
     if (!card_.present) {
       advisoryIdNode.textContent = '';
       // Three different nothings, and they are different claims: no feed, a
@@ -1406,9 +1512,10 @@ export function startHeadsupConsole({
           })
         : card_.id;
     advisoryCells.hazard.textContent = card_.hazardClass;
-    advisoryCells.severity.textContent = t('{severity} of 5', {
+    advisorySeverityText.textContent = t('{severity} of 5', {
       severity: card_.severity,
     });
+    advisoryPips.dataset.level = String(card_.severity);
     // Area for a polygon, length for a corridor: a `KEEP_CLEAR` over two
     // closed lanes covers no area, and a reported 0 m² would be a
     // measurement of something nobody measured.
@@ -1422,17 +1529,47 @@ export function startHeadsupConsole({
           ? t('{length} corridor', { length: formatLength(card_.lengthM) })
           : t('point');
     advisoryCells.extent.textContent = extentText;
-    advisoryCells.expiry.textContent = t('{remaining} ({clock}Z)', {
-      remaining: formatRemaining(card_.expiresInMs),
-      clock: new Date(card_.validUntil).toISOString().slice(11, 19),
-    });
-    // The feeds it rests on, named as the advisory named them. A count on its
-    // own would answer "how much evidence" and not "whose".
-    advisoryCells.sources.textContent = card_.sources.length
-      ? card_.sources.map((source) => feedName(source)).join(', ')
-      : t('none cited');
+    // The clock is the advisory's own `valid_until`; the countdown beside it
+    // is this page's subtraction from it, re-read on every refresh.
+    advisoryCountdown.textContent = formatRemaining(card_.expiresInMs);
+    advisoryUntil.textContent = new Date(card_.validUntil)
+      .toISOString()
+      .slice(11, 19)
+      .concat('Z');
+    advisoryCells.expiry.dataset.urgency =
+      card_.expiresInMs < IMMINENT_EXPIRY_MS ? 'imminent' : 'open';
+    // Who issued it. An advisory that did not say is shown as not having
+    // said, because the issuer is half of what a signature is a claim about.
+    advisoryCells.issuer.textContent = card_.issuer ?? '—';
     advisoryCells.signature.textContent = t(SIGNATURE_TEXT[card_.signature]);
     advisoryCells.signature.dataset.signature = card_.signature;
+    // The feeds it rests on, named as the advisory named them. A count on its
+    // own would answer "how much evidence" and not "whose" — and a citation
+    // whose source this layer could not read is its own chip rather than a
+    // silent omission, so the row never claims fewer citations than arrived.
+    const chipKey = `${card_.sources.join('|')}+${card_.unnamedSources}`;
+    if (chipKey !== advisoryChipKey) {
+      advisoryChipKey = chipKey;
+      const chips = card_.sources.map((source) => {
+        const chip = element('span', 'headsup-advisory-chip');
+        chip.textContent = feedName(source);
+        return chip;
+      });
+      if (card_.unnamedSources) {
+        const chip = element('span', 'headsup-advisory-chip is-unnamed');
+        chip.textContent = t('+{count} unnamed', {
+          count: card_.unnamedSources,
+        });
+        chip.title = t('Cited evidence that named no feed');
+        chips.push(chip);
+      }
+      if (!chips.length) {
+        const chip = element('span', 'headsup-advisory-chip is-absent');
+        chip.textContent = t('none cited');
+        chips.push(chip);
+      }
+      advisoryChips.replaceChildren(...chips);
+    }
   };
 
   // ── Readouts ────────────────────────────────────────────────────────────
