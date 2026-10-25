@@ -28,6 +28,7 @@
  *
  *   node scripts/qa-headsup-load.mjs
  *   node scripts/qa-headsup-load.mjs --url http://localhost:4173 --seconds 60
+ *   node scripts/qa-headsup-load.mjs --width 1600 --height 960
  *   node scripts/qa-headsup-load.mjs --no-feed --headful
  *
  * Headless by default, with occlusion throttling disabled so the frame clock
@@ -54,6 +55,16 @@ const has = (name) => argv.includes(`--${name}`);
 
 const url = flag('url', 'http://localhost:4173');
 const seconds = Number(flag('seconds', 60));
+/**
+ * The page viewport the run is measured at.
+ *
+ * It is a parameter because the rasterized area IS what is being paid for:
+ * Heads Up mode draws the globe into the left 55% of the window, so a reading
+ * is only comparable to another one taken at the same size. The default is the
+ * 1920x1080 the layout contract is stated at (src/headsup/layout.test.mjs).
+ */
+const width = Number(flag('width', 1920));
+const height = Number(flag('height', 1080));
 const port = Number(flag('port', 8766));
 const startFeed = !has('no-feed');
 const headless = !has('headful');
@@ -141,7 +152,7 @@ try {
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--window-size=1600,1000',
+      `--window-size=${width},${height + 40}`,
       // Never let background or occlusion throttling freeze rAF: the whole
       // measurement depends on an honest frame clock.
       '--disable-backgrounding-occluded-windows',
@@ -150,7 +161,7 @@ try {
     ],
   });
   const page = await browser.newPage();
-  await page.setViewport({ width: 1600, height: 960 });
+  await page.setViewport({ width, height });
   page.on('pageerror', (error) => console.log(`  [page] ${error.message}`));
   await page.goto(`${url}/?mode=headsup`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => !!window.__godsEyeView?.viewer, {
@@ -210,6 +221,7 @@ try {
       `\nOnly ${reached.vehicles ?? 0} of ${EXPECT_VEHICLES} vehicles arrived; ` +
         'measuring what did.',
     );
+  console.log(`Viewport: ${width}x${height}`);
   console.log(
     `Feed: ${reached.endpoint ?? 'unknown'}` +
       `${reached.fallback ? ' (fallback)' : ''}`,
@@ -298,6 +310,7 @@ console.log(`  mean         ${mean.toFixed(1)} fps`);
 console.log(`  max          ${fps.at(-1)} fps`);
 console.log(`  vehicles     ${peakVehicles} (expected ${EXPECT_VEHICLES})`);
 console.log(`  trails       ${peakTrails} (expected ${EXPECT_TRAILS})`);
+console.log(`  viewport     ${width}x${height}`);
 
 // The p5 rather than the minimum: one stalled second during a tile load is
 // not the steady state the budget is about, and the minimum would make the

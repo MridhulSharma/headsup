@@ -1,25 +1,33 @@
 /**
  * The Heads Up console: the chrome `?mode=headsup` puts over the fork.
  *
- * This module only ADDS. It retitles two panel headers, appends its own
- * children into four surfaces upstream already owns, and builds three of its
- * own. Nothing upstream is removed, and nothing upstream's own code holds a
- * reference to is replaced — `#active-style-name`, `#hud-gsd`, `#scene-select`
- * and the rest all stay in the document, hidden by
- * `src/ui/styles/headsup-mode.css` from the single `body.headsup-mode` hook.
- * That is the whole reason a `git subtree pull` stays a clean merge.
+ * This module only ADDS. It builds its own dock and its own banner, and
+ * touches no upstream node at all. Nothing upstream is removed, and nothing
+ * upstream's own code holds a reference to is replaced — `#data-toggles`,
+ * `#active-style-name`, `#hud-gsd`, `#scene-select` and the rest all stay in
+ * the document, hidden by `src/ui/styles/headsup-mode.css` from the single
+ * `body.headsup-mode` hook. That is the whole reason a `git subtree pull`
+ * stays a clean merge.
  *
- * Surfaces, in the order the build step names them:
+ * The screen is split: the globe draws into a rectangular viewport filling the
+ * left 60% of the window, and everything this console says sits in a dock
+ * filling the right 40% — a top row 70% of the window high, split into two
+ * columns of 20% window width each, over a bottom row 30% high carrying two
+ * panes across the dock's whole width.
  *
- * | Upstream surface | Heads Up use |
+ * | Pane | Heads Up use |
  * | --- | --- |
- * | `#data-panel` / `#data-toggles` | Hazards, one row per fleet, the ghost fleet, corridors |
- * | `#scene-panel` | a Test Scene button and its picker |
- * | `#style-indicator` (top right) | scenario name, sim clock, replay speed |
- * | `.hud-bottom-right` | the counter strip |
- * | (new) `#headsup-banner` | the what-if provenance line |
- * | (new) `#headsup-pipeline-rail` | the agent rail and its stage cards |
- * | (new) `#headsup-scene-picker` | the scenario dialog |
+ * | `#headsup-controls` (top left) | the control panel: one launch button per test scene, the sim clock, replay speed, the scripted badge and Exit, then the cohort toggles and the legend |
+ * | `#headsup-pipeline-rail` (top right) | the agent workflow map and its stage cards |
+ * | `#headsup-status` (bottom left) | STATUS: the counter strip |
+ * | `#headsup-advisory` (bottom right) | the active advisory, always on screen |
+ * | `#headsup-banner` | the what-if provenance line |
+ *
+ * `#data-panel`, `#scene-panel`, `#style-indicator` and the HUD's bottom-right
+ * corner hosted four of these before the dock existed. They are left exactly
+ * as upstream built them and hidden by the stylesheet, not rebuilt or emptied
+ * — including the cohort rows, which used to be appended into upstream's
+ * `#data-toggles` and are built in this console's own control panel instead.
  *
  * Every string a person reads goes through `t()`. Every string that came off
  * the feed — a scenario name, a city, an operator id, a critic's reason, a
@@ -27,15 +35,26 @@
  * bounded by the grammar in `./scenarios.js` and
  * `../layers/headsup/records.js` before it arrives here.
  *
- * **The rail is event-driven, never timed.** Every row, chip and card is
+ * **The rail is event-driven, never timed.** Every node, chip and card is
  * rendered from `./pipeline.js`, which reads the socket's own transcript: a
- * stage is lit because a frame for it arrived. There is no animation, no
- * progress bar and no stage that advances on a clock, because the rail's
- * whole job is to be a record of what the agents actually did.
+ * node is lit because a frame for it arrived. There is no progress bar and no
+ * stage that advances on a clock, because the rail's whole job is to be a
+ * record of what the agents actually did.
+ *
+ * The rail draws that record as a **workflow map**: the agents as labelled
+ * nodes down one spine, each joined to the next by a directed edge, so the
+ * route a signal takes — Feeds, Sentinels, Fusion, Proposer, Critic,
+ * Compiler, Operators — is on screen without anybody having to narrate it.
+ * The map changes the PRESENTATION and nothing else: a node still lights from
+ * its own event and stays lit, and the single animation in it is a one-shot
+ * pulse down the edge a frame just arrived over, fired by that arrival. The
+ * node the pipeline is AT is drawn differently from the ones behind it, which
+ * is a reading of the records themselves (the furthest node that has
+ * reported) and never of elapsed time.
  * @module headsup/console
  */
 
-import { msg, t } from '../i18n/index.js';
+import { msg, t, tn } from '../i18n/index.js';
 import {
   FEED_LABELS,
   PIPELINE_STAGES,
@@ -43,6 +62,7 @@ import {
   buildPipelineView,
   sampleAssistQueue,
 } from './pipeline.js';
+import { buildAdvisoryCard } from './advisory.js';
 import { ScenarioApiError } from './scenarios.js';
 
 export { PIPELINE_STAGES } from './pipeline.js';
@@ -103,6 +123,15 @@ export const DECLINED_TAG = msg('DECLINED');
 const IDLE_REFRESH_MS = 1_000;
 
 /**
+ * When the advisory's remaining window reads as about to close.
+ *
+ * One minute, which is the horizon the countdown is refreshed often enough to
+ * be honest about: the card redraws on `IDLE_REFRESH_MS`, so "28s" is at most
+ * a second stale and a minute is sixty of those.
+ */
+const IMMINENT_EXPIRY_MS = 60_000;
+
+/**
  * Start the Heads Up console.
  * @param {object} options
  * @param {Readonly<object>} options.mode Mode config (`./mode.js`).
@@ -135,7 +164,8 @@ export function startHeadsupConsole({
   let running = null;
   /** The operator ids the fleet rows were last built for. */
   let renderedOperators = '';
-  let pickerBusy = false;
+  /** True while a launch call is in flight, so two presses are one. */
+  let launchBusy = false;
   const controller = new AbortController();
   if (signal) signal.addEventListener('abort', () => destroy(), { once: true });
 
@@ -170,13 +200,62 @@ export function startHeadsupConsole({
     hud.setMode('on');
   }
 
-  // ── Left panel: the Heads Up layers ─────────────────────────────────────
+  // ── The dock: the right 40%, in four panes ──────────────────────────────
+  //
+  // One fixed column beside the viewport rather than four surfaces scattered
+  // over the globe: a top row 70% of the window high, split into two columns
+  // of 20% window width — the control panel, then the agent rail — over a
+  // bottom row 30% high carrying STATUS and the active advisory.
+  //
+  // The four panes are created here, in the order they are read, and filled
+  // further down. Each is placed in a NAMED grid area by the stylesheet
+  // rather than by its position in this list, because the rail is hidden on
+  // the landing view: an auto-placed grid would pull STATUS up into the
+  // column the rail had just vacated.
+  const dock = mount(element('aside', 'headsup-dock'), doc.body);
+  dock.id = 'headsup-dock';
+  dock.setAttribute('aria-label', t('Heads Up console'));
 
-  const dataPanel = doc.getElementById('data-panel');
-  const dataTitle = dataPanel?.querySelector('.panel-title');
-  const previousDataTitle = dataTitle?.textContent ?? null;
-  if (dataTitle) dataTitle.textContent = t('HEADS UP LAYERS');
-  const toggles = doc.getElementById('data-toggles');
+  // Top left: everything a person can press, in one pane — the scenario
+  // picker, then the cohort toggles, then the legend. The cohort rows used to
+  // be appended into upstream's `#data-toggles`, which put the controls for
+  // this console on the far side of the globe from the console itself. That
+  // panel is left in the document and hidden by the stylesheet; nothing
+  // upstream built is moved or emptied.
+  const controlPanel = element(
+    'section',
+    'headsup-block headsup-controls',
+    dock,
+  );
+  controlPanel.id = 'headsup-controls';
+  const sceneBlock = element(
+    'section',
+    'headsup-control-group headsup-scenes',
+    controlPanel,
+  );
+  const layersGroup = element(
+    'section',
+    'headsup-control-group headsup-layers',
+    controlPanel,
+  );
+  // Top right: the agent rail, which grows with what the pipeline says and
+  // scrolls inside its own region.
+  const rail = element('aside', 'headsup-rail headsup-block', dock);
+  // Bottom left: STATUS. Bottom right: the advisory in force.
+  const stripBlock = element('section', 'headsup-block headsup-strip', dock);
+  stripBlock.id = 'headsup-status';
+  const advisoryBlock = element(
+    'section',
+    'headsup-block headsup-advisory',
+    dock,
+  );
+  advisoryBlock.id = 'headsup-advisory';
+
+  // ── The control panel: the Heads Up layers ──────────────────────────────
+
+  const layersTitle = element('h2', 'headsup-block-title', layersGroup);
+  layersTitle.textContent = t('HEADS UP LAYERS');
+  const toggles = element('div', 'headsup-toggle-list', layersGroup);
   const cohortRows = new Map();
   let fleetGroup = null;
 
@@ -390,49 +469,28 @@ export function startHeadsupConsole({
     }
   };
 
-  // ── Left panel: the Test Scene button ───────────────────────────────────
-
-  const scenePanel = doc.getElementById('scene-panel');
-  const sceneTitle = scenePanel?.querySelector('.panel-title');
-  const previousSceneTitle = sceneTitle?.textContent ?? null;
-  if (sceneTitle) sceneTitle.textContent = t('TEST SCENE');
-  const sceneInner = scenePanel?.querySelector('.scene-panel-inner');
-  const sceneLaunch = sceneInner
-    ? mount(element('div', 'headsup-scene-launch'), sceneInner)
-    : null;
-  const openButton = sceneLaunch
-    ? element('button', 'headsup-scene-btn', sceneLaunch)
-    : null;
-  if (openButton) {
-    openButton.type = 'button';
-    openButton.textContent = t('OPEN TEST SCENE');
-    openButton.title = t('Pick a what-if replay to run');
-  }
-  const exitButton = sceneLaunch
-    ? element('button', 'headsup-scene-btn headsup-scene-exit', sceneLaunch)
-    : null;
-  if (exitButton) {
-    exitButton.type = 'button';
-    exitButton.textContent = t('EXIT SCENE');
-    exitButton.title = t('Stop the replay and fly back to the landing view');
-    exitButton.hidden = true;
-  }
-  const sceneStatus = sceneLaunch
-    ? element('p', 'headsup-scene-status', sceneLaunch)
-    : null;
+  // ── The control panel: the scenario picker ──────────────────────────────
+  //
+  // One button per test scene, launched directly. The dialog this replaced
+  // asked a person to open a list before they could see what was on it; the
+  // whole list is three entries long, and on a wall display a modal over the
+  // globe is one more thing to dismiss.
+  const scenesTitle = element('h2', 'headsup-block-title', sceneBlock);
+  scenesTitle.textContent = t('TEST SCENE');
+  const sceneList = element('div', 'headsup-scene-list', sceneBlock);
+  const sceneStatus = element('p', 'headsup-scene-status', sceneBlock);
+  sceneStatus.setAttribute('role', 'status');
+  /** The launch buttons, by scenario id, so a launch can mark its own busy. */
+  const sceneButtons = new Map();
+  /** The scenario ids the list was last built for. */
+  let renderedScenes = '';
 
   const setSceneStatus = (text) => {
-    if (sceneStatus) sceneStatus.textContent = text ?? '';
+    sceneStatus.textContent = text ?? '';
   };
 
-  // ── Top right: scenario, sim clock, replay speed ────────────────────────
-
-  const styleIndicator = doc.getElementById('style-indicator');
-  const readout = styleIndicator
-    ? mount(element('div', 'headsup-readout'), styleIndicator)
-    : null;
+  const readout = element('div', 'headsup-readout', sceneBlock);
   const readoutRow = (labelText) => {
-    if (!readout) return null;
     const row = element('div', 'headsup-readout-row', readout);
     const key = element('span', 'headsup-readout-label', row);
     key.textContent = labelText;
@@ -444,13 +502,155 @@ export function startHeadsupConsole({
   const clockValue = readoutRow(t('SIM CLOCK'));
   const speedValue = readoutRow(t('REPLAY'));
 
-  // ── Bottom right: the counter strip ─────────────────────────────────────
+  const sceneFooter = element('div', 'headsup-scene-footer', sceneBlock);
+  // The scripted badge, driven by the scenario's own `scripted` flag rather
+  // than by which scenario it is: a replay whose events were written for the
+  // demo has to say so, and only the feed knows which replays those are.
+  const scriptedBadge = element('span', 'headsup-scripted-badge', sceneFooter);
+  scriptedBadge.textContent = t(SCRIPTED_BADGE);
+  scriptedBadge.title = t(
+    'The events in this replay were written, not observed',
+  );
+  scriptedBadge.hidden = true;
+  const exitButton = element('button', 'headsup-scene-exit', sceneFooter);
+  exitButton.type = 'button';
+  exitButton.textContent = t('EXIT SCENE');
+  exitButton.title = t('Stop the replay and fly back to the landing view');
+  exitButton.hidden = true;
 
-  const hudBottomRight = doc.querySelector('#intel-hud .hud-bottom-right');
-  const hudContent = hudBottomRight?.querySelector('.hud-content');
-  const strip = hudContent
-    ? mount(element('div', 'headsup-counters'), hudContent)
-    : null;
+  // ── Bottom right: the active advisory ───────────────────────────────────
+  //
+  // Always on screen, including when nothing is in force: what an operator
+  // reads off a wall at a glance is whether an advisory is live and what it
+  // asks for, and a card that appears only when one exists makes its absence
+  // something you have to notice rather than something you are told.
+  // It is laid out as a NOTICE and not as a readout: a header band saying
+  // what the card is and whether anything is in force, the action on its own
+  // line because it is the one thing the advisory asks for, then one labelled
+  // row per field, read top to bottom. Every field is labelled even where the
+  // value would be guessable, because this is read off a wall by somebody who
+  // did not issue it.
+  const advisoryHeader = element(
+    'div',
+    'headsup-advisory-header',
+    advisoryBlock,
+  );
+  const advisoryTitle = element('h2', 'headsup-block-title', advisoryHeader);
+  advisoryTitle.textContent = t('ACTIVE ADVISORY');
+  // The advisory's own id, and how many are in force: a card showing one
+  // advisory must not be read as the claim that there is only one.
+  const advisoryIdNode = element('span', 'headsup-advisory-id', advisoryHeader);
+  // Whether anything is in force at all, as one word in the band — the
+  // reading somebody takes at three metres before any field is legible.
+  const advisoryState = element(
+    'span',
+    'headsup-advisory-state',
+    advisoryHeader,
+  );
+  const advisoryActionRow = element(
+    'div',
+    'headsup-advisory-action-row',
+    advisoryBlock,
+  );
+  const advisoryActionLabel = element(
+    'span',
+    'headsup-advisory-field-label',
+    advisoryActionRow,
+  );
+  advisoryActionLabel.textContent = t('ACTION');
+  const advisoryAction = element(
+    'p',
+    'headsup-advisory-action',
+    advisoryActionRow,
+  );
+  const advisoryGrid = element('dl', 'headsup-advisory-grid', advisoryBlock);
+
+  /**
+   * One `term / value` cell, rewritten on every render rather than rebuilt.
+   *
+   * A cell that holds its own child spans is built EMPTY: a placeholder dash
+   * set as text would still be sitting beside them on every later render.
+   */
+  const advisoryCell = (field, labelText, className, placeholder = '—') => {
+    const key = element('dt', null, advisoryGrid);
+    key.textContent = labelText;
+    const value = element('dd', className, advisoryGrid);
+    // The field is named on the node as well as beside it, so a test and a
+    // stylesheet address a row by what it carries rather than by its index.
+    value.dataset.field = field;
+    value.textContent = placeholder;
+    return value;
+  };
+  const advisoryCells = Object.freeze({
+    hazard: advisoryCell('hazard', t('HAZARD')),
+    severity: advisoryCell('severity', t('SEVERITY'), null, ''),
+    extent: advisoryCell('extent', t('AREA')),
+    expiry: advisoryCell('expiry', t('EXPIRES'), 'headsup-advisory-expiry', ''),
+    issuer: advisoryCell('issuer', t('ISSUER')),
+    signature: advisoryCell(
+      'signature',
+      t('SIGNATURE'),
+      'headsup-advisory-signature',
+    ),
+  });
+  // Severity reads twice: as the number, and as five pips somebody can count
+  // without reading one. The pips are a VIEW of the same field and not a
+  // second claim, so they are driven by that one value and are hidden from a
+  // screen reader, which already has the number.
+  const advisorySeverityText = element(
+    'span',
+    'headsup-advisory-severity-text',
+    advisoryCells.severity,
+  );
+  const advisoryPips = element(
+    'span',
+    'headsup-advisory-pips',
+    advisoryCells.severity,
+  );
+  advisoryPips.setAttribute('aria-hidden', 'true');
+  for (let index = 0; index < 5; index++)
+    element('span', 'headsup-advisory-pip', advisoryPips);
+  // The window reads as time LEFT beside the instant it ends: a countdown
+  // alone cannot be checked against a clock on a wall, and an instant alone
+  // makes somebody do the subtraction.
+  const advisoryCountdown = element(
+    'span',
+    'headsup-advisory-countdown',
+    advisoryCells.expiry,
+  );
+  const advisoryUntil = element(
+    'span',
+    'headsup-advisory-until',
+    advisoryCells.expiry,
+  );
+  // The feeds it rests on, as a chip row under the fields: a chip per feed is
+  // countable at a glance, which a comma-separated line is not.
+  const advisoryEvidence = element(
+    'div',
+    'headsup-advisory-evidence',
+    advisoryBlock,
+  );
+  const advisoryEvidenceLabel = element(
+    'span',
+    'headsup-advisory-field-label',
+    advisoryEvidence,
+  );
+  advisoryEvidenceLabel.textContent = t('EVIDENCE');
+  const advisoryChips = element(
+    'div',
+    'headsup-advisory-chips',
+    advisoryEvidence,
+  );
+  const advisoryEmpty = element('p', 'headsup-advisory-empty', advisoryBlock);
+
+  // ── Bottom left: STATUS, the counter strip ──────────────────────────────
+  //
+  // The pane carries a title, because a corner of a wall display holding four
+  // numbers has to say what they are the status OF — and the cells wrap into
+  // a grid rather than a row, since the pane is a fifth of the window wide.
+  const statusTitle = element('h2', 'headsup-block-title', stripBlock);
+  statusTitle.textContent = t('STATUS');
+  const strip = element('div', 'headsup-counters', stripBlock);
   /** @type {Map<string, object>} One entry per counter cell. */
   const counterCells = new Map();
   /** @type {Array<{at: number, live: number, ghost: number}>} */
@@ -462,9 +662,9 @@ export function startHeadsupConsole({
    * One sparkline column: the ghost queue behind the live one.
    *
    * Two bars per column rather than a stack, because the two cohorts are a
-   * COMPARISON and not a total — stacking them would draw a number nobody
-   * is claiming. Heights are CSS custom properties, so a sample costs two
-   * property writes and no layout of ours.
+   * COMPARISON and not a total — stacking them would draw their sum, which is
+   * a number nobody is claiming. Heights are CSS custom properties, so a
+   * sample costs two property writes and no layout of ours.
    */
   const sparkColumn = (parent) => {
     const column = element('div', 'headsup-spark-col', parent);
@@ -475,45 +675,38 @@ export function startHeadsupConsole({
     };
   };
 
-  if (strip)
-    for (const counter of HEADSUP_COUNTERS) {
-      const cell = element('div', 'headsup-counter', strip);
-      cell.dataset.counter = counter.key;
-      const value = element('strong', 'headsup-counter-value', cell);
-      const entry = { value, live: null, ghost: null };
-      if (counter.pair) {
-        // Three nodes, so the stylesheet can colour the ghost side on its
-        // own: the comparison is the reading, not the pair of digits.
-        entry.live = element('span', 'headsup-counter-live', value);
-        entry.live.textContent = '—';
-        const separator = element('span', 'headsup-counter-split', value);
-        separator.textContent = '/';
-        separator.setAttribute('aria-hidden', 'true');
-        entry.ghost = element('span', 'headsup-counter-ghost', value);
-        entry.ghost.textContent = '—';
-      } else value.textContent = '0';
-      const name = element('span', 'headsup-counter-label', cell);
-      name.textContent = t(counter.label);
-      if (counter.spark) {
-        const spark = element('div', 'headsup-spark', cell);
-        spark.title = t('Assist queue, last {count} seconds', {
-          count: SPARKLINE_SAMPLES,
-        });
-        for (let index = 0; index < SPARKLINE_SAMPLES; index++)
-          sparkColumns.push(sparkColumn(spark));
-      }
-      counterCells.set(counter.key, entry);
+  for (const counter of HEADSUP_COUNTERS) {
+    const cell = element('div', 'headsup-counter', strip);
+    cell.dataset.counter = counter.key;
+    const value = element('strong', 'headsup-counter-value', cell);
+    const entry = { value, live: null, ghost: null };
+    if (counter.pair) {
+      // Three nodes, so the stylesheet can colour the ghost side on its own:
+      // the comparison is the reading, not the pair of digits.
+      entry.live = element('span', 'headsup-counter-live', value);
+      entry.live.textContent = '—';
+      const separator = element('span', 'headsup-counter-split', value);
+      separator.textContent = '/';
+      separator.setAttribute('aria-hidden', 'true');
+      entry.ghost = element('span', 'headsup-counter-ghost', value);
+      entry.ghost.textContent = '—';
+    } else value.textContent = '0';
+    const name = element('span', 'headsup-counter-label', cell);
+    name.textContent = t(counter.label);
+    if (counter.spark) {
+      const spark = element('div', 'headsup-spark', cell);
+      spark.title = t('Assist queue, last {count} seconds', {
+        count: SPARKLINE_SAMPLES,
+      });
+      for (let index = 0; index < SPARKLINE_SAMPLES; index++)
+        sparkColumns.push(sparkColumn(spark));
     }
-  const feedChip = strip
-    ? element('div', 'headsup-counter headsup-feed', strip)
-    : null;
-  const feedValue = feedChip
-    ? element('strong', 'headsup-counter-value', feedChip)
-    : null;
-  if (feedChip) {
-    const name = element('span', 'headsup-counter-label', feedChip);
-    name.textContent = t('FEED');
+    counterCells.set(counter.key, entry);
   }
+  const feedChip = element('div', 'headsup-counter headsup-feed', strip);
+  const feedValue = element('strong', 'headsup-counter-value', feedChip);
+  const feedLabel = element('span', 'headsup-counter-label', feedChip);
+  feedLabel.textContent = t('FEED');
 
   /** Seconds, or minutes and seconds; `—` while there is no answer yet. */
   const formatDuration = (ms) => {
@@ -565,7 +758,7 @@ export function startHeadsupConsole({
     });
   };
 
-  // ── The what-if banner and the agent pipeline rail ──────────────────────
+  // ── The what-if banner ──────────────────────────────────────────────────
 
   const banner = mount(element('div', 'headsup-banner'), doc.body);
   banner.id = 'headsup-banner';
@@ -573,17 +766,10 @@ export function startHeadsupConsole({
   banner.hidden = true;
   const bannerText = element('span', 'headsup-banner-text', banner);
   bannerText.textContent = t(WHAT_IF_BANNER);
-  // The scripted badge, driven by the scenario's own `scripted` flag rather
-  // than by which scenario it is: a replay whose events were written for the
-  // demo has to say so, and only the feed knows which replays those are.
-  const scriptedBadge = element('span', 'headsup-banner-badge', banner);
-  scriptedBadge.textContent = t(SCRIPTED_BADGE);
-  scriptedBadge.title = t(
-    'The events in this replay were written, not observed',
-  );
-  scriptedBadge.hidden = true;
+  // The scripted badge sits in the dock's scenario block, beside the clock it
+  // qualifies, rather than in this banner: the banner says what the whole
+  // replay is, and the badge says where that replay's events came from.
 
-  const rail = mount(element('aside', 'headsup-rail'), doc.body);
   rail.id = 'headsup-pipeline-rail';
   rail.hidden = true;
   rail.setAttribute('aria-label', t('Agent pipeline'));
@@ -594,20 +780,48 @@ export function startHeadsupConsole({
   // is the id that ties every row here to the geometry on the globe.
   const railLink = element('span', 'headsup-rail-link', railHeader);
   railLink.textContent = '';
-  const railStages = element('ol', 'headsup-rail-stages', rail);
-  /** @type {Map<string, object>} One entry per stage row. */
+  const railStages = element('ol', 'headsup-rail-stages headsup-flow', rail);
+  /** @type {Map<string, object>} One entry per node of the map. */
   const stageRows = new Map();
 
   /**
-   * One rail row: a marker, a name, and the one short value it carries.
+   * The edge INTO one node, drawn down the spine the nodes share.
    *
-   * A button, because clicking it opens that stage's card. `aria-expanded`
-   * is what tells a screen reader the row discloses something, and
+   * Three parts rather than one border, because they say three different
+   * things: the line is the connection, the head is the direction, and the
+   * pulse is the one-shot that this node's own event fires when it lands.
+   * The whole edge is decoration — the flow it draws is already in the node
+   * labels and their order — so it is hidden from assistive technology
+   * rather than narrated a second time.
+   */
+  const flowEdge = (parent) => {
+    const edge = element('span', 'headsup-flow-edge', parent);
+    edge.setAttribute('aria-hidden', 'true');
+    edge.dataset.flow = 'idle';
+    element('span', 'headsup-flow-edge-line', edge);
+    element('span', 'headsup-flow-edge-head', edge);
+    element('span', 'headsup-flow-edge-pulse', edge);
+    // Parking the edge on `done` when the pulse finishes is what lets the
+    // NEXT replay's arrival run it again: a one-shot animation only restarts
+    // when the attribute selecting it changes.
+    on(edge, 'animationend', () => {
+      if (edge.dataset.flow === 'on') edge.dataset.flow = 'done';
+    });
+    return edge;
+  };
+
+  /**
+   * One node of the map: a marker, the agent's name, and the one short value
+   * it carries.
+   *
+   * A button, because clicking it opens that agent's card. `aria-expanded`
+   * is what tells a screen reader the node discloses something, and
    * `aria-controls` points at the card the click fills.
    */
-  const railRow = (parent, { key, name }) => {
-    const item = element('li', 'headsup-rail-item', parent);
-    const row = element('button', 'headsup-rail-stage', item);
+  const railRow = (parent, { key, name, edge = false }) => {
+    const item = element('li', 'headsup-flow-step', parent);
+    const edgeNode = edge ? flowEdge(item) : null;
+    const row = element('button', 'headsup-rail-stage headsup-flow-node', item);
     row.type = 'button';
     row.dataset.stage = key;
     row.setAttribute('aria-expanded', 'false');
@@ -619,17 +833,49 @@ export function startHeadsupConsole({
     const value = element('span', 'headsup-rail-stage-value', row);
     value.textContent = '';
     on(row, 'click', () => selectCard(key));
-    const entry = { item, row, value, nameNode };
+    const entry = { item, row, value, nameNode, edge: edgeNode };
     stageRows.set(key, entry);
     return entry;
   };
 
-  for (const stage of PIPELINE_STAGES)
-    railRow(railStages, { key: stage.key, name: t(stage.label) });
+  // The flow, top to bottom. Every node but the first carries the edge that
+  // enters it, so an arrival animates the step that was just taken. Feeds
+  // has none: nothing in this pipeline feeds the feeds.
+  PIPELINE_STAGES.forEach((stage, index) =>
+    railRow(railStages, {
+      key: stage.key,
+      name: t(stage.label),
+      edge: index > 0,
+    }),
+  );
 
-  const ackHeading = element('h3', 'headsup-rail-group', rail);
-  ackHeading.textContent = t('FLEET ANSWERS');
-  const railAcks = element('ol', 'headsup-rail-stages', rail);
+  // The map's last node: the fleet operators an advisory goes out to. NOT a
+  // button, because there is no one operators card — each fleet's answer is
+  // its own card, on the nodes that branch off below this one. It carries no
+  // tone either: an aggregate of three answers would be a claim nobody made,
+  // and each fleet's own answer already carries its own.
+  const operatorStep = element('li', 'headsup-flow-step', railStages);
+  const operatorEdge = flowEdge(operatorStep);
+  const operatorNode = element(
+    'div',
+    'headsup-flow-node headsup-flow-tier-node',
+    operatorStep,
+  );
+  const operatorMarker = element('span', 'headsup-rail-marker', operatorNode);
+  operatorMarker.setAttribute('aria-hidden', 'true');
+  const operatorName = element('span', 'headsup-rail-stage-name', operatorNode);
+  operatorName.textContent = t('OPERATORS');
+  const operatorCount = element(
+    'span',
+    'headsup-rail-stage-value',
+    operatorNode,
+  );
+  operatorCount.textContent = '';
+  const railAcks = element(
+    'ol',
+    'headsup-rail-stages headsup-flow-fleet',
+    rail,
+  );
   /** The operator rows the rail was last built for. */
   let renderedAcks = '';
   const railEmpty = element('p', 'headsup-rail-empty', rail);
@@ -963,13 +1209,32 @@ export function startHeadsupConsole({
     }
   };
 
+  /** When each node of the map last lit, keyed by node. @type {Map} */
+  const arrivals = new Map();
+
   /**
-   * Draw the rail.
+   * Note that a node has lit, and animate the edge that fed it — once.
    *
-   * Stage rows exist from the start and only change state; the fleet rows
-   * are rebuilt when the operator SET changes, and the card when its own
-   * contents do. None of the three is rebuilt by a passing frame, because a
-   * row rebuilt under a pointer is a row that cannot be clicked.
+   * The pulse is fired by the transition from "nothing" to "something" and
+   * by nothing else: a node whose first record is later trimmed out from
+   * under it keeps the same state, because the edge says a frame ARRIVED,
+   * not that the oldest record on hand has a new timestamp. `at` going back
+   * to null is a replay ending, and the next one's arrival pulses again.
+   */
+  const noteArrival = (key, edge, at) => {
+    const was = arrivals.get(key) ?? null;
+    arrivals.set(key, at ?? null);
+    if (!edge || at == null) return;
+    if (was == null) edge.dataset.flow = 'on';
+  };
+
+  /**
+   * Draw the map.
+   *
+   * The agent nodes exist from the start and only change state; the fleet
+   * nodes are rebuilt when the operator SET changes, and the card when its
+   * own contents do. None of the three is rebuilt by a passing frame,
+   * because a node rebuilt under a pointer is one that cannot be clicked.
    */
   const renderRail = (view) => {
     railLink.textContent = view.hazardId
@@ -980,11 +1245,28 @@ export function startHeadsupConsole({
     railLink.title = view.advisoryId
       ? t('Advisory {id}', { id: view.advisoryId })
       : '';
+    // Where the pipeline has got to: the FURTHEST node that has reported,
+    // which is the one drawn as active while the lit nodes behind it read as
+    // done. Both are readings of the records themselves — a stage lights
+    // because its own frame arrived — so nothing here advances on a clock.
+    // The fleets are the last node, so an answered advisory moves "active"
+    // off the compiler the moment a fleet speaks.
+    const answered = view.operators.length;
+    const active = answered
+      ? 'operators'
+      : ([...view.stages].reverse().find((stage) => stage.lit)?.key ?? null);
     for (const stage of view.stages) {
       const entry = stageRows.get(stage.key);
       if (!entry) continue;
       entry.row.dataset.tone = stage.tone;
       entry.row.dataset.lit = stage.lit ? 'true' : 'false';
+      entry.item.dataset.lit = stage.lit ? 'true' : 'false';
+      entry.item.dataset.state = stage.lit
+        ? stage.key === active
+          ? 'active'
+          : 'done'
+        : 'idle';
+      noteArrival(stage.key, entry.edge, stage.firstAt);
       entry.value.textContent = stage.value ?? '';
       entry.row.setAttribute(
         'aria-expanded',
@@ -994,6 +1276,19 @@ export function startHeadsupConsole({
       // shape on the globe can be matched up without opening the card.
       entry.row.title = stage.linkedId ?? '';
     }
+    // The operators node. Its value is how many fleets have answered, which
+    // is a count of the nodes branching off it and not a tally of anything
+    // the feed has not said: no answers, no number.
+    operatorNode.dataset.lit = answered ? 'true' : 'false';
+    operatorStep.dataset.lit = answered ? 'true' : 'false';
+    operatorStep.dataset.state = answered ? 'active' : 'idle';
+    operatorCount.textContent = answered ? String(answered) : '';
+    noteArrival(
+      'operators',
+      operatorEdge,
+      answered ? (view.operators[0]?.at ?? 0) : null,
+    );
+
     const signature = view.operators
       .map((row) => `${row.op}:${row.status}`)
       .join(',');
@@ -1010,6 +1305,10 @@ export function startHeadsupConsole({
         });
         entry.row.dataset.tone = answer.tone;
         entry.row.dataset.lit = 'true';
+        // A fleet node is a leaf of the operators node: it has answered, so
+        // it is drawn as done, and its own tone says what it answered.
+        entry.item.dataset.lit = 'true';
+        entry.item.dataset.state = 'done';
         entry.value.textContent = answer.status;
       }
     } else
@@ -1052,57 +1351,32 @@ export function startHeadsupConsole({
     } else if (approveStatus) approveStatus.textContent = approveMessage;
   };
 
-  // ── The scenario picker ─────────────────────────────────────────────────
+  // ── The test scenes, as buttons ─────────────────────────────────────────
 
-  const picker = mount(element('div', 'headsup-picker'), doc.body);
-  picker.id = 'headsup-scene-picker';
-  picker.hidden = true;
-  const dialog = element('div', 'headsup-picker-dialog', picker);
-  dialog.setAttribute('role', 'dialog');
-  dialog.setAttribute('aria-modal', 'true');
-  dialog.setAttribute('aria-label', t('CHOOSE A TEST SCENE'));
-  const dialogHeader = element('header', 'headsup-picker-header', dialog);
-  const dialogTitle = element('h2', 'headsup-picker-title', dialogHeader);
-  dialogTitle.textContent = t('CHOOSE A TEST SCENE');
-  const closeButton = element('button', 'headsup-picker-close', dialogHeader);
-  closeButton.type = 'button';
-  closeButton.title = t('Close the scene picker');
-  closeButton.setAttribute('aria-label', t('Close the scene picker'));
-  closeButton.textContent = '×';
-  const pickerList = element('div', 'headsup-picker-list', dialog);
-  const pickerStatus = element('p', 'headsup-picker-status', dialog);
-  pickerStatus.setAttribute('role', 'status');
-
-  let restoreFocus = null;
-
-  const setPickerStatus = (text) => {
-    pickerStatus.textContent = text ?? '';
-  };
-
-  const closePicker = () => {
-    if (picker.hidden) return;
-    picker.hidden = true;
-    const target = restoreFocus;
-    restoreFocus = null;
-    // Focus goes back where it came from, so a keyboard user is not dropped
-    // at the top of the document by a dialog they dismissed.
-    if (target?.isConnected) target.focus();
-  };
-
-  const renderScenarios = (rows) => {
-    pickerList.replaceChildren();
-    if (!rows.length) {
-      setPickerStatus(t('No scenarios available'));
+  /**
+   * Rebuild the launch buttons, but only when the scenario SET changed.
+   *
+   * The same discipline the fleet rows keep: a listing that arrives again
+   * must not rebuild a button under the pointer that is pressing it.
+   */
+  const renderScenes = (listing) => {
+    const signature = listing.map((row) => row.id).join(',');
+    if (signature === renderedScenes) return;
+    renderedScenes = signature;
+    sceneButtons.clear();
+    sceneList.replaceChildren();
+    if (!listing.length) {
+      setSceneStatus(t('No scenarios available'));
       return;
     }
-    setPickerStatus('');
-    for (const scenario of rows) {
-      const scenarioCard = element('button', 'headsup-picker-card', pickerList);
-      scenarioCard.type = 'button';
-      const heading = element('span', 'headsup-picker-card-name', scenarioCard);
+    for (const scenario of listing) {
+      const button = element('button', 'headsup-scene-btn', sceneList);
+      button.type = 'button';
+      button.dataset.scenario = scenario.id;
+      const heading = element('span', 'headsup-scene-name', button);
       // Feed text, one node each: a code badge, the name, the city.
       if (scenario.code) {
-        const code = element('span', 'headsup-picker-card-code', heading);
+        const code = element('span', 'headsup-scene-code', heading);
         code.textContent = scenario.code;
       }
       const name = element('span', null, heading);
@@ -1110,35 +1384,45 @@ export function startHeadsupConsole({
         ? t('{name} ({city})', { name: scenario.name, city: scenario.city })
         : scenario.name;
       if (scenario.whatIf) {
-        const whatIf = element(
-          'span',
-          'headsup-picker-card-whatif',
-          scenarioCard,
-        );
+        const whatIf = element('span', 'headsup-scene-whatif', button);
         whatIf.textContent = scenario.whatIf;
       }
-      on(
-        scenarioCard,
-        'click',
-        () => void beginScenario(scenario, scenarioCard),
-      );
+      sceneButtons.set(scenario.id, button);
+      on(button, 'click', () => void beginScenario(scenario, button));
     }
-    pickerList.querySelector('button')?.focus();
   };
 
-  const openPicker = async (opener) => {
+  /**
+   * Ask the API what it can replay.
+   *
+   * Called once at startup and again from the retry the status line offers,
+   * because the answer to "the API is not running" is one a person can act
+   * on — start it, then press retry — and not one that needs a reload.
+   */
+  const loadScenes = async () => {
     if (destroyed) return;
-    restoreFocus = opener ?? doc.activeElement ?? null;
-    picker.hidden = false;
-    pickerList.replaceChildren();
-    setPickerStatus(t('Loading scenarios…'));
+    setSceneStatus(t('Loading scenarios…'));
     try {
-      renderScenarios(await scenarios.list({ signal: controller.signal }));
+      renderScenes(await scenarios.list({ signal: controller.signal }));
+      if (!destroyed && renderedScenes) setSceneStatus('');
     } catch (error) {
-      if (controller.signal.aborted) return;
-      setPickerStatus(describeScenarioError(error));
+      if (controller.signal.aborted || destroyed) return;
+      setSceneStatus(describeScenarioError(error));
+      // One retry affordance, and only while there is nothing to launch: a
+      // button beside a list that already works would be a second control
+      // for a job the list itself does.
+      if (!renderedScenes && !retryButton.parent) sceneList.append(retryButton);
     }
   };
+
+  const retryButton = element(
+    'button',
+    'headsup-scene-btn headsup-scene-retry',
+  );
+  retryButton.type = 'button';
+  retryButton.textContent = t('RETRY');
+  retryButton.title = t('Ask the Heads Up API for its scenarios again');
+  on(retryButton, 'click', () => void loadScenes());
 
   /**
    * Turn a failure into one line a person can act on.
@@ -1162,11 +1446,14 @@ export function startHeadsupConsole({
     running = scenario;
     banner.hidden = !scenario;
     rail.hidden = !scenario;
-    if (exitButton) exitButton.hidden = !scenario;
-    if (openButton)
-      openButton.textContent = scenario
-        ? t('CHANGE TEST SCENE')
-        : t('OPEN TEST SCENE');
+    exitButton.hidden = !scenario;
+    // Which scene is replaying, on the button that started it: the list stays
+    // live during a run, so one press swaps one replay for another.
+    for (const [id, button] of sceneButtons)
+      button.setAttribute(
+        'aria-pressed',
+        scenario && scenario.id === id ? 'true' : 'false',
+      );
     if (!scenario) {
       // A rail that is going away takes its open card with it, so the next
       // replay does not start with the last one's reasoning on screen. The
@@ -1186,11 +1473,11 @@ export function startHeadsupConsole({
     }
   };
 
-  const beginScenario = async (scenario, scenarioCard) => {
-    if (pickerBusy) return;
-    pickerBusy = true;
-    scenarioCard?.setAttribute('aria-busy', 'true');
-    setPickerStatus(t('Starting {name}…', { name: scenario.name }));
+  const beginScenario = async (scenario, button) => {
+    if (launchBusy) return;
+    launchBusy = true;
+    button?.setAttribute('aria-busy', 'true');
+    setSceneStatus(t('Starting {name}…', { name: scenario.name }));
     try {
       const result = await scenarios.start(scenario.id, {
         signal: controller.signal,
@@ -1199,20 +1486,19 @@ export function startHeadsupConsole({
       // The API's own view wins when it sends one: it knows where the
       // scenario's recording actually is, and the listing may be older.
       const started = result.scenario ?? scenario;
-      applyRunning(started);
+      applyRunning({ ...started, id: started.id ?? scenario.id });
       flyTo(started.startView ?? scenario.startView);
       setSceneStatus(
         started.city
           ? t('{name} ({city})', { name: started.name, city: started.city })
           : started.name,
       );
-      closePicker();
     } catch (error) {
       if (destroyed || controller.signal.aborted) return;
-      setPickerStatus(describeScenarioError(error));
+      setSceneStatus(describeScenarioError(error));
     } finally {
-      pickerBusy = false;
-      scenarioCard?.removeAttribute('aria-busy');
+      launchBusy = false;
+      button?.removeAttribute('aria-busy');
     }
   };
 
@@ -1239,30 +1525,17 @@ export function startHeadsupConsole({
     }
   };
 
-  if (openButton) on(openButton, 'click', () => void openPicker(openButton));
-  if (exitButton) on(exitButton, 'click', () => void endScenario());
-  on(closeButton, 'click', () => closePicker());
-  // A click on the backdrop, not on the dialog, dismisses it.
-  on(picker, 'mousedown', (event) => {
-    if (event.target === picker) closePicker();
-  });
+  on(exitButton, 'click', () => void endScenario());
 
   /**
-   * Escape closes the picker, then the open card, then ends the replay.
+   * Escape closes the open card, then ends the replay.
    *
-   * Only ever acted on when one of those three is actually open, and the
-   * event is left alone otherwise: upstream's own Escape handlers (the
-   * cockpit, the draw tool, the street-level viewer) must keep working in
-   * Heads Up mode.
+   * Only ever acted on when one of the two is actually open, and the event is
+   * left alone otherwise: upstream's own Escape handlers (the cockpit, the
+   * draw tool, the street-level viewer) must keep working in Heads Up mode.
    */
   const onKeyDown = (event) => {
     if (event.key !== 'Escape' || event.defaultPrevented) return;
-    if (!picker.hidden) {
-      event.preventDefault();
-      event.stopPropagation();
-      closePicker();
-      return;
-    }
     if (selected) {
       event.preventDefault();
       event.stopPropagation();
@@ -1276,6 +1549,152 @@ export function startHeadsupConsole({
     }
   };
   on(doc, 'keydown', onKeyDown, { capture: true });
+
+  // ── The advisory card ───────────────────────────────────────────────────
+
+  /** An extent in the unit it reads at: blocks are not square kilometres. */
+  const formatArea = (squareMetres) =>
+    squareMetres >= 1e6
+      ? t('{value} km²', { value: (squareMetres / 1e6).toFixed(2) })
+      : t('{value} m²', { value: Math.round(squareMetres).toLocaleString() });
+
+  const formatLength = (metres) =>
+    metres >= 1000
+      ? t('{value} km', { value: (metres / 1000).toFixed(2) })
+      : t('{value} m', { value: Math.round(metres) });
+
+  /** Time left on the window: minutes and seconds, then hours. */
+  const formatRemaining = (ms) => {
+    const seconds = Math.round(ms / 1000);
+    if (seconds < 60) return t('{seconds}s', { seconds });
+    if (seconds < 3600)
+      return t('{minutes}m {seconds}s', {
+        minutes: Math.floor(seconds / 60),
+        seconds: String(seconds % 60).padStart(2, '0'),
+      });
+    return t('{hours}h {minutes}m', {
+      hours: Math.floor(seconds / 3600),
+      minutes: String(Math.floor((seconds % 3600) / 60)).padStart(2, '0'),
+    });
+  };
+
+  /** The four signature readings, as the one line a person checks. */
+  const SIGNATURE_TEXT = Object.freeze({
+    verified: msg('verified'),
+    failed: msg('NOT VERIFIED'),
+    unverified: msg('present, unverified'),
+    absent: msg('absent'),
+  });
+
+  /** The chip row's current contents, so it is rebuilt only when it changes. */
+  let advisoryChipKey = null;
+
+  /**
+   * Draw the advisory card.
+   *
+   * The cells exist from the start and only their text changes, so a card
+   * refreshed twice a second never rebuilds under a pointer — the same rule
+   * the rail's rows keep. The chip row is the one part that is rebuilt, and
+   * only when the set of feeds it names actually changes. The empty state
+   * swaps two nodes rather than emptying the grid, because "no advisory in
+   * force" is a reading and not a blank — and the card drops back to the
+   * dock's own surface while it holds one: a red notice standing over an
+   * empty window is an alert about nothing, and a wall that shouts when
+   * nothing is wrong teaches an operator to stop looking at it.
+   */
+  const renderAdvisory = (feed, view) => {
+    const card_ = buildAdvisoryCard({ snapshot: feed, view, nowMs: now() });
+    advisoryBlock.dataset.state = card_.present ? 'live' : 'empty';
+    advisoryEmpty.hidden = card_.present;
+    advisoryActionRow.hidden = !card_.present;
+    advisoryGrid.hidden = !card_.present;
+    advisoryEvidence.hidden = !card_.present;
+    advisoryState.textContent = card_.present ? t('IN FORCE') : t('STANDBY');
+    if (!card_.present) {
+      advisoryIdNode.textContent = '';
+      // Three different nothings, and they are different claims: no feed, a
+      // feed that has published nothing, and advisories that have expired.
+      advisoryEmpty.textContent = card_.known
+        ? tn(
+            card_.known,
+            'No advisory in force. {count} has expired.',
+            'No advisory in force. {count} have expired.',
+          )
+        : t('No advisory in force.');
+      return;
+    }
+    // The action is the thing the advisory ASKS FOR, so it is the line set
+    // largest: a hazard class describes the world, an action changes what a
+    // fleet does.
+    advisoryAction.textContent = card_.action;
+    advisoryAction.dataset.action = card_.action;
+    advisoryIdNode.textContent =
+      card_.liveCount > 1
+        ? t('{id} · {count} in force', {
+            id: card_.id,
+            count: card_.liveCount,
+          })
+        : card_.id;
+    advisoryCells.hazard.textContent = card_.hazardClass;
+    advisorySeverityText.textContent = t('{severity} of 5', {
+      severity: card_.severity,
+    });
+    advisoryPips.dataset.level = String(card_.severity);
+    // Area for a polygon, length for a corridor: a `KEEP_CLEAR` over two
+    // closed lanes covers no area, and a reported 0 m² would be a
+    // measurement of something nobody measured.
+    // Built into a variable rather than written inline: the icon-subset gate
+    // reads a lower-case literal assigned straight to `textContent` as a
+    // Material Symbols glyph name, and `point` is a word here.
+    const extentText =
+      card_.areaSqM != null
+        ? formatArea(card_.areaSqM)
+        : card_.lengthM != null
+          ? t('{length} corridor', { length: formatLength(card_.lengthM) })
+          : t('point');
+    advisoryCells.extent.textContent = extentText;
+    // The clock is the advisory's own `valid_until`; the countdown beside it
+    // is this page's subtraction from it, re-read on every refresh.
+    advisoryCountdown.textContent = formatRemaining(card_.expiresInMs);
+    advisoryUntil.textContent = new Date(card_.validUntil)
+      .toISOString()
+      .slice(11, 19)
+      .concat('Z');
+    advisoryCells.expiry.dataset.urgency =
+      card_.expiresInMs < IMMINENT_EXPIRY_MS ? 'imminent' : 'open';
+    // Who issued it. An advisory that did not say is shown as not having
+    // said, because the issuer is half of what a signature is a claim about.
+    advisoryCells.issuer.textContent = card_.issuer ?? '—';
+    advisoryCells.signature.textContent = t(SIGNATURE_TEXT[card_.signature]);
+    advisoryCells.signature.dataset.signature = card_.signature;
+    // The feeds it rests on, named as the advisory named them. A count on its
+    // own would answer "how much evidence" and not "whose" — and a citation
+    // whose source this layer could not read is its own chip rather than a
+    // silent omission, so the row never claims fewer citations than arrived.
+    const chipKey = `${card_.sources.join('|')}+${card_.unnamedSources}`;
+    if (chipKey !== advisoryChipKey) {
+      advisoryChipKey = chipKey;
+      const chips = card_.sources.map((source) => {
+        const chip = element('span', 'headsup-advisory-chip');
+        chip.textContent = feedName(source);
+        return chip;
+      });
+      if (card_.unnamedSources) {
+        const chip = element('span', 'headsup-advisory-chip is-unnamed');
+        chip.textContent = t('+{count} unnamed', {
+          count: card_.unnamedSources,
+        });
+        chip.title = t('Cited evidence that named no feed');
+        chips.push(chip);
+      }
+      if (!chips.length) {
+        const chip = element('span', 'headsup-advisory-chip is-absent');
+        chip.textContent = t('none cited');
+        chips.push(chip);
+      }
+      advisoryChips.replaceChildren(...chips);
+    }
+  };
 
   // ── Readouts ────────────────────────────────────────────────────────────
 
@@ -1311,6 +1730,7 @@ export function startHeadsupConsole({
       scenario?.state === 'running' && scenario.scripted === true
     );
     renderCounters(view);
+    renderAdvisory(feed, view);
     // Which feed answered, not merely whether one did: a page driving the
     // mock must say so, because every number on this strip then came from a
     // synthetic feed rather than from a city.
@@ -1391,6 +1811,9 @@ export function startHeadsupConsole({
   void Promise.resolve(setLayerEnabled(true)).catch((error) =>
     console.warn('[HeadsUp] Could not enable the Heads Up layer:', error),
   );
+  // What the API can replay, asked for once at startup: the buttons ARE the
+  // surface now, so the listing is not something a person opens.
+  void loadScenes();
   // The first render happens here rather than on the first frame, so the
   // console is never briefly blank. If it throws, the subscription and the
   // refresh timer above are already live and nobody holds the handle that
@@ -1414,14 +1837,10 @@ export function startHeadsupConsole({
       }
     }
     for (const node of owned.splice(0)) node.remove();
-    // Hand the two retitled headers back exactly as they were found.
-    if (dataTitle && previousDataTitle !== null)
-      dataTitle.textContent = previousDataTitle;
-    if (sceneTitle && previousSceneTitle !== null)
-      sceneTitle.textContent = previousSceneTitle;
     cohortRows.clear();
     counterCells.clear();
     stageRows.clear();
+    sceneButtons.clear();
     sparkColumns.length = 0;
     sparkSamples.length = 0;
   }

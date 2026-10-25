@@ -692,3 +692,59 @@ with its uncertainty attached rather than a claim of no change. Anyone who
 needs that attributed should take the ceiling and the loaded reading back to
 back on an idle machine. See the D2.7 section for why the absolute number is
 a property of the hardware either way.
+
+### The rail as a workflow map (D3.8)
+
+The rail's rows became a **map**: one labelled node per agent down a single
+spine, joined by directed edges — Feeds, Sentinels, Fusion, Proposer, Critic,
+Compiler, Operators. The wiring underneath is the D3.6 wiring, unchanged. A
+node still lights from its own frame and stays lit, `./pipeline.js` is
+untouched, and the whole of the change is `console.js` building six steps and
+a tier instead of six rows, plus the `.headsup-flow-*` block in
+`headsup-mode.css`.
+
+Four decisions are worth keeping:
+
+- **Down, not across.** The pane is 20% of the window wide. A horizontal flow
+  in 384px has to either wrap or shrink the labels, and the labels are the
+  one part that has to read from the back of a room — so they are 14px
+  monospace capitals on the agent nodes, and the flow runs vertically.
+- **An edge is three parts.** The line is the connection, the head is the
+  direction (so which way a signal travels needs no caption), and the pulse
+  is a 900ms one-shot fired by the arrival of that node's own frame — the
+  only animation on the rail. `data-flow` goes `idle` → `on` → `done`, and
+  `done` is what lets the NEXT replay's arrival run it again: a one-shot only
+  restarts when the attribute selecting it changes. The pulse fires on the
+  transition from no record to a record and on nothing else, so a first
+  record later trimmed out from under a node does not re-animate it. Feeds
+  has no incoming edge: nothing in this pipeline feeds the feeds.
+- **Active is a reading of the records, and it is static.** `data-state` is
+  `active` on the furthest node that has reported, `done` on the lit ones
+  behind it, `idle` on the rest, with the fleets as the last node — so an
+  answered advisory takes "active" off the compiler the moment a fleet
+  speaks. The active node is marked with a brighter surface, a full accent
+  left edge and a ring round its marker rather than with a breathing glow: a
+  node pulsing on a clock would be claiming progress no frame reported, which
+  is the one thing this rail exists not to do.
+- **Edges are accent-coloured, never toned.** An edge says a handoff
+  happened; what an agent ANSWERED stays on its own marker, so the four tones
+  keep meaning exactly what they meant. The operators node carries no tone at
+  all for the same reason — an aggregate of three fleet answers is a claim
+  none of them made — and it is not a button, because there is no operators
+  card: each fleet's node branches off it with its own answer and its own
+  card. The six stage cards, the evidence lists, the signature line and the
+  Approve button are the D3.6 ones, unchanged.
+
+`FLEET ANSWERS` went with the heading it titled; the node is labelled
+`OPERATORS` and both catalogs moved with it. Three tests pin the new
+presentation (`console.test.mjs`): the active/done split, the one-shot edge,
+and the operators node's count.
+
+## Known issues
+
+- `npm run layer-token:check` cannot run in this layout: the script builds its
+  pathspec as `src/data/layerState.js`, but `gev/` is vendored one level down,
+  so `git rev-parse <ref>:src/data/layerState.js` fails with *path exists, but
+  not*. Pre-existing, and not this fork's to fix from inside `gev/`.
+  `gev/src/data/layerState.js` is unchanged from HEAD, so the ledger carries
+  0 new tokens — which is what the check would have reported.

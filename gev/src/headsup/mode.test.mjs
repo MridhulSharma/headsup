@@ -4,6 +4,7 @@ import {
   FULL_MODE,
   HEADSUP_MODE,
   HEADSUP_OMITTED_LAYERS,
+  HEADSUP_OMITTED_SUBSYSTEMS,
   createHeadsupModeConfig,
   markHeadsupMode,
   resolveHeadsupMode,
@@ -40,6 +41,12 @@ test('Heads Up mode omits the feeds it has no use for and gates the extras', () 
       keys: mode.providerSettings,
       summary: mode.hudSummary,
       hud: mode.forceHudVisible,
+      // The optional subsystems: detection and the tracked readout watch
+      // layers this mode never registers, and the scope mask is the circular
+      // lens the rectangular viewport replaced.
+      detection: mode.detection,
+      trackedReadout: mode.trackedReadout,
+      scopeMask: mode.scopeMask,
     },
     {
       layerPanel: false,
@@ -47,8 +54,12 @@ test('Heads Up mode omits the feeds it has no use for and gates the extras', () 
       keys: false,
       summary: false,
       hud: true,
+      detection: false,
+      trackedReadout: false,
+      scopeMask: false,
     },
   );
+  assert.deepEqual([...mode.omitSubsystems], [...HEADSUP_OMITTED_SUBSYSTEMS]);
   assert.equal(mode.scenarioBaseUrl, 'http://localhost:8765');
 });
 
@@ -59,23 +70,31 @@ test('full mode gates nothing and omits nothing', () => {
       id: mode.id,
       headsUp: mode.headsUp,
       omitted: mode.omitLayers.length,
+      omittedSubsystems: mode.omitSubsystems.length,
       enabled: mode.enableLayers.length,
       layerPanel: mode.upstreamLayerPanel,
       voice: mode.voiceAgent,
       keys: mode.providerSettings,
       summary: mode.hudSummary,
       hud: mode.forceHudVisible,
+      detection: mode.detection,
+      trackedReadout: mode.trackedReadout,
+      scopeMask: mode.scopeMask,
     },
     {
       id: 'full',
       headsUp: false,
       omitted: 0,
+      omittedSubsystems: 0,
       enabled: 0,
       layerPanel: true,
       voice: true,
       keys: true,
       summary: true,
       hud: false,
+      detection: true,
+      trackedReadout: true,
+      scopeMask: true,
     },
   );
 });

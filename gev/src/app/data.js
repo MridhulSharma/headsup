@@ -74,7 +74,7 @@ export function createApplicationData({
         delete window.__gevQaUnregisterLayer;
     });
   }
-  // A mode that owns `#data-toggles` itself mounts the panel nowhere; the
+  // A mode that builds its own layer controls mounts the panel nowhere; the
   // presentation keeps every other job it does for the application.
   presentation.mount(
     mountLayerPanel ? document.getElementById('data-toggles') : null,

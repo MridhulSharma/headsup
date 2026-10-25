@@ -47,7 +47,24 @@ const advisory = (overrides = {}, propertyOverrides = {}) => ({
     action: { type: 'NO_ENTRY' },
     valid_from: '2026-10-21T18:00:00Z',
     valid_until: '2026-10-21T20:00:00Z',
-    evidence: [{ event_id: 'nws-1' }, { event_id: 'usgs-1' }],
+    // Contract-shaped evidence: the schema requires a source on every row,
+    // and the advisory card names the feeds an advisory rests on from these.
+    evidence: [
+      {
+        event_id: 'nws-1',
+        source: 'nws',
+        kind: 'nws.flood_warning',
+        observed_at: '2026-10-21T17:55:00Z',
+        raw_ref: 'nws/alerts/nws-1',
+      },
+      {
+        event_id: 'usgs-1',
+        source: 'usgs',
+        kind: 'usgs.gauge',
+        observed_at: '2026-10-21T17:58:00Z',
+        raw_ref: 'usgs/gauge/08158000',
+      },
+    ],
     policy_rule: 'flood.no_entry',
     issuer: 'headsup/compiler',
     signature: 'c2lnbmF0dXJl',
@@ -172,6 +189,12 @@ test('a polygon advisory normalizes to drawable rings and a window', () => {
   assert.equal(row.validFrom, Date.parse('2026-10-21T18:00:00Z'));
   assert.equal(row.validUntil, Date.parse('2026-10-21T20:00:00Z'));
   assert.equal(row.evidenceCount, 2);
+  // The rows themselves, not only how many: the advisory card names the
+  // feeds, and reading them off a neighbouring frame would be inference.
+  assert.deepEqual(
+    row.evidence.map((cite) => cite.source),
+    ['nws', 'usgs'],
+  );
   assert.equal(row.policyRule, 'flood.no_entry');
   assert.equal(row.signed, true);
 });
@@ -218,6 +241,55 @@ test('an unsigned advisory is recorded as unsigned, not rejected', () => {
     normalizeAdvisoryFeature({ ...advisory(), properties: rest }).signed,
     false,
   );
+});
+
+test('an evidence row with no source keeps the advisory, minus the field', (t) => {
+  // An advisory is the signed artefact, and the hazard, the action, the
+  // window and the signature are not damaged by one citation that forgot to
+  // say which feed it came from. The row stays with `source` null and the
+  // loss is logged, rather than the card going blank over a label.
+  const warnings = [];
+  t.mock.method(console, 'warn', (...args) => warnings.push(args.join(' ')));
+  const row = normalizeAdvisoryFeature(
+    advisory(
+      {},
+      {
+        evidence: [
+          { event_id: 'nws-1', source: 'nws', kind: 'nws.flood_warning' },
+          { event_id: 'usgs-1', kind: 'usgs.gauge' },
+        ],
+      },
+    ),
+  );
+  assert.deepEqual(
+    row.evidence.map((cite) => cite.source),
+    ['nws', null],
+  );
+  // Still counted: the advisory rests on two citations whatever this layer
+  // can name them.
+  assert.equal(row.evidenceCount, 2);
+  assert.equal(row.hazardClass, 'FLOOD');
+  assert.equal(row.action, 'NO_ENTRY');
+  assert.equal(row.signed, true);
+  assert.equal(warnings.length, 1);
+  // The warning names the field and the advisory, so a feed defect is
+  // traceable from the console log alone.
+  assert.match(warnings[0], /adv-flood-1/);
+  assert.match(warnings[0], /"source"/);
+});
+
+test('a source that is present but not an identifier is also omitted', (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const row = normalizeAdvisoryFeature(
+    advisory(
+      {},
+      { evidence: [{ event_id: 'nws-1', source: 'not a feed id' }] },
+    ),
+  );
+  // Omitted rather than kept as free text: a chip is a claim about WHICH
+  // public feed, and feed text in that slot would be the console repeating
+  // something it cannot check.
+  assert.equal(row.evidence[0].source, null);
 });
 
 test('an advisory outside the contract is rejected whole', () => {

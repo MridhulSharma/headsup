@@ -7,6 +7,7 @@ import { createRecentImageryPanel } from '../ui/recentImagery.js';
 import { initGevVoiceCommands } from '../voice/gevRealtime.js';
 import { cancelHeadsupFlight, flyToHeadsupView } from '../headsup/camera.js';
 import { startHeadsupConsole } from '../headsup/console.js';
+import { applyHeadsupRenderBudget } from '../headsup/render.js';
 import { installViews, isEmbeddedInline } from './embed.js';
 import { installScopeMask, destroyScopeMask } from '../scopeMask.js';
 import {
@@ -118,14 +119,29 @@ export function createApplicationTools({
   }
   if (startChrome)
     defer(startChrome({ loadingScreen, styleManager, dataManager, signal }));
+  // The Heads Up frame budget: a coarser photoreal tileset and the
+  // resolution scale, both stated in src/headsup/render.js and applied before
+  // the governor takes over the render loop, so the first frame it draws is
+  // already the one this mode asked for. `?mode=full` keeps upstream's
+  // defaults.
+  if (headsupMode?.headsUp) applyHeadsupRenderBudget({ viewer, tileset });
+
   // Idle render governor: flips the scene into requestRenderMode whenever
   // nothing animates per frame. Installed AFTER every module above has had
   // its chance to register pre-install holds. (perf wave 2)
   installRenderGovernor(viewer);
 
   // Install the explicit scope mask used by the DISPLAY controls.
-  installScopeMask(viewer);
-  defer(() => destroyScopeMask());
+  //
+  // Heads Up mode asks the config instead of installing it: the console draws
+  // the globe into a RECTANGULAR viewport, and a mask that fades everything
+  // outside the inscribed circle would black out the corners of the very
+  // rectangle. Not installing it is the whole of "off" — no canvas, no resize
+  // observer, no per-frame height sample. `?mode=full` is untouched.
+  if (headsupMode?.scopeMask !== false) {
+    installScopeMask(viewer);
+    defer(() => destroyScopeMask());
+  }
 
   // The follow camera recomputes the tracked target's dead-reckon position
   // every frame — tracking anything is a per-frame animation. (perf wave 2)
