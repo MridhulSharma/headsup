@@ -34,6 +34,7 @@ data/cache/
 data/recordings/**/raw/
 # Audit chains and after-action reports are per-run artifacts.
 data/audit/
+data/audit_archive/
 
 # --- Editors and OS ---
 .vscode/
