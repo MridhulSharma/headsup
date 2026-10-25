@@ -3062,7 +3062,7 @@
   "Assist queue, last {count} seconds": "Очередь помощи, последние {count} с",
   "{seconds}s": "{seconds} с",
   "{minutes}m {seconds}s": "{minutes} мин {seconds} с",
-  "FLEET ANSWERS": "ОТВЕТЫ ПАРКОВ",
+  "OPERATORS": "ОПЕРАТОРЫ",
   "No fleet has answered yet.": "Ни один парк ещё не ответил.",
   "Close this stage": "Закрыть этот этап",
   "{kind} — {note}": "{kind} — {note}",

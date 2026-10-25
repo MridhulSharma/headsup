@@ -2995,7 +2995,7 @@
   "Assist queue, last {count} seconds": "Cola de asistencia, últimos {count} segundos",
   "{seconds}s": "{seconds} s",
   "{minutes}m {seconds}s": "{minutes} min {seconds} s",
-  "FLEET ANSWERS": "RESPUESTAS DE LAS FLOTAS",
+  "OPERATORS": "OPERADORES",
   "No fleet has answered yet.": "Ninguna flota ha respondido todavía.",
   "Close this stage": "Cerrar esta etapa",
   "{kind} — {note}": "{kind} — {note}",

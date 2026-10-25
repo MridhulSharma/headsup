@@ -166,6 +166,17 @@ body.headsup-mode {
   --headsup-alert-rule: rgba(255, 180, 190, 0.16);
   --headsup-alert-text: #ffe6ea;
   --headsup-advisory-label-width: 70px;
+  /* The workflow map. The spine is the x of a node marker's centre — a
+     node's left border, its padding and half the marker — and the edges are
+     drawn down that same line, which is what makes the chain read as one
+     thread with the labels hanging off it. The edge height is the gap
+     between two nodes, so the map's rhythm is one number.
+     `--headsup-flow-idle` is the colour of a handoff that has not happened;
+     the traversed edges take `--accent`, which no tone uses, so a node's
+     tone stays a statement about that agent's answer alone. */
+  --headsup-flow-spine: 18px;
+  --headsup-flow-edge-height: 22px;
+  --headsup-flow-idle: rgba(255, 255, 255, 0.14);
 }
 
 /* ── The rectangular viewport ────────────────────────────────────────────
@@ -817,56 +828,176 @@ body.headsup-mode {
   color: var(--accent);
 }
 
+/* ── The workflow map ────────────────────────────────────────────────────
+   The pipeline is drawn as a map rather than a list: one labelled node per
+   agent, down a single spine, each joined to the next by a directed edge.
+   The flow runs DOWN because the pane is 20% of the window wide — a
+   horizontal graph in that column would have to wrap or shrink the labels,
+   and the labels are the part that has to read from the back of a room.
+
+   The map is a presentation of ./pipeline.js and holds no state of its own.
+   `data-lit` on a step is that agent's own event having arrived, and
+   `data-state` is `active` on the furthest node that has reported, `done` on
+   the lit ones behind it and `idle` on the rest — all three read off the
+   records, never off a clock. */
 .headsup-rail-stages {
   display: grid;
-  gap: 4px;
   list-style: none;
 }
 
-.headsup-rail-group {
-  margin: 12px 0 5px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--text-dim);
+/* The agent chain: the steps carry their own spacing in the edge between
+   them, so the list adds no gap of its own. */
+.headsup-flow {
+  gap: 0;
 }
 
-.headsup-rail-stage {
+/* One step: the edge that enters this node, then the node. The edge comes
+   first in the source because it is drawn above the node it points into. */
+.headsup-flow-step {
+  display: grid;
+  position: relative;
+  gap: 0;
+}
+
+/* ── The edges ───────────────────────────────────────────────────────────
+   An edge is three parts, because they say three different things: the line
+   is the connection, the head is the direction, and the pulse is the
+   one-shot the arrival of this node's own frame fires. All three sit in the
+   spine lane the node markers stand in. */
+.headsup-flow-edge {
+  display: block;
+  position: relative;
+  height: var(--headsup-flow-edge-height);
+}
+
+.headsup-flow-edge-line {
+  position: absolute;
+  top: 0;
+  bottom: 3px;
+  left: var(--headsup-flow-spine);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--headsup-flow-idle);
+}
+
+/* The arrow head, so which way the signal travels needs no caption. */
+.headsup-flow-edge-head {
+  position: absolute;
+  bottom: 0;
+  left: var(--headsup-flow-spine);
+  width: 0;
+  height: 0;
+  margin-left: -5px;
+  border-top: 6px solid var(--headsup-flow-idle);
+  border-right: 5px solid transparent;
+  border-left: 5px solid transparent;
+}
+
+/* A traversed edge, in the accent rather than in a tone colour: an edge
+   says a handoff happened, and what the agent then ANSWERED is the tone on
+   its own marker. */
+.headsup-flow-step[data-lit='true'] .headsup-flow-edge-line {
+  background: var(--accent);
+}
+
+.headsup-flow-step[data-lit='true'] .headsup-flow-edge-head {
+  border-top-color: var(--accent);
+}
+
+/* The one animation on the rail: a single pulse down the edge a frame just
+   arrived over, fired by that arrival and by nothing else (`data-flow` in
+   src/headsup/console.js). It runs once per handoff — there is no loop, no
+   progress bar and no stage that advances on a clock. */
+.headsup-flow-edge-pulse {
+  position: absolute;
+  top: 0;
+  left: var(--headsup-flow-spine);
+  width: 4px;
+  height: 9px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent);
+  opacity: 0;
+}
+
+.headsup-flow-edge[data-flow='on'] .headsup-flow-edge-pulse {
+  animation: headsup-flow-pulse 900ms ease-out 1;
+}
+
+@keyframes headsup-flow-pulse {
+  0% {
+    top: -9px;
+    opacity: 0;
+  }
+
+  20% {
+    opacity: 1;
+  }
+
+  100% {
+    top: 100%;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .headsup-flow-edge[data-flow='on'] .headsup-flow-edge-pulse {
+    animation: none;
+  }
+}
+
+/* ── The nodes ───────────────────────────────────────────────────────────
+   One box per agent, carrying its name and the one short value it produced.
+   The name is the biggest type on the rail: it is what somebody narrating
+   this map points at, from further away than any other string here. */
+.headsup-flow-node {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 10px;
   width: 100%;
-  padding: 6px 8px;
-  border: 1px solid transparent;
+  padding: 9px 10px;
+  border: 1px solid var(--headsup-border);
+  border-left: 3px solid var(--headsup-flow-idle);
   border-radius: var(--btn-radius);
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.5px;
+  font-size: 14px;
+  letter-spacing: 1px;
   text-align: left;
   color: var(--text-dim);
-  cursor: pointer;
   transition:
     border-color var(--transition-fast),
     background var(--transition-fast);
 }
 
-.headsup-rail-stage:hover {
-  border-color: var(--glass-border-hover);
-  background: rgba(255, 255, 255, 0.04);
+/* A node that has not reported keeps its name and nothing else: an unlit
+   node is a step that has not happened, not a step that failed. */
+.headsup-flow-step[data-lit='true'] .headsup-flow-node {
+  color: var(--text-secondary);
 }
 
-.headsup-rail-stage[aria-expanded='true'] {
+/* Done: this agent answered and the signal moved on. */
+.headsup-flow-step[data-state='done'] .headsup-flow-node {
+  border-left-color: var(--accent);
+  background: rgba(255, 255, 255, 0.035);
+}
+
+/* Active: where the pipeline IS — the furthest node that has reported. The
+   distinction is static (a brighter surface, a full accent edge and a ring
+   round the marker) because a node that pulsed on a timer would be claiming
+   progress no frame has reported. */
+.headsup-flow-step[data-state='active'] .headsup-flow-node {
   border-color: var(--accent-dim);
-  background: rgba(0, 212, 255, 0.08);
+  border-left-color: var(--accent);
+  background: rgba(0, 212, 255, 0.12);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-/* A stage that has not reported keeps its name and nothing else: an unlit
-   row is a step that has not happened, not a step that failed. */
-.headsup-rail-stage[data-lit='true'] {
-  color: var(--text-primary);
+.headsup-flow-step[data-state='active'] .headsup-rail-marker {
+  outline: 2px solid var(--accent-glow);
+  outline-offset: 2px;
 }
 
 .headsup-rail-stage-name {
@@ -876,11 +1007,18 @@ body.headsup-mode {
   white-space: nowrap;
 }
 
+/* The agent names are set in capitals for distance. The fleet nodes are NOT:
+   an operator id is feed text, and an id read back in a case it did not
+   arrive in is a different string. */
+.headsup-flow .headsup-rail-stage-name {
+  text-transform: uppercase;
+}
+
 .headsup-rail-stage-value {
   flex: 0 0 auto;
   max-width: 48%;
   overflow: hidden;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.8px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -889,8 +1027,8 @@ body.headsup-mode {
 
 .headsup-rail-marker {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border: 1px solid var(--text-dim);
   border-radius: 50%;
 }
@@ -898,36 +1036,77 @@ body.headsup-mode {
 /* The four tones. `wait` is a pipeline stopped for a person and `alert` one
    that produced a refusal: different states, different colours, because the
    first is the only one somebody can act on. */
-.headsup-rail-stage[data-tone='ok'] .headsup-rail-marker {
+.headsup-flow-node[data-tone='ok'] .headsup-rail-marker {
   border-color: var(--headsup-live);
   background: var(--headsup-live);
   box-shadow: 0 0 7px var(--headsup-live);
 }
 
-.headsup-rail-stage[data-tone='wait'] .headsup-rail-marker {
+.headsup-flow-node[data-tone='wait'] .headsup-rail-marker {
   border-color: var(--headsup-amber);
   background: var(--headsup-amber);
   box-shadow: 0 0 7px var(--headsup-amber);
 }
 
-.headsup-rail-stage[data-tone='alert'] .headsup-rail-marker {
+.headsup-flow-node[data-tone='alert'] .headsup-rail-marker {
   border-color: var(--headsup-down);
   background: var(--headsup-down);
   box-shadow: 0 0 7px var(--headsup-down);
 }
 
-.headsup-rail-stage[data-tone='wait'] .headsup-rail-stage-value {
+.headsup-flow-node[data-tone='wait'] .headsup-rail-stage-value {
   color: var(--headsup-amber);
 }
 
-.headsup-rail-stage[data-tone='alert'] .headsup-rail-stage-value {
+.headsup-flow-node[data-tone='alert'] .headsup-rail-stage-value {
   color: var(--headsup-down);
 }
 
+/* ── The operators node, and the fleets that branch off it ───────────────
+   The last node of the flow. It is not a button and carries no tone: there
+   is no one operators card, and an aggregate of three fleet answers would be
+   a claim none of them made. Each fleet's own node below it keeps its own
+   answer, its own colour and its own card. */
+.headsup-flow-tier-node {
+  cursor: default;
+}
+
+.headsup-flow-tier-node[data-lit='true'] .headsup-rail-marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 7px var(--accent);
+}
+
+.headsup-flow-fleet {
+  gap: 5px;
+  margin-left: calc(var(--headsup-flow-spine) - 1px);
+  margin-top: 6px;
+  padding-left: 12px;
+  border-left: 2px solid var(--accent);
+}
+
+.headsup-flow-fleet .headsup-flow-node {
+  padding: 6px 9px;
+  border-left-width: 2px;
+  font-size: 12px;
+}
+
+/* The tick off the thread, so a fleet answer reads as something the
+   operators node produced rather than a second list. */
+.headsup-flow-fleet .headsup-flow-step::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -12px;
+  width: 12px;
+  height: 2px;
+  background: var(--accent);
+}
+
 .headsup-rail-empty {
-  margin-top: 4px;
+  margin: 6px 0 0 calc(var(--headsup-flow-spine) + 12px);
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.6;
   letter-spacing: 0.4px;
   color: var(--text-dim);
@@ -935,6 +1114,26 @@ body.headsup-mode {
 
 .headsup-rail-empty[hidden] {
   display: none;
+}
+
+/* ── What a node does when it is clicked ─────────────────────────────────
+   Last, so the two interactive states win the tie against the step states
+   above: they have the same specificity, and a node under the pointer has
+   to look like one. */
+.headsup-rail-stage {
+  cursor: pointer;
+}
+
+.headsup-flow-step .headsup-rail-stage:hover {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+.headsup-flow-step .headsup-rail-stage[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: rgba(0, 212, 255, 0.14);
+  color: var(--text-primary);
 }
 
 /* ── One stage's card ────────────────────────────────────────────────── */

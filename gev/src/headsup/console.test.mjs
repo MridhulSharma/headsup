@@ -1022,6 +1022,15 @@ const railStage = (page, key) =>
     .querySelectorAll('.headsup-rail-stage')
     .find((row) => row.dataset.stage === key);
 
+/** The step one node sits in, which is what carries the node's flow state. */
+const flowStep = (page, key) => railStage(page, key).parent;
+
+/** The edge INTO one node, which is the part an arrival animates. */
+const flowEdge = (page, key) =>
+  flowStep(page, key).children.find((node) =>
+    node.classList.contains('headsup-flow-edge'),
+  );
+
 const cardText = (page) =>
   page.document
     .getElementById('headsup-rail-card')
@@ -1060,6 +1069,60 @@ test('a stage lights when its own event arrives, and not before', (t) => {
       .textContent,
     '88%',
   );
+});
+
+test('the map marks the agent it is AT, and the ones behind it as done', (t) => {
+  const feed = transcript();
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  // Nothing has reported, so no node is active: an idle map claims no agent
+  // is working, which is a different thing from one that has stalled.
+  assert.deepEqual(
+    ['feeds', 'sentinel', 'fusion', 'proposer', 'critic', 'compiler'].map(
+      (key) => flowStep(page, key).dataset.state,
+    ),
+    ['idle', 'idle', 'idle', 'idle', 'idle', 'idle'],
+  );
+
+  feed.pipeline.candidates = [s3Candidate];
+  layer.publish();
+  // The sentinel reported, so that is where the pipeline is. Feeds lit off
+  // the same evidence and reads as done, which is the distinction a person
+  // narrating this map needs: answered, versus holding the signal now.
+  assert.equal(flowStep(page, 'feeds').dataset.state, 'done');
+  assert.equal(flowStep(page, 'sentinel').dataset.state, 'active');
+  assert.equal(flowStep(page, 'fusion').dataset.state, 'idle');
+
+  feed.pipeline.hazards = [s3Hazard];
+  layer.publish();
+  assert.equal(flowStep(page, 'sentinel').dataset.state, 'done');
+  assert.equal(flowStep(page, 'fusion').dataset.state, 'active');
+});
+
+test('the edge into a node animates on arrival, once', (t) => {
+  const feed = transcript();
+  const layer = fakeLayer({ stats: { connected: true }, feed });
+  const page = mount({ layer });
+  t.after(() => page.console.destroy());
+  layer.publish();
+  // Nothing has crossed that edge, so there is nothing to animate.
+  assert.equal(flowEdge(page, 'fusion').dataset.flow, 'idle');
+
+  feed.pipeline.hazards = [s3Hazard];
+  layer.publish();
+  assert.equal(flowEdge(page, 'fusion').dataset.flow, 'on');
+
+  // The pulse ends, and the next frame from the same stage does not re-arm
+  // it: the edge says a handoff happened, not that one is happening again.
+  flowEdge(page, 'fusion').dispatch('animationend');
+  layer.publish();
+  assert.equal(flowEdge(page, 'fusion').dataset.flow, 'done');
+
+  // And the first node has no incoming edge at all: nothing in this pipeline
+  // feeds the feeds.
+  assert.equal(flowEdge(page, 'feeds'), undefined);
 });
 
 test('the critic and the compiler read as three states, not two', (t) => {
@@ -1288,6 +1351,18 @@ test('one rail row per operator, carrying what that fleet answered', (t) => {
   // And a fleet row opens its own card, with the reason it gave.
   rows[1].click();
   assert.match(cardText(page), /90 second cycle/);
+
+  // The operators node is the last of the flow: it lights when a fleet
+  // answers, counts the nodes that branch off it, and takes "active" off the
+  // compiler — the advisory is out, and the fleets are what is answering.
+  const tier = page.document.querySelector('.headsup-flow-tier-node');
+  assert.equal(tier.dataset.lit, 'true');
+  assert.equal(
+    tier.querySelector('.headsup-rail-stage-value').textContent,
+    '2',
+  );
+  assert.equal(tier.parent.dataset.state, 'active');
+  assert.equal(flowStep(page, 'compiler').dataset.state, 'done');
 });
 
 test('the assist badge is handed to the layer already worded', (t) => {

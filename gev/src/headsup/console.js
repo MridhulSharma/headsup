@@ -18,7 +18,7 @@
  * | Pane | Heads Up use |
  * | --- | --- |
  * | `#headsup-controls` (top left) | the control panel: one launch button per test scene, the sim clock, replay speed, the scripted badge and Exit, then the cohort toggles and the legend |
- * | `#headsup-pipeline-rail` (top right) | the agent rail and its stage cards |
+ * | `#headsup-pipeline-rail` (top right) | the agent workflow map and its stage cards |
  * | `#headsup-status` (bottom left) | STATUS: the counter strip |
  * | `#headsup-advisory` (bottom right) | the active advisory, always on screen |
  * | `#headsup-banner` | the what-if provenance line |
@@ -35,11 +35,22 @@
  * bounded by the grammar in `./scenarios.js` and
  * `../layers/headsup/records.js` before it arrives here.
  *
- * **The rail is event-driven, never timed.** Every row, chip and card is
+ * **The rail is event-driven, never timed.** Every node, chip and card is
  * rendered from `./pipeline.js`, which reads the socket's own transcript: a
- * stage is lit because a frame for it arrived. There is no animation, no
- * progress bar and no stage that advances on a clock, because the rail's
- * whole job is to be a record of what the agents actually did.
+ * node is lit because a frame for it arrived. There is no progress bar and no
+ * stage that advances on a clock, because the rail's whole job is to be a
+ * record of what the agents actually did.
+ *
+ * The rail draws that record as a **workflow map**: the agents as labelled
+ * nodes down one spine, each joined to the next by a directed edge, so the
+ * route a signal takes — Feeds, Sentinels, Fusion, Proposer, Critic,
+ * Compiler, Operators — is on screen without anybody having to narrate it.
+ * The map changes the PRESENTATION and nothing else: a node still lights from
+ * its own event and stays lit, and the single animation in it is a one-shot
+ * pulse down the edge a frame just arrived over, fired by that arrival. The
+ * node the pipeline is AT is drawn differently from the ones behind it, which
+ * is a reading of the records themselves (the furthest node that has
+ * reported) and never of elapsed time.
  * @module headsup/console
  */
 
@@ -769,20 +780,48 @@ export function startHeadsupConsole({
   // is the id that ties every row here to the geometry on the globe.
   const railLink = element('span', 'headsup-rail-link', railHeader);
   railLink.textContent = '';
-  const railStages = element('ol', 'headsup-rail-stages', rail);
-  /** @type {Map<string, object>} One entry per stage row. */
+  const railStages = element('ol', 'headsup-rail-stages headsup-flow', rail);
+  /** @type {Map<string, object>} One entry per node of the map. */
   const stageRows = new Map();
 
   /**
-   * One rail row: a marker, a name, and the one short value it carries.
+   * The edge INTO one node, drawn down the spine the nodes share.
    *
-   * A button, because clicking it opens that stage's card. `aria-expanded`
-   * is what tells a screen reader the row discloses something, and
+   * Three parts rather than one border, because they say three different
+   * things: the line is the connection, the head is the direction, and the
+   * pulse is the one-shot that this node's own event fires when it lands.
+   * The whole edge is decoration — the flow it draws is already in the node
+   * labels and their order — so it is hidden from assistive technology
+   * rather than narrated a second time.
+   */
+  const flowEdge = (parent) => {
+    const edge = element('span', 'headsup-flow-edge', parent);
+    edge.setAttribute('aria-hidden', 'true');
+    edge.dataset.flow = 'idle';
+    element('span', 'headsup-flow-edge-line', edge);
+    element('span', 'headsup-flow-edge-head', edge);
+    element('span', 'headsup-flow-edge-pulse', edge);
+    // Parking the edge on `done` when the pulse finishes is what lets the
+    // NEXT replay's arrival run it again: a one-shot animation only restarts
+    // when the attribute selecting it changes.
+    on(edge, 'animationend', () => {
+      if (edge.dataset.flow === 'on') edge.dataset.flow = 'done';
+    });
+    return edge;
+  };
+
+  /**
+   * One node of the map: a marker, the agent's name, and the one short value
+   * it carries.
+   *
+   * A button, because clicking it opens that agent's card. `aria-expanded`
+   * is what tells a screen reader the node discloses something, and
    * `aria-controls` points at the card the click fills.
    */
-  const railRow = (parent, { key, name }) => {
-    const item = element('li', 'headsup-rail-item', parent);
-    const row = element('button', 'headsup-rail-stage', item);
+  const railRow = (parent, { key, name, edge = false }) => {
+    const item = element('li', 'headsup-flow-step', parent);
+    const edgeNode = edge ? flowEdge(item) : null;
+    const row = element('button', 'headsup-rail-stage headsup-flow-node', item);
     row.type = 'button';
     row.dataset.stage = key;
     row.setAttribute('aria-expanded', 'false');
@@ -794,17 +833,49 @@ export function startHeadsupConsole({
     const value = element('span', 'headsup-rail-stage-value', row);
     value.textContent = '';
     on(row, 'click', () => selectCard(key));
-    const entry = { item, row, value, nameNode };
+    const entry = { item, row, value, nameNode, edge: edgeNode };
     stageRows.set(key, entry);
     return entry;
   };
 
-  for (const stage of PIPELINE_STAGES)
-    railRow(railStages, { key: stage.key, name: t(stage.label) });
+  // The flow, top to bottom. Every node but the first carries the edge that
+  // enters it, so an arrival animates the step that was just taken. Feeds
+  // has none: nothing in this pipeline feeds the feeds.
+  PIPELINE_STAGES.forEach((stage, index) =>
+    railRow(railStages, {
+      key: stage.key,
+      name: t(stage.label),
+      edge: index > 0,
+    }),
+  );
 
-  const ackHeading = element('h3', 'headsup-rail-group', rail);
-  ackHeading.textContent = t('FLEET ANSWERS');
-  const railAcks = element('ol', 'headsup-rail-stages', rail);
+  // The map's last node: the fleet operators an advisory goes out to. NOT a
+  // button, because there is no one operators card — each fleet's answer is
+  // its own card, on the nodes that branch off below this one. It carries no
+  // tone either: an aggregate of three answers would be a claim nobody made,
+  // and each fleet's own answer already carries its own.
+  const operatorStep = element('li', 'headsup-flow-step', railStages);
+  const operatorEdge = flowEdge(operatorStep);
+  const operatorNode = element(
+    'div',
+    'headsup-flow-node headsup-flow-tier-node',
+    operatorStep,
+  );
+  const operatorMarker = element('span', 'headsup-rail-marker', operatorNode);
+  operatorMarker.setAttribute('aria-hidden', 'true');
+  const operatorName = element('span', 'headsup-rail-stage-name', operatorNode);
+  operatorName.textContent = t('OPERATORS');
+  const operatorCount = element(
+    'span',
+    'headsup-rail-stage-value',
+    operatorNode,
+  );
+  operatorCount.textContent = '';
+  const railAcks = element(
+    'ol',
+    'headsup-rail-stages headsup-flow-fleet',
+    rail,
+  );
   /** The operator rows the rail was last built for. */
   let renderedAcks = '';
   const railEmpty = element('p', 'headsup-rail-empty', rail);
@@ -1138,13 +1209,32 @@ export function startHeadsupConsole({
     }
   };
 
+  /** When each node of the map last lit, keyed by node. @type {Map} */
+  const arrivals = new Map();
+
   /**
-   * Draw the rail.
+   * Note that a node has lit, and animate the edge that fed it — once.
    *
-   * Stage rows exist from the start and only change state; the fleet rows
-   * are rebuilt when the operator SET changes, and the card when its own
-   * contents do. None of the three is rebuilt by a passing frame, because a
-   * row rebuilt under a pointer is a row that cannot be clicked.
+   * The pulse is fired by the transition from "nothing" to "something" and
+   * by nothing else: a node whose first record is later trimmed out from
+   * under it keeps the same state, because the edge says a frame ARRIVED,
+   * not that the oldest record on hand has a new timestamp. `at` going back
+   * to null is a replay ending, and the next one's arrival pulses again.
+   */
+  const noteArrival = (key, edge, at) => {
+    const was = arrivals.get(key) ?? null;
+    arrivals.set(key, at ?? null);
+    if (!edge || at == null) return;
+    if (was == null) edge.dataset.flow = 'on';
+  };
+
+  /**
+   * Draw the map.
+   *
+   * The agent nodes exist from the start and only change state; the fleet
+   * nodes are rebuilt when the operator SET changes, and the card when its
+   * own contents do. None of the three is rebuilt by a passing frame,
+   * because a node rebuilt under a pointer is one that cannot be clicked.
    */
   const renderRail = (view) => {
     railLink.textContent = view.hazardId
@@ -1155,11 +1245,28 @@ export function startHeadsupConsole({
     railLink.title = view.advisoryId
       ? t('Advisory {id}', { id: view.advisoryId })
       : '';
+    // Where the pipeline has got to: the FURTHEST node that has reported,
+    // which is the one drawn as active while the lit nodes behind it read as
+    // done. Both are readings of the records themselves — a stage lights
+    // because its own frame arrived — so nothing here advances on a clock.
+    // The fleets are the last node, so an answered advisory moves "active"
+    // off the compiler the moment a fleet speaks.
+    const answered = view.operators.length;
+    const active = answered
+      ? 'operators'
+      : ([...view.stages].reverse().find((stage) => stage.lit)?.key ?? null);
     for (const stage of view.stages) {
       const entry = stageRows.get(stage.key);
       if (!entry) continue;
       entry.row.dataset.tone = stage.tone;
       entry.row.dataset.lit = stage.lit ? 'true' : 'false';
+      entry.item.dataset.lit = stage.lit ? 'true' : 'false';
+      entry.item.dataset.state = stage.lit
+        ? stage.key === active
+          ? 'active'
+          : 'done'
+        : 'idle';
+      noteArrival(stage.key, entry.edge, stage.firstAt);
       entry.value.textContent = stage.value ?? '';
       entry.row.setAttribute(
         'aria-expanded',
@@ -1169,6 +1276,19 @@ export function startHeadsupConsole({
       // shape on the globe can be matched up without opening the card.
       entry.row.title = stage.linkedId ?? '';
     }
+    // The operators node. Its value is how many fleets have answered, which
+    // is a count of the nodes branching off it and not a tally of anything
+    // the feed has not said: no answers, no number.
+    operatorNode.dataset.lit = answered ? 'true' : 'false';
+    operatorStep.dataset.lit = answered ? 'true' : 'false';
+    operatorStep.dataset.state = answered ? 'active' : 'idle';
+    operatorCount.textContent = answered ? String(answered) : '';
+    noteArrival(
+      'operators',
+      operatorEdge,
+      answered ? (view.operators[0]?.at ?? 0) : null,
+    );
+
     const signature = view.operators
       .map((row) => `${row.op}:${row.status}`)
       .join(',');
@@ -1185,6 +1305,10 @@ export function startHeadsupConsole({
         });
         entry.row.dataset.tone = answer.tone;
         entry.row.dataset.lit = 'true';
+        // A fleet node is a leaf of the operators node: it has answered, so
+        // it is drawn as done, and its own tone says what it answered.
+        entry.item.dataset.lit = 'true';
+        entry.item.dataset.state = 'done';
         entry.value.textContent = answer.status;
       }
     } else
