@@ -71,6 +71,31 @@ body.headsup-mode #loading-screen :is(.loader-content, .loader-content *) {
   animation: none;
 }
 
+/* ── The cover, before the first paint ────────────────────────────────────
+   The one rule in this file that does NOT hang off `body.headsup-mode`, and
+   it has to be: the loading cover is static markup expanded into index.html
+   at build time, so the browser paints the fork's logo and wordmark the
+   instant the document arrives -- a beat before any module runs and renames
+   them. The result is a flash of GOD'S EYE VIEW on every load.
+
+   So the cover's contents start invisible for everyone, and are revealed by
+   a selector only a mode can satisfy. `markHeadsupMode` adds the body class
+   and `applyHeadsupBrand` writes the wordmark in the same synchronous turn
+   in src/standalone/application.js, so the first frame that shows the cover
+   already says Signum; `?mode=full` reveals upstream's own, untouched.
+
+   `visibility` rather than `display`: the box keeps its size, so nothing
+   reflows at the reveal, and the loader status line upstream writes to goes
+   on existing for the code that writes it. */
+#loading-screen .loader-content {
+  visibility: hidden;
+}
+
+body.headsup-mode #loading-screen .loader-content,
+:root[data-gev-mode='full'] #loading-screen .loader-content {
+  visibility: visible;
+}
+
 /* Upstream's ACTIVE STYLE readout. The scenario readout it used to host moved
    into the dock's first block, so the whole indicator goes — the node stays in
    the document, because upstream's own code keeps writing to
