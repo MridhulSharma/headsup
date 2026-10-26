@@ -78,6 +78,30 @@ in an instruction slot.
 Scripted events are flagged in the scenario YAML and badged on screen. S1 is real
 public data.
 
+### What it looks like
+
+![S2 signal blackout: a yellow SIGNAL_OUTAGE hazard over the downtown Austin grid, with an ALL_WAY_STOP advisory in force](docs/s2-advisory.png)
+
+**S2, downtown Austin signal blackout.** Fifteen flashing signals cluster into one
+hazard; the gate has published `adv_68ac6449b88d` — `ALL_WAY_STOP`, severity 2 of 5,
+163,197 m², Ed25519 signature present, expiring in 29 minutes, evidence `AUSTIN SIGNALS`.
+The labels on the map are the per-node actions the advisory carries: `SPEED_CAP` and
+`DENSITY_CAP` alongside the all-way stop. Three fleets are subscribed at 100 vehicles each.
+
+![S3 emergency scene: red KEEP_CLEAR volumes around a fire response in downtown Austin](docs/s3-advisory.png)
+
+**S3, downtown Austin emergency scene.** The hazard here came out of free-text dispatch
+records, some without coordinates — the case a rules engine cannot read. `KEEP_CLEAR`,
+severity 2 of 5, 65,844 m², expiring in 44 minutes, evidence `AUSTIN INCIDENTS`. The red
+volumes are the approach the advisory asks fleets to leave open for the second engine.
+
+Both shots are a live replay, not a mock-up: the advisory IDs, areas and expiries are
+read off the running compiler. The agent-pipeline rail and the status counters on the
+right read blank because the viewer's frame validators still expect a nested payload
+shape the backend no longer sends, so those two panels drop their frames. The advisory
+card, the hazard geometry and the fleet rows come through a different path and are live.
+That mismatch is a viewer-side bug, tracked below.
+
 ## Results
 
 20 runs, real model (`claude-sonnet-5-5` / `claude-haiku-5-5`), **$0.249 total
@@ -181,6 +205,14 @@ them findable.
 
 **Performance**
 
+- **The viewer's agent-pipeline rail and status strip do not light up.** The frame
+  validators in `gev/src/layers/headsup/records.js` read candidate, hazard, proposal,
+  verdict, ack and counter frames out of a nested `payload.<type>` envelope; the backend
+  emits them flat. Every one of those frames is rejected silently and the two panels stay
+  at their defaults. The advisory card, hazard geometry, fleet rows and telemetry use a
+  separate path and are unaffected, and the backend is provably healthy — frames were
+  captured off the live socket to confirm it. This is contract drift in the viewer, not a
+  pipeline failure, and it is a known open bug rather than a finished surface.
 - **The 30 fps Gate 1 floor is not reachable on this hardware.** Intel Iris Xe with
   Google photoreal 3D tiles holds a median ~12–13 fps at 1920×1080 with 1,000
   vehicles and 200 trails. That is a measured hardware fact, not an open task.
