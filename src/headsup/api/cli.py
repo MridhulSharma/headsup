@@ -157,6 +157,9 @@ def serve(
 ) -> None:
     """Run the API and the agents on one port, for the viewer to drive."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # The stand-in operator polls the approvals endpoint, and httpx logs every
+    # request at INFO: left on, that one client buries the pipeline's own lines.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     chosen: str | None = None
     try:
         if scenario:
@@ -200,6 +203,9 @@ def demo(
 ) -> None:
     """Run `hu serve` with one scenario started: the whole demo, one command."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+    # The stand-in operator polls the approvals endpoint, and httpx logs every
+    # request at INFO: left on, that one client buries the pipeline's own lines.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     try:
         chosen = _resolve(scenario, ScenarioCatalog())
         options = _options(speed, vehicles, seed, llm, ghost)
