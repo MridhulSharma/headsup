@@ -66,7 +66,7 @@ and every decision is recorded on both sides.
 
 ## Who it's for
 
-Four buyers, one artefact. The advisory is the product, and each of these reads a
+Four buyers, one artifact. The advisory is the product, and each of these reads a
 different part of it.
 
 | | What they get |
