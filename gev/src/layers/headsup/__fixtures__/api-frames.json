@@ -234,28 +234,28 @@
     },
     "counters": {
       "ghost": {
-        "assist_open": 23,
-        "hazard_entries": 12,
-        "rides_completed": 38
+        "assist_open_total": 23,
+        "hazard_entries_total": 12,
+        "rides_completed_total": 38
       },
       "live": {
-        "assist_open": 7,
-        "hazard_entries": 3,
-        "rides_completed": 41
+        "assist_open_total": 7,
+        "hazard_entries_total": 3,
+        "rides_completed_total": 41
       }
     },
     "headline": {
       "ghost": {
-        "assist_queue_depth": 0.0,
+        "assist_queue_depth": 23.0,
         "blocked_corridor_minutes": 19.25,
-        "hazard_entries": 0.0,
-        "rides_completed": 0.0
+        "hazard_entries": 12.0,
+        "rides_completed": 38.0
       },
       "live": {
-        "assist_queue_depth": 0.0,
+        "assist_queue_depth": 7.0,
         "blocked_corridor_minutes": 4.5,
-        "hazard_entries": 0.0,
-        "rides_completed": 0.0
+        "hazard_entries": 3.0,
+        "rides_completed": 41.0
       }
     },
     "type": "counters"

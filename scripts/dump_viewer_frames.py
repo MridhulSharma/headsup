@@ -25,6 +25,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "tests"))
 
+from headsup.sim import counters  # noqa: E402
 from headsup.api.frames import (  # noqa: E402
     RailIndex,
     ack_frame,
@@ -61,11 +62,22 @@ def build() -> dict[str, object]:
     advisory = advisory_frame(ADVISORY, index, signature_valid=True)
     ack = ack_frame(ACK, index)
     assist = assist_frame(ASSIST_REQUEST)
-    counters = counters_frame(
-        {
-            "live": {"hazard_entries": 3, "assist_open": 7, "rides_completed": 41},
-            "ghost": {"hazard_entries": 12, "assist_open": 23, "rides_completed": 38},
-        },
+    # Snapshot keys are built with `counters.key`, not spelled by hand: the
+    # headline block the viewer reads is only meaningful if the keys feeding
+    # it are the ones a real run produces.
+    def snapshot(entries: int, assists: int, rides: int) -> dict[str, int]:
+        return {
+            counters.key(counters.HAZARD_ENTRIES): entries,
+            counters.key(counters.ASSIST_OPEN): assists,
+            counters.key(counters.RIDES_COMPLETED): rides,
+        }
+
+    counters_by_mode = {
+        "live": snapshot(3, 7, 41),
+        "ghost": snapshot(12, 23, 38),
+    }
+    counters_payload = counters_frame(
+        counters_by_mode,
         {"live": {"corr-1": 4.5}, "ghost": {"corr-1": 19.25}},
     )
     return {
@@ -76,7 +88,7 @@ def build() -> dict[str, object]:
         "advisory": advisory,
         "ack": ack,
         "assist": assist,
-        "counters": counters,
+        "counters": counters_payload,
     }
 
 
