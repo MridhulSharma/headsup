@@ -96,11 +96,12 @@ severity 2 of 5, 65,844 m², expiring in 44 minutes, evidence `AUSTIN INCIDENTS`
 volumes are the approach the advisory asks fleets to leave open for the second engine.
 
 Both shots are a live replay, not a mock-up: the advisory IDs, areas and expiries are
-read off the running compiler. The agent-pipeline rail and the status counters on the
-right read blank because the viewer's frame validators still expect a nested payload
-shape the backend no longer sends, so those two panels drop their frames. The advisory
-card, the hazard geometry and the fleet rows come through a different path and are live.
-That mismatch is a viewer-side bug, tracked below.
+read off the running compiler. They were captured **before** the frame-contract fix,
+which is why the agent-pipeline rail and the status counters on the right read blank —
+the viewer was validating pipeline frames against a shape the API never sent and
+dropping all of them. That is fixed; the rail now lights every stage from FEEDS through
+COMPILER and the counters report. See `gev/scripts/railcheck.mjs`, which replays the
+server's own frames through the viewer and prints the rail.
 
 ## Results
 
@@ -202,14 +203,28 @@ free sweep rather than the paid one.
 
 **Performance**
 
-- **The viewer's agent-pipeline rail and status strip do not light up.** The frame
-  validators in `gev/src/layers/headsup/records.js` read candidate, hazard, proposal,
-  verdict, ack and counter frames out of a nested `payload.<type>` envelope; the backend
-  emits them flat. Every one of those frames is rejected silently and the two panels stay
-  at their defaults. The advisory card, hazard geometry, fleet rows and telemetry use a
-  separate path and are unaffected, and the backend is provably healthy — frames were
-  captured off the live socket to confirm it. This is contract drift in the viewer, not a
-  pipeline failure, and it is a known open bug rather than a finished surface.
+- **The two-key approval control never appears in the viewer, and cannot.** The rail's
+  Approve button is drawn for a proposal whose latest compiler answer is
+  `PENDING_APPROVAL`, and there is no compile stream on the bus: `CompileResult` lives
+  inside the compiler service and never reaches the viewer socket. A proposal held for a
+  second key never becomes an advisory, so nothing about it is published at all. The
+  COMPILER row is therefore derived from published advisories and can only ever read
+  `SIGNED` — the gate's refusals and holds are real, recorded in the audit log, and
+  exercised by the tests, but they are invisible on screen. Closing this needs one
+  additive frame on the server, not a viewer change.
+- **The viewer validated pipeline frames against a contract the server never spoke**,
+  for the whole build: six validators read candidate, hazard, proposal, verdict, ack and
+  counter frames out of a nested envelope under field names the API does not use, so
+  every one was silently rejected and the rail, the stage cards and the status strip sat
+  at their defaults on a pipeline that was running correctly. Nothing caught it because
+  `viz/mock_stream.py` only ever emitted `telemetry` and `advisory` — no test on either
+  side had ever put a real pipeline frame through a real validator. It is fixed, and the
+  frames both sides agree on are now generated from the server's own builders rather
+  than written twice: `scripts/dump_viewer_frames.py` dumps them,
+  `tests/unit/test_viewer_frame_fixture.py` fails when they drift, and
+  `records.contract.test.mjs` feeds them to the real validators. Ten of those seventeen
+  tests fail against the pre-fix code. The lesson is in the shape of the bug: a contract
+  with two hand-written ends and no shared example will drift, and stay quiet about it.
 - **The 30 fps Gate 1 floor is not reachable on this hardware.** Intel Iris Xe with
   Google photoreal 3D tiles holds a median ~12–13 fps at 1920×1080 with 1,000
   vehicles and 200 trails. That is a measured hardware fact, not an open task.
