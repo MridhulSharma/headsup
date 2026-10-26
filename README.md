@@ -16,15 +16,74 @@ fleet operator, and not for operational use.
 
 ## The problem
 
-Cities change faster than fleets learn. A low-water crossing floods, a signal
-cluster goes dark, an engine company takes a lane — and there is no channel that
-tells every fleet at once. Today each operator integrates with each city
-separately, or not at all.
+A low-water crossing floods. A cluster of signals goes dark after a substation
+fault. An engine company takes a lane for forty minutes.
 
-Signum is one integration per city instead of one per fleet. A hazard becomes
-a signed GeoJSON advisory with an action, an area, an expiry, and the evidence it
-rests on. Fleets subscribe. Compliance stays the operator's call, and every
-decision is recorded on both sides.
+The city knows about all three within seconds. Each one is already sitting in a
+feed it publishes — a National Weather Service warning, a stream-gauge reading, a
+signal-status endpoint, a dispatch record.
+
+**None of it reaches the vehicles.**
+
+That is the part people assume is solved. It isn't. The channel between a city and
+an autonomous fleet today is a phone number and a PDF. Waymo publishes a
+law-enforcement interaction protocol per vehicle model, runs a first-responder
+hotline, and has trained more than 35,000 responders at over 150 agencies. That is
+a serious programme, run properly — and it is also the exact shape of the problem.
+It is manual, it is per-operator, and it scales by training humans.
+
+Do the arithmetic a city actually faces. Three robotaxi operators means three
+separate integrations, three hotlines, three escalation paths. A fourth operator
+arrives and the city starts again from nothing. Every city repeats this for every
+operator, forever, while the hazard is in the road and the clock is running.
+
+**The gap is not sensing.** Every signal already exists, already public, already
+timestamped. The gap is that there is no authoritative, machine-readable channel on
+which a city can say one thing once and have every fleet hear it — and verify it
+came from the city.
+
+### What already exists, and what it leaves out
+
+Nothing below is a direct substitute. That is the finding, not an excuse: the
+adjacent work standardises one narrow hazard class, targets human drivers, or sells
+the city a dashboard.
+
+| | What it does | What it leaves open |
+| --- | --- | --- |
+| **WZDx** (US DOT) — the closest precedent | A GTFS-style spec for publishing harmonised work-zone data to OEMs and navigation apps | A format, not a pipeline. It assumes the city already holds structured data, covers work zones only, and carries no signature, expiry or evidence trail |
+| **HAAS Alert** | V2X digital alerting; transponders on emergency apparatus broadcast into Waze and some OEM vehicles | The emitter is a vehicle and the receiver is a human driver. Covers the responder's own presence, not civic hazards generally |
+| **Waze for Cities** | A two-way data partnership; cities share closures and incidents, and get flow data back | One proprietary consumer, rendering to a person. A fleet cannot subscribe to a verifiable machine contract |
+| **Rekor / Waycare** | AI incident detection and traffic-management dashboards for DOTs | Sells the city situational awareness. The output is a screen for an operator, not an instrument a third-party fleet consumes |
+
+Read down that last column and the missing piece is the same every time: **a signed,
+expiring, evidence-bound instrument that any fleet can verify and act on, published
+once by the city, owned by no operator.**
+
+That is what Signum is. A hazard becomes a signed GeoJSON advisory carrying an
+action, an area, an expiry, and the evidence it rests on. Fleets subscribe — one
+integration per city instead of one per fleet. Compliance stays the operator's call,
+and every decision is recorded on both sides.
+
+## Who it's for
+
+Four buyers, one artefact. The advisory is the product, and each of these reads a
+different part of it.
+
+| | What they get |
+| --- | --- |
+| **City transport and emergency-management agencies** | Publish once. A hazard their existing feeds already describe becomes a structured advisory with no new integration per operator — and their integration cost stops scaling with the number of operators in town |
+| **Robotaxi and AV fleet operators** | One signed feed per city instead of a bilateral arrangement per city. Full autonomy over whether to comply, and a record proving what they were told and when |
+| **Emergency responders** (fire, EMS, police) | A scene already reported to dispatch produces a keep-clear corridor, without anyone phoning a fleet operator from the kerb |
+| **Regulators and city auditors** | A hash-chained record of what was advised, on what evidence, and which operator did what about it — the thing that is impossible to reconstruct from a phone call |
+
+The reason this generalises is that **nothing in the contract is specific to
+robotaxis.** An advisory is a signed statement that an area has a hazard class, a
+recommended action and an expiry. Any consumer that can check a signature and read
+GeoJSON can act on it: delivery robots and sidewalk fleets, drone corridors, transit
+and school-bus routing, commercial telematics, mapping providers, insurers pricing
+exposure in real time. The prototype proves the channel on robotaxis because that is
+where the regulatory pressure is sharpest today — not because the channel is
+narrower than that.
 
 ## How it works
 
