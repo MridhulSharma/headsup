@@ -80,6 +80,41 @@ public data.
 
 ### What it looks like
 
+#### One whole run, end to end
+
+![S3 emergency scene, complete run: every agent-pipeline stage lit from FEEDS through OPERATORS, three fleets accepted, and a verified KEEP_CLEAR advisory in force over downtown Austin](docs/s3-complete.png)
+
+**This is the whole system in one frame.** S3, the downtown Austin emergency scene —
+the scenario built on free-text dispatch records, some without coordinates, which is
+the case a rules engine cannot read.
+
+Follow the rail down the right-hand side. One public feed is cited. A sentinel reads
+the dispatch text and classes it `EMERGENCY_SCENE`. Fusion combines the readings at
+**55% confidence** and narrows the hazard to the reach the evidence corroborates. The
+proposer chooses `KEEP_CLEAR` from the hazard class's playbook vocabulary — it could
+not have invented an action outside it. The critic, which sees the proposal and the
+raw evidence but never the proposer's rationale, answers `APPROVE`. Only then does the
+compiler — plain Python, not a model — sign and publish. All three fleets accepted.
+
+The advisory card is the published artefact: `adv_894fdc88c560`, `KEEP_CLEAR`,
+severity 2 of 5, 65,843 m², expiring in 43 minutes, issued by `headsup/austin`,
+evidence `AUSTIN INCIDENTS`, and an Ed25519 signature this server **verified** rather
+than assumed. Three advisories are in force.
+
+**Time from first public signal to published advisory: 2.8 seconds.** That number is
+measured by the page itself — from the first feed frame it saw to the first advisory
+it received — not copied off a publisher's clock.
+
+The status strip carries the comparison the whole project exists to make. Live fleet
+against ghost fleet, the same scenario with no advisory: **235 hazard entries versus
+251**, and an assist queue of **235 against 250**. The red figure is the counterfactual
+— what the same city, the same minute, costs a fleet that never got the message.
+
+On the map, the red volumes are what `KEEP_CLEAR` asks for: the approach to the fire
+station held open for the second engine, before dispatch had called it a crash.
+
+#### Earlier captures
+
 ![S2 signal blackout: a yellow SIGNAL_OUTAGE hazard over the downtown Austin grid, with an ALL_WAY_STOP advisory in force](docs/s2-advisory.png)
 
 **S2, downtown Austin signal blackout.** Fifteen flashing signals cluster into one
@@ -95,13 +130,14 @@ records, some without coordinates — the case a rules engine cannot read. `KEEP
 severity 2 of 5, 65,844 m², expiring in 44 minutes, evidence `AUSTIN INCIDENTS`. The red
 volumes are the approach the advisory asks fleets to leave open for the second engine.
 
-Both shots are a live replay, not a mock-up: the advisory IDs, areas and expiries are
-read off the running compiler. They were captured **before** the frame-contract fix,
-which is why the agent-pipeline rail and the status counters on the right read blank —
-the viewer was validating pipeline frames against a shape the API never sent and
-dropping all of them. That is fixed; the rail now lights every stage from FEEDS through
-COMPILER and the counters report. See `gev/scripts/railcheck.mjs`, which replays the
-server's own frames through the viewer and prints the rail.
+These two are live replays as well, and their advisory IDs, areas and expiries are read
+off the running compiler the same way. They were captured **before** the frame-contract
+fix, which is why the rail and the status counters read blank in them: the viewer was
+validating pipeline frames against a shape the API never sent and dropping every one.
+They are kept because the advisory geometry and the published cards in them are real,
+and because the contrast with the run above is the clearest record of what that fix
+changed. `gev/scripts/railcheck.mjs` replays the server's own frames through the viewer
+and prints the rail, so the lit version is reproducible without a live stack.
 
 ## Results
 
