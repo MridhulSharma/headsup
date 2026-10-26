@@ -144,6 +144,15 @@ def serve(
         "--ghost/--no-ghost",
         help="Run the unadvised baseline fleet beside the advised one, on the same seed.",
     ),
+    approve: bool = typer.Option(
+        False,
+        "--approve/--no-approve",
+        help=(
+            "Have a stand-in operator approve two-key advisories over the approvals "
+            "API. Off by default: a severity-4 advisory is meant to wait for a person, "
+            "and on this command the person is whoever is driving the viewer."
+        ),
+    ),
     log_level: str = typer.Option("warning", "--log-level", help="uvicorn log level."),
 ) -> None:
     """Run the API and the agents on one port, for the viewer to drive."""
@@ -163,6 +172,7 @@ def serve(
         options=options,
         namespace=namespace,
         log_level=log_level,
+        second_key=approve,
     )
 
 
