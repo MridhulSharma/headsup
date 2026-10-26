@@ -545,6 +545,8 @@ test('a fused hazard frame carries identity, class and severity', () => {
       // Absent is null, not a guess: a hazard that reported no confidence
       // has not told this page it is 0.
       confidence: null,
+      candidateIds: [],
+      updatedAt: null,
       rationale: null,
       validUntil: null,
       evidence: [],

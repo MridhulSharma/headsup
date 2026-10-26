@@ -1,0 +1,366 @@
+{
+  "ack": {
+    "acknowledged_at": "2026-10-20T23:15:58+00:00",
+    "advisory_id": "adv_flood_1",
+    "advisory_version": 1,
+    "id": "ack_flood_1",
+    "operator": "op_c",
+    "proposal_id": "prop_flood_1",
+    "reason": "Confidence 0.91 accepted, but op_c declines advisories it cannot verify locally.",
+    "status": "DECLINED",
+    "type": "ack",
+    "vehicles_rerouted": 0
+  },
+  "advisory": {
+    "action": "NO_ENTRY",
+    "candidate_ids": [
+      "cand_flood_1"
+    ],
+    "feature": {
+      "geometry": {
+        "coordinates": [
+          [
+            [
+              -98.4946,
+              29.4195
+            ],
+            [
+              -98.4921,
+              29.4195
+            ],
+            [
+              -98.4921,
+              29.4213
+            ],
+            [
+              -98.4946,
+              29.4213
+            ],
+            [
+              -98.4946,
+              29.4195
+            ]
+          ]
+        ],
+        "type": "Polygon"
+      },
+      "id": "adv_flood_1",
+      "properties": {
+        "action": {
+          "applies_to": {
+            "edges": [
+              "58291-58294-0"
+            ],
+            "nodes": [],
+            "operators": [
+              "*"
+            ],
+            "vehicle_classes": [
+              "*"
+            ]
+          },
+          "params": {},
+          "type": "NO_ENTRY"
+        },
+        "evidence": [
+          {
+            "event_id": "ev_nws_flood_1",
+            "geometry": null,
+            "kind": "flood_warning",
+            "observed_at": "2026-10-20T23:15:00Z",
+            "raw_ref": "data/recordings/s1_flood/nws_0001.json",
+            "source": "nws"
+          },
+          {
+            "event_id": "ev_usgs_gauge_1",
+            "geometry": null,
+            "kind": "gauge_reading",
+            "observed_at": "2026-10-20T23:15:30Z",
+            "raw_ref": "data/recordings/s1_flood/usgs_0001.json",
+            "source": "usgs"
+          }
+        ],
+        "hazard": {
+          "candidates": [
+            "cand_flood_1"
+          ],
+          "class": "FLOOD",
+          "confidence": 0.91,
+          "evidence": [
+            {
+              "event_id": "ev_nws_flood_1",
+              "geometry": null,
+              "kind": "flood_warning",
+              "observed_at": "2026-10-20T23:15:00Z",
+              "raw_ref": "data/recordings/s1_flood/nws_0001.json",
+              "source": "nws"
+            },
+            {
+              "event_id": "ev_usgs_gauge_1",
+              "geometry": null,
+              "kind": "gauge_reading",
+              "observed_at": "2026-10-20T23:15:30Z",
+              "raw_ref": "data/recordings/s1_flood/usgs_0001.json",
+              "source": "usgs"
+            }
+          ],
+          "first_seen": "2026-10-20T23:15:10Z",
+          "geometry": {
+            "coordinates": [
+              [
+                [
+                  -98.4946,
+                  29.4195
+                ],
+                [
+                  -98.4921,
+                  29.4195
+                ],
+                [
+                  -98.4921,
+                  29.4213
+                ],
+                [
+                  -98.4946,
+                  29.4213
+                ],
+                [
+                  -98.4946,
+                  29.4195
+                ]
+              ]
+            ],
+            "type": "Polygon"
+          },
+          "id": "haz_flood_1",
+          "narrowing": null,
+          "rationale": "The NWS flood warning and the USGS gauge at 11.4 ft against a 9.0 ft flood stage agree that the crossing is under water.",
+          "severity": 4,
+          "updated_at": "2026-10-20T23:15:40Z",
+          "valid_until": "2026-10-21T02:15:00Z"
+        },
+        "id": "adv_flood_1",
+        "issuer": "headsup/san_antonio",
+        "policy_rule": "flood.no_entry.v1",
+        "signature": "3rUqRtQKnJ5n2Y1pZ8m0bWc4dE6fG7hI8jK9lM0nO1p2Q3r4S5t6U7v8W9x0Y1z2A3B4C5D6E7F8g==",
+        "valid_from": "2026-10-20T23:15:55Z",
+        "valid_until": "2026-10-21T01:15:00Z",
+        "version": 1
+      },
+      "type": "Feature"
+    },
+    "hazard_id": "haz_flood_1",
+    "id": "adv_flood_1",
+    "issuer": "headsup/san_antonio",
+    "policy_rule": "flood.no_entry.v1",
+    "proposal_id": "prop_flood_1",
+    "signature_valid": true,
+    "type": "advisory",
+    "valid_from": "2026-10-20T23:15:55+00:00",
+    "valid_until": "2026-10-21T01:15:00+00:00",
+    "version": 1
+  },
+  "assist": {
+    "class": "FLOOD",
+    "ghost": true,
+    "hazard_id": "haz_flood_1",
+    "id": "assist_flood_1",
+    "location": {
+      "coordinates": [
+        -98.4933,
+        29.4204
+      ],
+      "type": "Point"
+    },
+    "operator": "op_c",
+    "priority": 2,
+    "reason": "FLOODED_EDGE",
+    "requested_at": "2026-10-20T23:18:00+00:00",
+    "type": "assist",
+    "vehicle_id": "veh_op_c_004"
+  },
+  "candidate": {
+    "class": "FLOOD",
+    "confidence": 0.72,
+    "detected_at": "2026-10-20T23:15:10+00:00",
+    "detected_by": "flood_sentinel",
+    "event_ids": [
+      "ev_nws_flood_1"
+    ],
+    "geometry": {
+      "coordinates": [
+        [
+          [
+            -98.4946,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4195
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "id": "cand_flood_1",
+    "notes": "Polygon taken from the NWS warning area, clipped to the crossing.",
+    "severity": 4,
+    "sources": [
+      "nws"
+    ],
+    "type": "candidate",
+    "valid_until": "2026-10-21T02:15:00+00:00"
+  },
+  "counters": {
+    "blocked_minutes": {
+      "ghost": {
+        "corr-1": 19.25
+      },
+      "live": {
+        "corr-1": 4.5
+      }
+    },
+    "counters": {
+      "ghost": {
+        "assist_open_total": 23,
+        "hazard_entries_total": 12,
+        "rides_completed_total": 38
+      },
+      "live": {
+        "assist_open_total": 7,
+        "hazard_entries_total": 3,
+        "rides_completed_total": 41
+      }
+    },
+    "headline": {
+      "ghost": {
+        "assist_queue_depth": 23.0,
+        "blocked_corridor_minutes": 19.25,
+        "hazard_entries": 12.0,
+        "rides_completed": 38.0
+      },
+      "live": {
+        "assist_queue_depth": 7.0,
+        "blocked_corridor_minutes": 4.5,
+        "hazard_entries": 3.0,
+        "rides_completed": 41.0
+      }
+    },
+    "type": "counters"
+  },
+  "hazard": {
+    "candidate_ids": [
+      "cand_flood_1"
+    ],
+    "class": "FLOOD",
+    "confidence": 0.91,
+    "event_ids": [
+      "ev_nws_flood_1",
+      "ev_usgs_gauge_1"
+    ],
+    "geometry": {
+      "coordinates": [
+        [
+          [
+            -98.4946,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4195
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "id": "haz_flood_1",
+    "rationale": "The NWS flood warning and the USGS gauge at 11.4 ft against a 9.0 ft flood stage agree that the crossing is under water.",
+    "severity": 4,
+    "sources": [
+      "nws",
+      "usgs"
+    ],
+    "type": "hazard",
+    "updated_at": "2026-10-20T23:15:40+00:00",
+    "valid_until": "2026-10-21T02:15:00+00:00"
+  },
+  "proposal": {
+    "action": "NO_ENTRY",
+    "candidate_ids": [
+      "cand_flood_1"
+    ],
+    "geometry": {
+      "coordinates": [
+        [
+          [
+            -98.4946,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4195
+          ],
+          [
+            -98.4921,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4213
+          ],
+          [
+            -98.4946,
+            29.4195
+          ]
+        ]
+      ],
+      "type": "Polygon"
+    },
+    "hazard_id": "haz_flood_1",
+    "id": "prop_flood_1",
+    "params": {},
+    "policy_rule": "flood.no_entry.v1",
+    "proposed_by": "proposer",
+    "rationale": "A low-water crossing under an active warning is a no-entry area, not a slow zone.",
+    "type": "proposal",
+    "valid_from": "2026-10-20T23:15:45+00:00",
+    "valid_until": "2026-10-21T01:15:00+00:00"
+  },
+  "verdict": {
+    "created_at": "2026-10-20T23:15:50+00:00",
+    "hazard_id": "haz_flood_1",
+    "proposal_id": "prop_flood_1",
+    "reasons": [
+      "Two authoritative sources agree.",
+      "Geometry is limited to the crossing."
+    ],
+    "reviewed_by": "critic",
+    "revised": false,
+    "type": "verdict",
+    "verdict": "APPROVE"
+  }
+}
