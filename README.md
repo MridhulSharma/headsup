@@ -168,9 +168,6 @@ free sweep rather than the paid one.
 
 ## Honest limitations
 
-Written out because a judge will find these anyway, and because the audit log makes
-them findable.
-
 **Measurement**
 
 - **Hazard entries are flat across variants and that is a measurement artifact,
