@@ -1,4 +1,5 @@
 import {
+  compileFromAdvisory,
   normalizeAckFrame,
   normalizeAdvisoryFeature,
   normalizeAssistFrame,
@@ -305,6 +306,17 @@ export function createHeadsupViewerSource({
       runTallies.advisory++;
       noteSignal(now());
       if (advisoryAt == null) advisoryAt = now();
+      // The gate signed this, and no `compile` frame exists to say so: the
+      // compiler's own result never leaves its process. Without this the
+      // rail's COMPILER row stays dark on a run that published an advisory,
+      // which reads as "the gate did not run" rather than "the gate ran and
+      // this is what it produced". A real compile frame, if one is ever
+      // sent, replaces this by proposal id rather than doubling it.
+      const compiled = compileFromAdvisory(payload);
+      if (compiled) {
+        runTallies.compile++;
+        remember(runRecords.compiles, { ...compiled, at: now() });
+      }
     } else if (payload?.type === 'scenario_state') {
       const state = normalizeScenarioStateFrame(payload);
       if (!state) {
