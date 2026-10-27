@@ -207,30 +207,56 @@ without the critic, **V4** full pipeline. Full tables in
 [`results/ablation.md`](results/ablation.md); per-run rows in
 [`results/ablation.csv`](results/ablation.csv).
 
-### The headline: remote-assist load on the free-text scene
+### What the 20 runs actually establish
 
-Means over the two seeds all variants share (42, 43):
+Two things, on every row, with no seed-picking:
 
-| S3 emergency scene | assist requests | reduction vs V0 | missed hazards |
-| --- | --- | --- | --- |
-| V0 — no Signum | 550.0 | — | 1 |
-| V1 — rules only | 541.0 | **1.6%** | 0 |
-| V4 — full pipeline | 282.5 | **48.6%** | 0 |
+| | V0 no Signum | V1 rules only | V3 agents, no critic | V4 full pipeline |
+| --- | --- | --- | --- | --- |
+| **Missed hazards** (all rows) | **1** | 0 | 0 | 0 |
+| Advisories published | 0 | 3–36 | 4–18 | 4–18 |
+| Proposals the gate refused | — | 0 | 0 | **3–18** |
 
-A rules-only reading of the same dispatch feed removes almost none of the
-remote-assist load. The agent pipeline removes about half. On S2, where the input
-is clean and structured, V0 → V4 is 432.0 → 173.5 (59.8%) and V1 closes most of
-that gap on its own — which is the expected result, and the reason S3 is the
-scenario the case rests on.
+**Detection is the clean result.** V0 misses the hazard in all six of its runs;
+every variant that reads the feeds misses none, in all fourteen of theirs. That is
+the channel working, and it does not depend on a single metric's accounting.
+
+**The refusals are the interesting column.** V4 is the only variant that ever has
+the gate turn a proposal down — on S2 seed 43 it published 18 advisories and
+refused 18 more. V3 runs the same agents without the critic and is refused nothing,
+because nothing escalates. That column is the critic and the two-key rule becoming
+visible in the data rather than only in the tests.
+
+On the within-run counterfactual — each live fleet against its own ghost, same run,
+same seed — the advised fleet accrues fewer blocked corridor minutes in **all seven
+S3 runs that produce a corridor**, by 0.9–3.7%. Consistent in direction, small in
+size, and reported as such.
+
+### What we do not claim
+
+**The `assist_requests` column is not trustworthy, so no reduction is claimed from
+it.** An earlier version of this README headlined S3 assist load falling from 550 to
+282.5 (48.6%). That figure is withdrawn.
+
+In 7 of the 20 runs, `assist_requests` equals `assist_peak` *exactly* — including
+V0 and V1 rows, so it is not a quirk of the agent path. A cumulative count landing
+precisely on the concurrent peak in seven separate runs is an accounting fault, not
+a coincidence, and until it is reconciled the column cannot carry a comparison. The
+project document reaches the same conclusion and declines the same number; this file
+now agrees with it.
 
 ### Where V1 keeps up, and we say so
 
-On S3's blocked-corridor metric, **V1 matches V4** (11,463 vs 11,642 vehicle-minutes)
+On S3's blocked-corridor metric **V1 matches V4** (11,463 vs 11,642 vehicle-minutes)
 and V4 is marginally *worse*. Both reach zero missed hazards. V0 shows 0 corridor
-minutes only because it never creates a corridor at all. The case for agents rests
-on the assist-request separation above, on attack A3, and on the guardrails — **not**
-on corridor minutes. An honest margin beats a rigged one; that was the rule from
-day one.
+minutes only because it never creates a corridor at all.
+
+So the case for the agent pipeline rests on what it can read, not on a speed-up: a
+rules engine cannot turn free-text dispatch records with no coordinates into typed,
+geocoded hazards, and V0's missed hazard is what that costs. Beyond that the case is
+the gate, attack A3, and the refusal column above — **not** corridor minutes, and no
+longer assist load. An honest margin beats a rigged one; that was the rule from day
+one, and applying it to our own headline number is the test of it.
 
 ## Attacks
 
@@ -273,10 +299,17 @@ free sweep rather than the paid one.
 - **`p95_agent_latency_ms` is unreportable for V1.** Four of six V1 rows read
   14–15 hours; the rules-only path has a timestamp bug. V3/V4 figures (5–83 s) are
   sound. Do not read the V1 latency column.
-- **`rerouted: 0` on every S2 row is correct, not broken.** Only NO_ENTRY and
-  KEEP_CLEAR remove edges. S2's actions are ALL_WAY_STOP, DENSITY_CAP and SPEED_CAP,
-  none of which reroute. 18 advisories published, 14 acks, all three operators
+- **`rerouted: 0` on every S2 row is correct, not broken.** Only NO_ENTRY removes
+  edges from routing. S2's actions are ALL_WAY_STOP, DENSITY_CAP and SPEED_CAP, none
+  of which reroute — and KEEP_CLEAR does not either: it forbids *stopping* in the
+  corridor, not travelling through it, which is what keeping a fire-station approach
+  clear actually means. 18 advisories published, 14 acks, all three operators
   ACCEPTED.
+- **The viewer's `rerouted` readout is always 0, in every scenario.** It counts
+  vehicles carrying a `rerouted_by` field, and `VehicleState` has no such field — it
+  never reaches the wire. The deflection trail in the viewer's legend cannot draw for
+  the same reason. The simulator does reroute under NO_ENTRY; the viewer has no way
+  to say so.
 - **The D3.1 target was a 3× ghost/live assist-queue peak ratio. Actual is ~1.2×.**
 
 **Coverage**

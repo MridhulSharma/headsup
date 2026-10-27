@@ -258,16 +258,26 @@ def shared_seed_rows(
 
 
 def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
-    """The headline: S3 remote-assist load and missed hazards, V0, V1, V4.
+    """The headline: S3 blocked corridor minutes and missed hazards, V0, V1, V4.
 
-    Assist requests rather than blocked-corridor minutes, because corridor
-    minutes are where V1 and V4 agree and the assist queue is where they do
-    not. Both figures stay in the tables; this is the one the pitch rests on.
+    This panel used to plot `assist_requests`, because that was where V0 and
+    V4 separated most. It no longer does, and the reason is the point: in 7 of
+    the 20 recorded runs that column equals `assist_peak` exactly, including
+    V0 and V1 rows, so a cumulative count is landing on the concurrent peak
+    too often to be an accident. Until that is reconciled the column cannot
+    carry a comparison, and a chart is the worst place to keep claiming one --
+    it travels further than the caveat under it.
+
+    What is plotted instead is what the runs support: corridor minutes, where
+    V1 and V4 agree and the honest answer is "no separation", and missed
+    hazards, where V0 fails on every row and every reading variant does not.
+    A chart that shows one result flat and the other decisive is a truer
+    picture of this evaluation than a dramatic bar built on a suspect column.
 
     Two panels over the same three variants rather than two y-axes in one
     frame. The measures have nothing to do with each other's scale -- one is
-    a few hundred requests, the other a count of two or three hazards -- and a
-    dual axis would let the choice of scales decide what the chart said.
+    thousands of vehicle-minutes, the other a count of two or three hazards --
+    and a dual axis would let the choice of scales decide what the chart said.
     """
     good = [row for row in usable(rows) if row.scenario == HEADLINE_SCENARIO]
     good, common = shared_seed_rows(good, HEADLINE_VARIANTS, HEADLINE_SCENARIO)
@@ -283,7 +293,7 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
         2, 1, figsize=(9.0, 7.0), dpi=DPI, facecolor=SURFACE, sharex=True
     )
     panels = (
-        (top, "assist_requests", "remote-assist requests", SERIES[0], "%.1f"),
+        (top, "blocked_corridor_minutes", "blocked corridor (veh-min)", SERIES[0], "%.0f"),
         (bottom, "missed_hazards", "missed hazards", SERIES[1], "%.0f"),
     )
     for ax, field, ylabel, colour, fmt in panels:
@@ -291,15 +301,18 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
             cell(buckets.get((variant.value, HEADLINE_SCENARIO), []), field).value or 0.0
             for variant in variants
         ]
-        # The change against the baseline rides on the bar label. A separate
-        # annotation collides with the subtitle on the tallest bar, and the
-        # figure has to survive being screenshotted out of its caption.
+        # The reading rides on the bar label, because the figure has to survive
+        # being screenshotted out of its caption.
         labels = [fmt % value for value in values]
-        if field == "assist_requests" and values and values[0]:
-            base, against = values[0], variants[0].value
-            labels = [labels[0]] + [
-                f"{text}   \u2212{(base - value) / base * 100:.0f}% vs {against}"
-                for text, value in zip(labels[1:], values[1:], strict=True)
+        if field == "blocked_corridor_minutes":
+            # A zero here is not a win and must never be allowed to look like
+            # one. V0 publishes no advisory, so it never creates a corridor,
+            # so it accrues no corridor minutes -- the bar is absence, not
+            # performance, and unlabelled it reads as the best result on the
+            # chart. Every zero on this panel says so on its face.
+            labels = [
+                "0 \u2014 no corridor created" if value == 0 else text
+                for text, value in zip(labels, values, strict=True)
             ]
         bars = ax.bar(
             [variant.value for variant in variants],
@@ -315,7 +328,7 @@ def headline_chart(rows: Sequence[RunMetrics], directory: Path) -> Path | None:
         _style(ax, title="", ylabel=ylabel)
 
     top.set_title(
-        f"{HEADLINE_SCENARIO}: the remote-assist load each reading leaves behind",
+        f"{HEADLINE_SCENARIO}: what each reading of the feed catches, and what it costs",
         color=INK,
         fontsize=13,
         loc="left",
