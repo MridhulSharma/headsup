@@ -19,7 +19,7 @@ fleet operator, and not for operational use.
 
 ---
 
-## The problem
+## The Problem
 
 A low-water crossing floods. A cluster of signals goes dark after a substation
 fault. An engine company takes a lane for forty minutes.
@@ -47,7 +47,7 @@ timestamped. The gap is that there is no authoritative, machine-readable channel
 which a city can say one thing once and have every fleet hear it — and verify it
 came from the city.
 
-### What already exists, and what it leaves out
+### What Already Exists, and What It Leaves Out
 
 Nothing below is a direct substitute. That is the finding, not an excuse: the
 adjacent work standardises one narrow hazard class, targets human drivers, or sells
@@ -69,7 +69,7 @@ action, an area, an expiry, and the evidence it rests on. Fleets subscribe — o
 integration per city instead of one per fleet. Compliance stays the operator's call,
 and every decision is recorded on both sides.
 
-## Who it's for
+## Who It's For
 
 Four buyers, one artifact. The advisory is the product, and each of these reads a
 different part of it.
@@ -90,7 +90,7 @@ exposure in real time. The prototype proves the channel on robotaxis because tha
 where the regulatory pressure is sharpest today — not because the channel is
 narrower than that.
 
-## How it works
+## How It Works
 
 Public feeds → agents → a deterministic gate → signed advisory → fleets.
 
@@ -104,10 +104,10 @@ Public feeds → agents → a deterministic gate → signed advisory → fleets.
 | **Compiler** | The deterministic publishing gate. Not a model |
 | **Operators** | Three simulated fleets with fixed personas: accept immediately, accept after 30–90 s, decline below 0.7 confidence |
 
-### The guardrails are the point
+### Guardrails USP
 
-The agents propose; they cannot publish. Every advisory passes a gate written in
-plain Python, and that gate is what makes a model in the loop defensible:
+Every advisory by an agent passes a gate written in plain Python, and that
+gate is what makes a model in the loop defensible:
 
 - **Single writer.** A Redis ACL makes `compiler` the only user that can write to
   the `advisories` stream. Agents connect as `agent` and get `NOPERM`. This is
@@ -142,7 +142,7 @@ in an instruction slot.
 Scripted events are flagged in the scenario YAML and badged on screen. S1 is real
 public data.
 
-### What it looks like
+### What It Looks Like
 
 ![S3 emergency scene, complete run: every agent-pipeline stage lit from FEEDS through OPERATORS, three fleets accepted, and a verified KEEP_CLEAR advisory in force over downtown Austin](docs/s3-complete.png)
 
