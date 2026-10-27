@@ -37,6 +37,7 @@ import {
   normalizeCountersFrame,
   normalizeHazardFrame,
   normalizeProposalFrame,
+  normalizeTelemetryFrame,
   normalizeVerdictFrame,
 } from './records.js';
 
@@ -211,6 +212,39 @@ test('a derived compile passes the signature check through, never assumes it', (
 test('only an advisory frame yields a compile record', () => {
   assert.equal(compileFromAdvisory(FRAMES.hazard), null);
   assert.equal(compileFromAdvisory({ type: 'advisory' }), null);
+});
+
+test('the control fleet arrives as its own frame type and is kept', () => {
+  // The bug this pins: the server sends the ghost cohort as `ghost_telemetry`
+  // (api/runner.py rewrites the type), and `VehicleState` has no per-vehicle
+  // `ghost` field, so a validator that only accepts `telemetry` and only reads
+  // `vehicle.ghost` discarded the entire control fleet. The counters reported a
+  // ghost column while the map showed none -- and the comparison between the
+  // advised and unadvised fleet is the demo's whole claim.
+  const live = {
+    type: 'telemetry',
+    tick: 1,
+    vehicles: [{ id: 'v-1', op: 'op_a', lon: -97.74, lat: 30.27, heading: 90 }],
+  };
+  const ghost = { ...live, type: 'ghost_telemetry' };
+
+  const liveRows = normalizeTelemetryFrame(live);
+  assert.notEqual(liveRows, null);
+  assert.equal(liveRows[0].ghost, false);
+
+  const ghostRows = normalizeTelemetryFrame(ghost);
+  assert.notEqual(ghostRows, null, 'the control fleet frame was rejected');
+  assert.equal(ghostRows[0].ghost, true, 'control vehicles must read as ghost');
+});
+
+test('a frame-level ghost flag marks the cohort too', () => {
+  // `Telemetry.ghost` is in the contract even when the type is not rewritten.
+  const rows = normalizeTelemetryFrame({
+    type: 'telemetry',
+    ghost: true,
+    vehicles: [{ id: 'v-2', op: 'op_b', lon: -97.74, lat: 30.27 }],
+  });
+  assert.equal(rows[0].ghost, true);
 });
 
 test('a frame of the wrong kind is refused by every validator', () => {

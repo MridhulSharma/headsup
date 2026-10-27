@@ -138,6 +138,16 @@ export function createHeadsupViewerSource({
   let reconnectTimer = null;
   let vehicles = [];
   let vehiclesAt = null;
+  /**
+   * The control fleet, kept apart from the live one.
+   *
+   * The two cohorts arrive in SEPARATE frames -- `telemetry` and
+   * `ghost_telemetry` -- and each is whole state for its own fleet. Holding
+   * them in one list would make each frame wipe the other cohort off the
+   * map, so they are merged only when the snapshot is read.
+   * @type {Array<object>}
+   */
+  let ghostVehicles = [];
   /** @type {Map<string, object>} */
   const advisories = new Map();
   let lastFrameAt = null;
@@ -228,7 +238,9 @@ export function createHeadsupViewerSource({
     primaryEndpoint: endpoints[0] ?? endpoint,
     fallback: candidate > 0,
     connected: socket?.readyState === 1,
-    vehicles,
+    // One list for the layer, which tells the cohorts apart by the row's
+    // own `ghost` flag rather than by which frame carried it.
+    vehicles: ghostVehicles.length ? [...vehicles, ...ghostVehicles] : vehicles,
     vehiclesAt,
     advisories: [...advisories.values()],
     scenario,
@@ -281,13 +293,16 @@ export function createHeadsupViewerSource({
       reject(msg('Malformed Heads Up frame'));
       return false;
     }
-    if (payload?.type === 'telemetry') {
+    if (payload?.type === 'telemetry' || payload?.type === 'ghost_telemetry') {
       const rows = normalizeTelemetryFrame(payload);
       if (!rows) {
         reject(msg('Malformed Heads Up frame'));
         return false;
       }
-      vehicles = rows;
+      if (payload.type === 'ghost_telemetry') ghostVehicles = rows;
+      else vehicles = rows;
+      // Either cohort arriving is a live feed. The ghost ticks on the same
+      // clock, so a run where only it is moving is still a run being fed.
       vehiclesAt = now();
     } else if (payload?.type === 'advisory') {
       const row = normalizeAdvisoryFeature(payload.feature);
@@ -536,6 +551,7 @@ export function createHeadsupViewerSource({
       // disconnect would draw a fleet that is no longer reporting. Advisories
       // carry their own validity window and are kept until it ends.
       vehicles = [];
+      ghostVehicles = [];
       vehiclesAt = null;
     },
 
@@ -551,6 +567,7 @@ export function createHeadsupViewerSource({
     reset() {
       advisories.clear();
       vehicles = [];
+      ghostVehicles = [];
       vehiclesAt = null;
       scenario = null;
       resetRun();

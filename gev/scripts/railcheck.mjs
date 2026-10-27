@@ -53,8 +53,19 @@ const send = (frame) => {
   return (snap()?.rejectedFrames ?? 0) === before;
 };
 
+const fleet = (ids, op) =>
+  ids.map((n, i) => ({
+    id: `${op}-${n}`,
+    op,
+    lon: -97.74 + i * 0.001,
+    lat: 30.27,
+    heading: 90,
+  }));
+
 // The scenario, then the pipeline in the order a live run produces it.
 const order = [
+  { type: 'telemetry', tick: 1, vehicles: fleet([1, 2, 3], 'op_a') },
+  { type: 'ghost_telemetry', tick: 1, vehicles: fleet([1, 2, 3], 'ghost') },
   { type: 'scenario_state', id: 's2_signal', state: 'running', label: 'S2' },
   FRAMES.candidate,
   FRAMES.hazard,
@@ -89,6 +100,11 @@ for (const stage of view.stages)
       `${stage.key.toUpperCase().padEnd(9)} ${stage.value ?? ''}`,
   );
 
+const rows = snap()?.vehicles ?? [];
+console.log('FLEETS');
+console.log(`  live  ${rows.filter((v) => !v.ghost).length} vehicles`);
+console.log(`  ghost ${rows.filter((v) => v.ghost).length} vehicles`);
+
 console.log('\nOPERATORS');
 if (!view.operators.length) console.log('  (no fleet has answered)');
 for (const op of view.operators)
@@ -104,8 +120,11 @@ console.log(`  hazard            ${view.hazardId ?? '-'}`);
 console.log(`  advisory          ${view.advisoryId ?? '-'}`);
 console.log(`  pending approval  ${view.pending ? 'yes' : 'none'}`);
 
+const ghostSeen = rows.filter((v) => v.ghost).length;
+if (!ghostSeen) console.log('\nGHOST COHORT MISSING: the control fleet was dropped.');
+
 const dark = view.stages.filter((s) => !s.lit).map((s) => s.key);
 console.log(
   dark.length ? `\nDARK ROWS: ${dark.join(', ')}` : '\nEvery stage lit.',
 );
-process.exit(dark.length || rejected ? 1 : 0);
+process.exit(dark.length || rejected || !ghostSeen ? 1 : 0);

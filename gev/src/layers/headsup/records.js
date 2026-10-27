@@ -259,10 +259,22 @@ function anchorPoints(geometry) {
 /**
  * Validate one `{type: 'telemetry', vehicles: [...]}` frame.
  *
- * Two optional fields widen a row beyond position: `ghost` marks a vehicle in
- * the control fleet that is NOT acting on advisories, and `rerouted_by` names
- * the advisory that moved this one. Both are what makes the Heads Up and
- * ghost cohorts separable on screen, which is the whole claim the demo makes.
+ * Accepts `ghost_telemetry` as well as `telemetry`. The control fleet -- the
+ * one running the same seed while ignoring every advisory -- arrives as a
+ * frame of its OWN TYPE (`api/runner.py` rewrites the type on the way out),
+ * not as flagged vehicles inside the live tick, and `VehicleState` carries no
+ * per-vehicle `ghost` field at all. Reading only `telemetry` therefore
+ * discarded the entire ghost cohort, which is the comparison the demo exists
+ * to make: the counters reported a ghost column while the map showed none.
+ *
+ * `ghost` is taken from whichever of the three places says so -- the frame
+ * type, the frame-level flag the contract defines, or a per-vehicle field --
+ * so a row is ghost if anything on the wire claims it is.
+ *
+ * `rerouted_by` names the advisory that moved a vehicle. Nothing sends it
+ * yet: `VehicleState` has no such field, so it is always null and the
+ * deflection trail never draws. Kept because the contract documents it and
+ * the viewer should read it the day the simulator starts sending it.
  * @param {unknown} payload Parsed socket frame.
  * @returns {Array<{id: string, op: string, lon: number, lat: number,
  *   heading: number, ghost: boolean, reroutedBy: string|null}>|null} Rows, or
@@ -271,7 +283,10 @@ function anchorPoints(geometry) {
 export function normalizeTelemetryFrame(payload) {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload))
     return null;
-  if (payload.type !== 'telemetry') return null;
+  if (payload.type !== 'telemetry' && payload.type !== 'ghost_telemetry')
+    return null;
+  const cohortIsGhost =
+    payload.type === 'ghost_telemetry' || payload.ghost === true;
   const { vehicles } = payload;
   if (vehicles == null) return [];
   if (!Array.isArray(vehicles) || vehicles.length > MAX_VEHICLES) return null;
@@ -303,7 +318,7 @@ export function normalizeTelemetryFrame(payload) {
       lon: position[0],
       lat: position[1],
       heading: bearing,
-      ghost: vehicle.ghost === true,
+      ghost: cohortIsGhost || vehicle.ghost === true,
       reroutedBy,
     });
   }
