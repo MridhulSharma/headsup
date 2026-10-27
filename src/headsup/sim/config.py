@@ -67,13 +67,24 @@ class SimConfig:
     hop_budget: int = 400
     keep_clear_default_width_m: float = 12.0
     #: Seconds of routing penalty added to each KEEP_CLEAR corridor edge.
-    #: Finite on purpose, and that is the whole design: NO_ENTRY is a
-    #: prohibition and gets infinity, KEEP_CLEAR is a preference and gets a
-    #: cost. A vehicle with a real alternative goes around; a vehicle with
-    #: none still gets through, so an advisory can never strand a fleet or
-    #: disconnect the graph. 0.0 restores the older behaviour, where the
-    #: corridor was free to drive and only forbade stopping.
-    keep_clear_detour_s: float = 90.0
+    #:
+    #: The default is large enough to dominate any detour a real street
+    #: network can offer, so in practice a corridor is NOT ENTERED wherever
+    #: any other route exists at all. It behaves as a prohibition.
+    #:
+    #: It is nonetheless finite, and that is deliberate. NO_ENTRY uses
+    #: infinity, which makes an edge cease to exist for routing; applied to a
+    #: corridor that is someone's only way home it would strand that vehicle
+    #: and, with enough corridors, immobilise a fleet. Keeping this finite
+    #: means the one vehicle with no alternative still gets through instead of
+    #: stalling into the assist queue -- the advisory is enforced everywhere it
+    #: can be enforced, and degrades rather than failing.
+    #:
+    #: Set a small value (90.0, say) for a true preference, where a vehicle
+    #: takes the corridor when going around would cost more than that. 0.0
+    #: restores the oldest behaviour, where the corridor was free to drive
+    #: through and only forbade stopping.
+    keep_clear_detour_s: float = 1_000_000.0
 
     #: Congestion multiplier range, drawn once per edge from the seeded
     #: `("congestion", "base")` substream. Static on purpose: a density-coupled

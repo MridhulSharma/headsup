@@ -292,10 +292,20 @@ free sweep rather than the paid one.
 
 **Measurement**
 
-- **Hazard entries are flat across variants and that is a measurement artifact,
-  not a null result.** For a signal outage an "entry" counts a vehicle passing
-  through a dark signalized node. Under the advisory the vehicle still passes — it
-  just stops first. The metric does not capture the behaviour change.
+- **Hazard entries were flat across variants because a KEEP_CLEAR advisory could
+  not move them, which was a bug and is now fixed.** The movement gate decided
+  whether an operator had been told to stay off an impassable edge by looking only
+  at `no_entry`. A corridor populates `keep_clear_edges` and never `no_entry`, so
+  it offered no protection: vehicles drove onto the scene, counted an entry and
+  stalled in it. On the fixture scene the advisory changed entries by exactly 0%.
+  The gate now honours both, and the same fixture falls from 24 entries to 8 — a
+  67% reduction, with assist requests falling 24 to 8 alongside it and completed
+  rides unchanged. **The committed ablation in `results/` predates this fix and
+  still shows the flat figures.**
+- **A separate flatness remains real for signal outages.** There an "entry" counts
+  a vehicle passing through a dark signalized node, and under ALL_WAY_STOP the
+  vehicle still passes — it just stops first. That metric genuinely does not
+  capture the behaviour change, and no gate fix touches it.
 - **`p95_agent_latency_ms` is unreportable for V1.** Four of six V1 rows read
   14–15 hours; the rules-only path has a timestamp bug. V3/V4 figures (5–83 s) are
   sound. Do not read the V1 latency column.

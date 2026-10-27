@@ -644,9 +644,27 @@ class Simulation:
                     continue
 
                 hazard = snapshot.impassable.get(intent.next_edge)
-                if hazard is not None and intent.next_edge not in mask.no_entry:
-                    # The road is physically impassable and nothing told this
-                    # operator to avoid it. This is the measurement.
+                if hazard is not None:
+                    # An advisory this operator accepted covers this edge if it
+                    # closed it outright or asked for it to be kept clear. Both
+                    # are instructions to stay off it, and until now only the
+                    # first was honoured here: a KEEP_CLEAR corridor left
+                    # vehicles driving onto the impassable scene and stalling
+                    # in it, which is the behaviour the advisory existed to
+                    # prevent and which no amount of routing cost could stop
+                    # for a vehicle that had no other way.
+                    covered = (
+                        intent.next_edge in mask.no_entry
+                        or intent.next_edge in mask.keep_clear_edges
+                    )
+                    if covered:
+                        # Stop short of the hazard rather than in it. No entry
+                        # is counted because none happened -- the vehicle is
+                        # held on the edge it is already on.
+                        self._stall(veh, None, AssistReason.BLOCKED_ROUTE)
+                        continue
+                    # Physically impassable, and nothing told this operator to
+                    # avoid it. This is the measurement.
                     veh.edge = intent.next_edge
                     veh.offset_mm = 0
                     veh.hops += 1

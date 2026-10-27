@@ -14,11 +14,13 @@ from __future__ import annotations
 from shapely.geometry import LineString
 
 from fixtures.sim import (
+    BARRIER,
     CORRIDOR_LINE,
     advisory_for,
     corridor_edges,
     grid_net,
     no_hazards,
+    scripted_hazards,
     tiny_config,
 )
 from headsup.contracts import ActionType, Telemetry
@@ -227,4 +229,64 @@ def test_an_advisory_names_itself_on_the_vehicles_it_deflects() -> None:
     )
     assert on_the_wire == {advisory_id}, (
         "the deflection has to reach the wire, not just the engine"
+    )
+
+
+def test_a_corridor_keeps_vehicles_out_of_the_scene_underneath_it() -> None:
+    """A KEEP_CLEAR advisory has to protect, not merely annotate.
+
+    The movement gate used to honour only `no_entry` when deciding whether an
+    operator had been told to stay off a physically impassable edge. A
+    KEEP_CLEAR corridor populates `keep_clear_edges` and never `no_entry`, so
+    it gave no protection at all: vehicles drove onto the scene, counted a
+    hazard entry and stalled in it. Measured on this fixture the advisory
+    changed hazard entries by exactly nothing, which is the definition of a
+    metric that cannot move.
+
+    Routing cost alone cannot fix that. A vehicle whose only remaining path
+    is through the corridor still takes it, and then drives into the scene.
+    The gate is where the guarantee has to live.
+    """
+    from headsup.contracts import HazardClass
+
+    scene = BARRIER.__geo_interface__
+
+    def entries(advise: bool) -> tuple[int, int]:
+        cfg = tiny_config()
+        net = grid_net()
+        sim = Simulation(
+            net,
+            cfg,
+            mode=SimMode.LIVE,
+            hazards=scripted_hazards(
+                net, geometry=scene, hazard_class=HazardClass.EMERGENCY_SCENE
+            ),
+            start=T0,
+        )
+        if advise:
+            sim.offer(
+                advisory_for(
+                    ActionType.KEEP_CLEAR,
+                    geometry=scene,
+                    confidence=0.9,
+                    params={"width_m": 30.0},
+                )
+            )
+        for _ in range(TICKS):
+            sim.step()
+        snap = sim._counters.snapshot()
+        return (
+            sum(v for k, v in snap.items() if k.startswith(C.HAZARD_ENTRIES)),
+            sum(v for k, v in snap.items() if k.startswith(C.RIDES_COMPLETED)),
+        )
+
+    unadvised, unadvised_rides = entries(advise=False)
+    advised, advised_rides = entries(advise=True)
+    assert unadvised > 0, "the fixture must send vehicles into the scene unadvised"
+    assert advised < unadvised, "a corridor over a scene must keep vehicles out of it"
+    # Not zero, and that is honest: a vehicle already inside the corridor, or
+    # with no other way out of its node, still has to move. The advisory
+    # protects everyone it can reach rather than pretending to reach everyone.
+    assert advised_rides >= unadvised_rides * 0.9, (
+        "protection must not be bought by stopping the fleet from working"
     )
