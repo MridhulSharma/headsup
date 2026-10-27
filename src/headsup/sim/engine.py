@@ -410,7 +410,12 @@ class Simulation:
             if change is None or not change.newly_effective:
                 continue
             mask = op.mask
-            affected = self._count_affected(op.name, mask)
+            # The first newly-effective advisory names the deflection. A
+            # vehicle disturbed by two advisories landing on one tick is
+            # deflected by the pair; the trail only has room to credit one,
+            # and the earlier is the one that moved it first.
+            cause = change.newly_effective[0].properties.id
+            affected = self._count_affected(op.name, mask, cause=cause)
             if affected:
                 self._counters.bump(C.VEHICLES_REROUTED, op.name, affected)
             for advisory in change.newly_effective:
@@ -427,30 +432,49 @@ class Simulation:
                 )
         acks.extend(self._collect_acks())
 
-    def _count_affected(self, op_name: str, mask: Mask) -> int:
+    def _count_affected(self, op_name: str, mask: Mask, *, cause: str = "") -> int:
         """Vehicles whose current edge or destination a new mask disturbs.
 
         O(N) and no routing: there are no stored paths to invalidate, which is
         the whole reason an advisory landing is cheap here.
+
+        `cause` names the advisory on each vehicle it disturbs, so telemetry
+        can say WHICH advisory moved a vehicle rather than only that the fleet
+        rerouted some. The count is unchanged either way; marking rides along
+        with a walk that was already happening.
         """
         if mask.empty:
             return 0
         blocked = mask.no_entry
         banned = mask.keep_clear_nodes
+        corridor = mask.keep_clear_edges
         count = 0
         for veh in self._vehicles:
             if veh.op != op_name:
                 continue
             if veh.edge in blocked:
                 count += 1
+                if cause:
+                    veh.rerouted_by = cause
                 continue
             if banned and veh.dest_node in banned:
                 count += 1
+                if cause:
+                    veh.rerouted_by = cause
+                continue
+            # A vehicle already inside a corridor is being asked to clear it,
+            # which is a deflection even though the edge stays passable.
+            if corridor and veh.edge in corridor:
+                count += 1
+                if cause:
+                    veh.rerouted_by = cause
                 continue
             if veh.zone_ix >= 0 and not self._router.reachable(
                 mask.key, veh.zone_ix, self._net.head[veh.edge]
             ):
                 count += 1
+                if cause:
+                    veh.rerouted_by = cause
         return count
 
     def _advance(self, snapshot: HazardSnapshot) -> list[Intent]:
@@ -648,6 +672,8 @@ class Simulation:
         """Arrive, dwell unless the corridor forbids it, then pick a new zone."""
         self._counters.bump(C.RIDES_COMPLETED, veh.op)
         veh.trip_seq += 1
+        # A new journey is not the one that was deflected.
+        veh.rerouted_by = ""
         veh.hops = 0
         veh.held_ticks = 0
         # No pick-up, drop-off or idling inside a corridor the operator
@@ -769,6 +795,7 @@ class Simulation:
                     speed_mph=min(120.0, speed_mm_s / MM_PER_M * MPH_PER_MPS),
                     status=veh.status,
                     trip_id=veh.trip_id,
+                    rerouted_by=veh.rerouted_by or None,
                 )
             )
         frame = Telemetry(

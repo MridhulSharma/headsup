@@ -127,12 +127,33 @@ def test_density_cap_is_a_queue_and_never_touches_the_weights() -> None:
     assert weights_for(mask, net) == list(net.free_flow_s)
 
 
-def test_keep_clear_never_touches_the_weights_either() -> None:
-    """It forbids stopping, not passing, so routing is unaffected."""
+def test_keep_clear_leaves_the_weights_alone_when_no_detour_is_configured() -> None:
+    """The penalty is opt-in: a caller with no config gets the plain vector."""
     net = grid_net()
     mask = _resolve(ActionType.KEEP_CLEAR, params={"width_m": 30.0})
     assert mask.keep_clear_edges
     assert weights_for(mask, net) == list(net.free_flow_s)
+
+
+def test_keep_clear_makes_the_corridor_costly_but_never_impassable() -> None:
+    """A preference, not a prohibition -- and the difference is the guarantee.
+
+    NO_ENTRY gets infinity so nothing can route through a flood zone at any
+    detour length. KEEP_CLEAR gets a cost, so a vehicle with an alternative
+    goes around and a vehicle without one still gets through. A corridor that
+    closed the street outright could disconnect a destination and strand a
+    fleet, which is not what asking a city to keep an approach clear means.
+    """
+    net = grid_net()
+    mask = _resolve(ActionType.KEEP_CLEAR, params={"width_m": 30.0})
+    assert mask.keep_clear_edges
+    weights = weights_for(mask, net, keep_clear_detour_s=90.0)
+    for edge in mask.keep_clear_edges:
+        assert weights[edge] == pytest.approx(net.free_flow_s[edge] + 90.0)
+        assert weights[edge] < INF, "a corridor must stay passable"
+    for edge in range(net.edge_count):
+        if edge not in mask.keep_clear_edges:
+            assert weights[edge] == pytest.approx(net.free_flow_s[edge])
 
 
 def test_pause_service_resolves_rather_than_raising() -> None:

@@ -153,3 +153,78 @@ def test_an_accepting_operator_does_not_dwell_at_a_corridor_node() -> None:
     for veh in sim.vehicles:
         if veh.op == "op_a" and veh.dest_node in banned:
             raise AssertionError(f"{veh.vid} is bound for a corridor node")
+
+
+def test_a_corridor_moves_routing_decisions_off_the_street() -> None:
+    """The point of the detour penalty, measured where routing is decided.
+
+    End-to-end corridor occupancy is a weak instrument on a small grid: some
+    trips begin inside the corridor and some end there, and those vehicles
+    have to be on it whatever the weights say. What the penalty controls is
+    the CHOICE -- which edge a vehicle takes out of a node when it has an
+    alternative -- so that is what this asserts.
+    """
+    from dataclasses import replace as _replace
+
+    from headsup.sim.router import Router
+
+    advisory = advisory_for(
+        ActionType.KEEP_CLEAR, geometry=CORRIDOR, confidence=0.9, params={"width_m": 30.0}
+    )
+
+    def hops_into_corridor(detour_s: float) -> tuple[int, int]:
+        cfg = _replace(tiny_config(), keep_clear_detour_s=detour_s)
+        net = grid_net()
+        router = Router(net, cfg)
+        mask = resolve(advisory, net, cfg)
+        router.ensure_mask(mask)
+        inside = 0
+        total = 0
+        for zone in range(len(net.zones)):
+            for node in range(len(net.out_edges)):
+                edge = router.next_hop(mask.key, zone, node)
+                total += 1
+                if edge in mask.keep_clear_edges:
+                    inside += 1
+        return inside, total
+
+    free, _ = hops_into_corridor(0.0)
+    costly, _ = hops_into_corridor(90.0)
+    assert free > 0, "the fixture corridor must be on some shortest path"
+    assert costly < free, "a priced corridor must pull routing off it"
+
+
+def test_an_advisory_names_itself_on_the_vehicles_it_deflects() -> None:
+    """`rerouted_by` is what the viewer draws a deflection trail from.
+
+    Without it the viewer can show that an advisory exists but not that any
+    vehicle acted on it, which leaves the rerouted readout at 0 in every
+    scenario and the trail unable to draw at all.
+    """
+    cfg = tiny_config()
+    net = grid_net()
+    sim = Simulation(net, cfg, mode=SimMode.LIVE, hazards=no_hazards(), start=T0)
+    advisory = advisory_for(
+        ActionType.KEEP_CLEAR, geometry=CORRIDOR, confidence=0.9, params={"width_m": 30.0}
+    )
+    assert all(not veh.rerouted_by for veh in sim._vehicles), "nothing is deflected yet"
+    sim.offer(advisory)
+    # Collected across the run rather than sampled at the end: an operator
+    # with a delayed persona accepts late, and a tag clears when the vehicle
+    # it is on starts a new trip, so one snapshot can easily miss both.
+    advisory_id = advisory.properties.id
+    seen: set[str] = set()
+    on_the_wire: set[str] = set()
+    for _ in range(TICKS):
+        sim.step()
+        for veh in sim._vehicles:
+            if veh.rerouted_by:
+                seen.add(veh.rerouted_by)
+        frame, _ = sim._telemetry(sim.sim_time)
+        on_the_wire.update(row.rerouted_by for row in frame.vehicles if row.rerouted_by)
+    assert seen == {advisory_id}, (
+        "a deflection must name the advisory that caused it, and name no other"
+    )
+    assert on_the_wire == {advisory_id}, (
+        "the deflection has to reach the wire, not just the engine"
+    )

@@ -59,6 +59,13 @@ class VehicleState(HeadsUpModel):
     speed_mph: float = Field(default=0.0, ge=0.0, le=120.0)
     status: VehicleStatus = VehicleStatus.MOVING
     trip_id: Identifier | None = None
+    #: The advisory that deflected this vehicle, when one did.
+    #:
+    #: The viewer draws a deflection trail from this and counts the fleet's
+    #: rerouted vehicles with it. Without it the viewer can show that an
+    #: advisory exists but not that anything acted on it, which is the one
+    #: claim the demo most needs to make visible.
+    rerouted_by: Identifier | None = None
 
 
 class Telemetry(HeadsUpModel):

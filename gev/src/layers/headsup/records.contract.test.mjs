@@ -247,6 +247,24 @@ test('a frame-level ghost flag marks the cohort too', () => {
   assert.equal(rows[0].ghost, true);
 });
 
+test('a deflected vehicle names the advisory that moved it', () => {
+  // `rerouted_by` is what the deflection trail is drawn from and what the
+  // fleet's rerouted count is derived from. It was absent from VehicleState
+  // for the whole build, so the readout sat at 0 in every scenario and the
+  // trail could never draw -- the simulator rerouted and the viewer had no
+  // way to say so.
+  const rows = normalizeTelemetryFrame({
+    type: 'telemetry',
+    tick: 2,
+    vehicles: [
+      { id: 'v-3', op: 'op_a', lon: -97.74, lat: 30.27, rerouted_by: 'adv_1' },
+      { id: 'v-4', op: 'op_a', lon: -97.73, lat: 30.27 },
+    ],
+  });
+  assert.equal(rows[0].reroutedBy, 'adv_1');
+  assert.equal(rows[1].reroutedBy, null, 'an undeflected vehicle claims nothing');
+});
+
 test('a frame of the wrong kind is refused by every validator', () => {
   for (const [kind, validate] of Object.entries(VALIDATORS))
     assert.equal(

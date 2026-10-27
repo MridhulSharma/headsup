@@ -82,6 +82,11 @@ class Vehicle:
     #: Edges traversed on this trip, against `SimConfig.hop_budget`.
     hops: int = 0
 
+    #: The advisory id that last deflected this vehicle, or "" for none.
+    #: Cleared when the vehicle takes a new trip: it describes the journey
+    #: being made now, not a journey it finished ten minutes ago.
+    rerouted_by: str = ""
+
     assist_open: bool = False
     #: Ground hazard already counted as an entry for this vehicle, so a
     #: vehicle sitting in a flood zone counts one entry, not one per tick.

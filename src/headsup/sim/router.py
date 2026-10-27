@@ -104,7 +104,9 @@ class Router:
         if mask.key in self._weights:
             return
         self._masks[mask.key] = mask
-        self._weights[mask.key] = weights_for(mask, self._net)
+        self._weights[mask.key] = weights_for(
+            mask, self._net, keep_clear_detour_s=self._cfg.keep_clear_detour_s
+        )
         for ix in range(len(self._net.zones)):
             self._stale[(mask.key, ix)] = None
 

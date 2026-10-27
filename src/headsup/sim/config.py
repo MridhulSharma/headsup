@@ -66,6 +66,14 @@ class SimConfig:
     #: Hops before a vehicle is declared lost and asks for help.
     hop_budget: int = 400
     keep_clear_default_width_m: float = 12.0
+    #: Seconds of routing penalty added to each KEEP_CLEAR corridor edge.
+    #: Finite on purpose, and that is the whole design: NO_ENTRY is a
+    #: prohibition and gets infinity, KEEP_CLEAR is a preference and gets a
+    #: cost. A vehicle with a real alternative goes around; a vehicle with
+    #: none still gets through, so an advisory can never strand a fleet or
+    #: disconnect the graph. 0.0 restores the older behaviour, where the
+    #: corridor was free to drive and only forbade stopping.
+    keep_clear_detour_s: float = 90.0
 
     #: Congestion multiplier range, drawn once per edge from the seeded
     #: `("congestion", "base")` substream. Static on purpose: a density-coupled

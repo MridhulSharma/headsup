@@ -13,14 +13,24 @@ the outage took out and no others. The unsignalised corners between them keep
 their free-flow weight, which is what makes `weights_for` prefer a route
 through them.
 
-Two actions deliberately do **not** touch edge weights:
+`DENSITY_CAP` deliberately does **not** touch edge weights: it is a queue,
+not a cost. Putting occupancy into the weights would change the weight vector
+every tick and destroy the label cache that makes routing affordable.
 
-* `DENSITY_CAP` is a queue, not a cost. Putting occupancy into the weights
-  would change the weight vector every tick and destroy the label cache that
-  makes routing affordable.
-* `KEEP_CLEAR` forbids *stopping*, not *through travel*. Penalising the
-  corridor in the weights would invent a routing rule the advisory never
-  asked for, and would cost a full label refresh for nothing.
+`KEEP_CLEAR` does, by a finite amount. It forbids *stopping* outright, and it
+makes *through travel* expensive rather than impossible: the fire-service
+meaning of keeping an approach clear is that traffic should go around it if
+it reasonably can, not that the street ceases to exist. An earlier build left
+the weights untouched on the grounds that the advisory only asked about
+stopping, which was defensible and produced a demo in which vehicles drove
+straight down a corridor held open for a second engine.
+
+The penalty is finite and that distinction carries the guarantee. NO_ENTRY is
+a prohibition and gets infinity, so Dijkstra cannot route through a flood
+zone at any detour length. KEEP_CLEAR is a preference and gets a cost, so a
+vehicle with an alternative takes it and a vehicle without one is not
+stranded. See `SimConfig.keep_clear_detour_s`; 0.0 restores the older
+behaviour exactly.
 """
 
 from __future__ import annotations
@@ -324,17 +334,28 @@ def merge(masks: Sequence[Mask]) -> Mask:
     )
 
 
-def weights_for(mask: Mask, net: DriveNetwork) -> list[float]:
+def weights_for(
+    mask: Mask, net: DriveNetwork, *, keep_clear_detour_s: float = 0.0
+) -> list[float]:
     """The igraph weight vector for routing under a mask.
 
-    `float("inf")` for a closed edge, not a large finite number. A finite
+    `float("inf")` for a NO_ENTRY edge, not a large finite number. A finite
     sentinel lets Dijkstra route *through* a closure when the detour is long
     enough, which would quietly put vehicles in the flood zone and make the
     NO_ENTRY guarantee a lie. Infinity makes the edge non-existent for
     routing while `RoadGraph.edges` is left untouched, which is the invariant
     `world/graph.py` promises and the trajectory hash depends on.
+
+    `keep_clear_detour_s` is the opposite case on purpose: a cost, never
+    infinity, so a corridor is avoided where there is an alternative and
+    passable where there is not. Defaults to 0 so a caller that has no
+    `SimConfig` to hand gets the unpenalised vector rather than a silent
+    routing change.
     """
     weights = list(net.free_flow_s)
+    if keep_clear_detour_s > 0.0:
+        for edge_id in mask.keep_clear_edges:
+            weights[edge_id] += keep_clear_detour_s
     for edge_id, cap_mm_s in mask.speed_cap_mm_s:
         # Travel time at the capped speed, from the edge's own length.
         weights[edge_id] = net.length_mm[edge_id] / cap_mm_s

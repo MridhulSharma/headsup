@@ -76,6 +76,21 @@
       ],
       "default": null,
       "title": "Trip Id"
+    },
+    "rerouted_by": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9._:\\-]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rerouted By"
     }
   },
   "required": [
