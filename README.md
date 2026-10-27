@@ -144,8 +144,6 @@ public data.
 
 ### What it looks like
 
-#### One whole run, end to end
-
 ![S3 emergency scene, complete run: every agent-pipeline stage lit from FEEDS through OPERATORS, three fleets accepted, and a verified KEEP_CLEAR advisory in force over downtown Austin](docs/s3-complete.png)
 
 **This is the whole system in one frame.** S3, the downtown Austin emergency scene —
@@ -177,31 +175,9 @@ against ghost fleet, the same scenario with no advisory: **235 hazard entries ve
 On the map, the red volumes are what `KEEP_CLEAR` asks for: the approach to the fire
 station held open for the second engine, before dispatch had called it a crash.
 
-#### Earlier captures
-
-![S2 signal blackout: a yellow SIGNAL_OUTAGE hazard over the downtown Austin grid, with an ALL_WAY_STOP advisory in force](docs/s2-advisory.png)
-
-**S2, downtown Austin signal blackout.** Fifteen flashing signals cluster into one
-hazard; the gate has published `adv_68ac6449b88d` — `ALL_WAY_STOP`, severity 2 of 5,
-163,197 m², Ed25519 signature present, expiring in 29 minutes, evidence `AUSTIN SIGNALS`.
-The labels on the map are the per-node actions the advisory carries: `SPEED_CAP` and
-`DENSITY_CAP` alongside the all-way stop. Three fleets are subscribed at 100 vehicles each.
-
-![S3 emergency scene: red KEEP_CLEAR volumes around a fire response in downtown Austin](docs/s3-advisory.png)
-
-**S3, downtown Austin emergency scene.** The hazard here came out of free-text dispatch
-records, some without coordinates — the case a rules engine cannot read. `KEEP_CLEAR`,
-severity 2 of 5, 65,844 m², expiring in 44 minutes, evidence `AUSTIN INCIDENTS`. The red
-volumes are the approach the advisory asks fleets to leave open for the second engine.
-
-These two are live replays as well, and their advisory IDs, areas and expiries are read
-off the running compiler the same way. They were captured **before** the frame-contract
-fix, which is why the rail and the status counters read blank in them: the viewer was
-validating pipeline frames against a shape the API never sent and dropping every one.
-They are kept because the advisory geometry and the published cards in them are real,
-and because the contrast with the run above is the clearest record of what that fix
-changed. `gev/scripts/railcheck.mjs` replays the server's own frames through the viewer
-and prints the rail, so the lit version is reproducible without a live stack.
+Nothing here is staged. `gev/scripts/railcheck.mjs` replays the server's own frames
+through the viewer and prints the rail, so this picture is reproducible without a
+live stack.
 
 ## Results
 
