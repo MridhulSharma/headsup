@@ -1,3 +1,8 @@
+<p align="center">
+  <img src="docs/signum.webp" width="100%"
+       alt="Signum — the wordmark over a dark lattice of city blocks lit in colour">
+</p>
+
 # Signum
 
 > **The code says `headsup`.** That was the working name and it stays as the
